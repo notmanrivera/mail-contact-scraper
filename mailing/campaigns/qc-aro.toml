@@ -11,15 +11,18 @@ email = "pedro@dindustrimex.com"
 reply_to = "ventas@dindustrimex.com"
 
 # Imágenes en mailing/assets/qc-aro/ (sacadas del banco de recursos).
-# base_url vacío: van incrustadas (cid:) y la macro de Outlook las adjunta.
-# Si las subes a un servidor, pon aquí la carpeta pública, p. ej.
-# "https://www.dindustrimex.com/mailing/qc-aro/", y se enlazan desde ahí.
+# Sin URLs: van incrustadas (cid:) para la macro de Outlook y los .eml.
+# Para YAMM/Brevo/Mailchimp deben estar en línea: sube cada archivo al Media Manager de
+# Wix y pega su URL abajo en [assets.urls] (o, si están todas en una carpeta, usa base_url).
 [assets]
 dir = "assets/qc-aro"
 base_url = ""
 logo = "logo-rojo.png"
 logo_footer = "logo-blanco.png"
 site_icon = "globo.png"
+
+[assets.urls]
+# "logo-rojo.png" = "https://static.wixstatic.com/media/....png"
 
 [hero]
 eyebrow = "Bombeo sanitario e industrial"

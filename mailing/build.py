@@ -75,14 +75,28 @@ def asset_files(campaign):
     return sorted(p for p in folder.iterdir() if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".gif"))
 
 
+def hosted_url(campaign, name):
+    """Public URL of an image: its own entry in [assets.urls] (e.g. Wix) or base_url + name."""
+    assets = campaign["assets"]
+    if name in assets.get("urls", {}):
+        return assets["urls"][name]
+    if assets.get("base_url"):
+        return assets["base_url"].rstrip("/") + "/" + name
+    return None
+
+
+def is_hosted(campaign):
+    return all(hosted_url(campaign, f.name) for f in asset_files(campaign))
+
+
 def _asset_resolver(campaign, mode):
     """How images are referenced: hosted URL, cid: (attached inline) or data: (local preview)."""
-    base = campaign["assets"].get("base_url", "")
+    hosted = is_hosted(campaign)
     folder = campaign["_dir"] / campaign["assets"]["dir"]
 
     def resolve(name):
-        if base:
-            return base.rstrip("/") + "/" + name
+        if hosted:
+            return hosted_url(campaign, name)
         if mode == "data":
             mime = mimetypes.guess_type(name)[0] or "image/png"
             return f"data:{mime};base64," + base64.b64encode((folder / name).read_bytes()).decode()
@@ -179,7 +193,7 @@ def build_eml(campaign, person, html_body, text_body):
     msg["X-Unsent"] = "1"  # Outlook / Apple Mail open it as a draft
     msg.set_content(text_body)
     msg.add_alternative(html_body, subtype="html")
-    if not campaign["assets"].get("base_url"):
+    if not is_hosted(campaign):
         html_part = msg.get_payload()[1]
         for f in asset_files(campaign):
             maintype, subtype = (mimetypes.guess_type(f.name)[0] or "image/png").split("/")
@@ -220,7 +234,7 @@ def write_excel(path, campaign, people):
         ws.column_dimensions[col].width = width
     ws.freeze_panes = "A2"
     wb.save(path)
-    if not campaign["assets"].get("base_url"):
+    if not is_hosted(campaign):
         # the Outlook macro attaches these inline from the folder next to the workbook
         img_dir = Path(path).parent / "imagenes"
         img_dir.mkdir(exist_ok=True)
@@ -243,7 +257,7 @@ def build(campaign_path, contacts_csv, out_dir, esp=None, eml=False, excel=False
         render_text(campaign, sample["greeting"], unsubscribe_mailto(campaign, sample["email"])), encoding="utf-8")
 
     if esp:
-        if not campaign["assets"].get("base_url"):
+        if not is_hosted(campaign):
             raise ValueError(f"Para {esp} las imágenes deben estar en línea: llena [assets] base_url en la campaña")
         tags = ESP[esp]
         (out / f"template-{esp}.html").write_text(

@@ -134,8 +134,8 @@ estén en `output/suppression.txt` (uno por línea; ahí van las bajas).
   las adjunta desde la carpeta `imagenes/` que se genera junto al Excel, y los `.eml` ya las
   traen. Para Brevo/Mailchimp súbelas a un servidor y pon esa carpeta en `[assets] base_url`.
 - **Envío con YAMM (Google Sheets + Gmail), lo que usa el equipo:**
-  1. Sube las imágenes de `mailing/assets/<campaña>/` a una carpeta pública (p. ej.
-     `https://www.dindustrimex.com/mailing/qc-aro/`) y ponla en `[assets] base_url`.
+  1. Sube las imágenes de `mailing/assets/<campaña>/` al Media Manager de Wix
+     (dindustrimex.com), copia la URL de cada una y pégalas en `[assets.urls]` de la campaña.
   2. `python -m mailing --esp yamm` → `template-yamm.html` y `audience-yamm.csv`.
   3. Abre `template-yamm.html` en Chrome, Cmd/Ctrl+A, Cmd/Ctrl+C y pégalo en un borrador nuevo
      de Gmail (en la cuenta que va a enviar) con el asunto de la campaña.
