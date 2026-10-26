@@ -3,161 +3,227 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Contactos del buzón</title>
+<meta name="color-scheme" content="light">
+<title>Contactos · D-Industrimex</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,500;0,600;0,700;0,800;1,600&display=swap" rel="stylesheet">
 <style>
+  /* Tokens del Sistema de diseño D-Industrimex v2 (oct 2026) */
   :root {
-    --bg: #f6f5f2; --surface: #ffffff; --surface-2: #f0efeb; --border: #e3e1db;
-    --text: #1d1c1a; --muted: #6b6862; --faint: #9a968e;
-    --accent: #2f6fdb; --accent-soft: #e4edfc; --good: #1f8a5b; --good-soft: #def3e9;
-    --warn: #b4540f; --warn-soft: #fbeadb; --bad: #c23a3a; --bad-soft: #fbe3e3;
-    --new: #fff5cc;
-    --radius: 10px; --shadow: 0 1px 2px rgba(0,0,0,.04), 0 1px 1px rgba(0,0,0,.03);
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #141412; --surface: #1d1c1a; --surface-2: #262522; --border: #33312d;
-      --text: #eeece8; --muted: #a29e96; --faint: #75716a;
-      --accent: #7aa7f5; --accent-soft: #1f2b40; --good: #5cc796; --good-soft: #17302a;
-      --warn: #f0a062; --warn-soft: #3a2817; --bad: #f08080; --bad-soft: #3c1f1f;
-      --new: #3a3417; --shadow: none;
-    }
+    --red: #A81818;          /* palabra clave, botones, acentos, badges (≈10%) */
+    --red-deep: #7E1010;     /* sombra guinda */
+    --red-tint: rgba(168, 24, 24, .08);
+    --red-line: rgba(168, 24, 24, .18);
+    --ink: #181212;          /* titulares */
+    --text: #2A2320;         /* texto informativo */
+    --muted: #6E6360;        /* eyebrows, descripciones */
+    --line: #E0DAD8;         /* bordes de filas */
+    --rail: #D8D0CE;         /* rieles */
+    --good: #1C8A4A;         /* solo semántico "correcto" */
+    --card: rgba(255, 255, 255, .66);
+    --card-strong: rgba(255, 255, 255, .82);
+    --font: "Montserrat", "Helvetica Neue", Arial, sans-serif;
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html { background: #E1E3E7; }
   body {
-    margin: 0; background: var(--bg); color: var(--text);
-    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    margin: 0; min-height: 100vh; color: var(--text); font: 500 14px/1.45 var(--font);
     -webkit-font-smoothing: antialiased;
+    background: linear-gradient(118deg, #EEF0F2 0%, #E1E3E7 30%, #F4F5F7 52%, #DADDE1 74%, #ECEDEF 100%) fixed;
   }
-  .wrap { max-width: 1280px; margin: 0 auto; padding: 24px 20px 48px; }
-  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; margin-bottom: 20px; }
-  h1 { font-size: 20px; font-weight: 650; margin: 0; letter-spacing: -.01em; }
-  .mailbox { color: var(--muted); }
+  /* Textura de vetas del acero, al 45% en overlay */
+  body::before {
+    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: .45; mix-blend-mode: overlay;
+    background: repeating-linear-gradient(118deg, rgba(255,255,255,.5) 0 3px, rgba(0,0,0,.05) 3px 6px);
+  }
+  .wrap { position: relative; z-index: 1; max-width: 1280px; margin: 0 auto; padding: 28px 24px 40px; }
+
+  /* Encabezado: logo arriba a la izquierda (≥ 200 px) */
+  .top { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 24px; margin-bottom: 28px; }
+  .brand { display: block; min-width: 200px; text-decoration: none; }
+  .brand img { display: block; width: 220px; height: auto; }
+  .wordmark { font-weight: 800; font-size: 26px; line-height: 1; letter-spacing: -.02em; color: var(--red); }
+  .wordmark sup { font-size: 11px; }
+  .tagline { font-weight: 600; font-style: italic; font-size: 11.5px; color: var(--muted); margin-top: 4px; }
   .spacer { flex: 1; }
-  .pill {
-    display: inline-flex; align-items: center; gap: 7px; padding: 4px 10px; border-radius: 999px;
-    font-size: 12.5px; font-weight: 550; background: var(--surface-2); color: var(--muted);
+  .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px; border-radius: 100px; padding: 12px 24px;
+    font: 700 14px/1 var(--font); cursor: pointer; text-decoration: none; white-space: nowrap;
+    transition: transform .08s ease, box-shadow .15s ease, background .15s ease;
   }
-  .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-  .pill.running { background: var(--accent-soft); color: var(--accent); }
-  .pill.running .dot { animation: pulse 1.4s ease-in-out infinite; }
-  .pill.done { background: var(--good-soft); color: var(--good); }
-  .pill.error { background: var(--bad-soft); color: var(--bad); }
+  .btn:active { transform: translateY(1px); }
+  .btn[disabled] { opacity: .5; cursor: default; }
+  .btn-primary { background: var(--red); color: #fff; border: 0; box-shadow: 0 6px 16px -6px var(--red-deep); }
+  .btn-primary:hover:not([disabled]) { background: #951414; }
+  .btn-outline { background: var(--card-strong); color: var(--red); border: 3px solid var(--red); padding: 9px 21px; }
+  .btn-outline:hover:not([disabled]) { background: #fff; }
+  .btn-ghost { background: var(--card); color: var(--text); border: 1px solid var(--line); padding: 10px 18px; font-weight: 600; font-size: 13px; }
+  .btn svg { width: 16px; height: 16px; }
+
+  .state {
+    display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 11.5px;
+    letter-spacing: .14em; text-transform: uppercase; color: var(--muted);
+  }
+  .state .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--rail); }
+  .state.running { color: var(--red); }
+  .state.running .dot { background: var(--red); animation: pulse 1.3s ease-in-out infinite; }
+  .state.done .dot { background: var(--good); }
+  .state.error { color: var(--red); }
+  .state.error .dot { background: var(--red); }
   @keyframes pulse { 50% { opacity: .25; } }
-  .updated { color: var(--faint); font-size: 12.5px; font-variant-numeric: tabular-nums; }
 
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
-  .progress { padding: 14px 16px; margin-bottom: 16px; }
-  .progress-top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; margin-bottom: 8px; font-size: 13px; }
-  .progress-top b { font-weight: 600; }
-  .progress-top span { color: var(--muted); font-variant-numeric: tabular-nums; }
-  .bar { height: 8px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
-  .bar > div { height: 100%; width: 0; background: var(--accent); border-radius: 999px; transition: width .6s ease; }
-  .progress.done .bar > div { background: var(--good); }
-  .error-msg { margin-top: 8px; color: var(--bad); font-size: 13px; }
+  /* Titular */
+  .eyebrow { font-weight: 700; font-size: 12px; letter-spacing: .28em; text-transform: uppercase; color: var(--muted); }
+  h1 { margin: 10px 0 0; font-weight: 800; font-size: 40px; line-height: 1.06; letter-spacing: -.02em; color: var(--ink); }
+  h1 em { font-style: normal; color: var(--red); }
+  .lede { margin: 10px 0 24px; font-size: 15px; color: var(--text); }
+  .lede b { font-weight: 700; }
+  .updated { color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
 
-  .kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
-  .kpi { padding: 14px 16px; }
-  .kpi .label { color: var(--muted); font-size: 12.5px; }
-  .kpi .value { font-size: 26px; font-weight: 650; letter-spacing: -.02em; font-variant-numeric: tabular-nums; margin-top: 2px; }
-  .kpi .sub { color: var(--faint); font-size: 12px; font-variant-numeric: tabular-nums; }
-
-  .grid { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 16px; align-items: start; }
-  .panel-title { font-size: 13px; font-weight: 600; padding: 14px 16px 6px; }
-  .companies { padding: 4px 16px 14px; }
-  .co { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; padding: 6px 0; cursor: pointer; }
-  .co:hover .co-name { color: var(--accent); }
-  .co-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; }
-  .co-count { color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
-  .co-bar { grid-column: 1 / -1; height: 5px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
-  .co-bar > div { height: 100%; background: var(--accent); opacity: .75; border-radius: 999px; transition: width .6s ease; }
-  .empty { color: var(--faint); font-size: 13px; padding: 8px 0; }
-
-  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px 12px 10px; border-bottom: 1px solid var(--border); }
-  .search {
-    flex: 1 1 220px; min-width: 0; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px;
-    background: var(--bg); color: var(--text); font: inherit;
+  /* Caja de información: avance */
+  .infobox {
+    background: rgba(255,255,255,.73); border: 1px solid var(--red-line); border-radius: 18px;
+    padding: 16px 20px; margin-bottom: 18px;
   }
-  .search:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+  .progress-top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; margin-bottom: 10px; }
+  .progress-top b { font-weight: 800; color: var(--ink); }
+  .progress-top span { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .bar { height: 8px; background: var(--rail); border-radius: 100px; overflow: hidden; }
+  .bar > div { height: 100%; width: 0; background: var(--red); border-radius: 100px; transition: width .6s ease; }
+  .notice { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--red-tint); color: var(--red); font-size: 13px; }
+  .notice pre { margin: 6px 0 0; white-space: pre-wrap; font: 12px/1.45 ui-monospace, Menlo, monospace; color: var(--text); }
+
+  /* KPIs: filas de lista; el acento rojo solo en la principal */
+  .kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; }
+  .kpi { padding: 16px 18px; }
+  .kpi.lead { border-left: 6px solid var(--red); }
+  .kpi .label { font-weight: 700; font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
+  .kpi .value { font-weight: 800; font-size: 32px; letter-spacing: -.02em; color: var(--ink); font-variant-numeric: tabular-nums; margin-top: 4px; }
+  .kpi.lead .value { color: var(--red); }
+  .kpi .sub { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; min-height: 17px; }
+
+  .grid { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 18px; align-items: start; }
+  .panel-title { font-weight: 800; font-size: 16px; color: var(--ink); padding: 18px 18px 8px; letter-spacing: -.01em; }
+  .companies { padding: 2px 18px 16px; }
+  .co { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; padding: 7px 0; cursor: pointer; }
+  .co-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; font-size: 13px; color: var(--text); }
+  .co:hover .co-name { color: var(--red); }
+  .co-count { font-weight: 700; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .co-bar { grid-column: 1 / -1; height: 5px; background: var(--rail); border-radius: 100px; overflow: hidden; }
+  .co-bar > div { height: 100%; background: var(--red); border-radius: 100px; transition: width .6s ease; }
+  .empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
+
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 14px; border-bottom: 1px solid var(--line); }
+  .search {
+    flex: 1 1 240px; min-width: 0; padding: 10px 16px; border: 1px solid var(--line); border-radius: 100px;
+    background: rgba(255,255,255,.85); color: var(--text); font: 500 13.5px var(--font);
+  }
+  .search::placeholder { color: var(--muted); }
+  .search:focus { outline: 0; border-color: var(--red); box-shadow: 0 0 0 3px var(--red-tint); }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .chip {
-    border: 1px solid var(--border); background: transparent; color: var(--muted); border-radius: 999px;
-    padding: 5px 11px; font: inherit; font-size: 12.5px; cursor: pointer;
+    border: 1px solid var(--line); background: rgba(255,255,255,.7); color: var(--text); border-radius: 100px;
+    padding: 7px 13px; font: 600 12.5px var(--font); cursor: pointer;
   }
-  .chip[aria-pressed="true"] { background: var(--text); color: var(--surface); border-color: var(--text); }
-  .btn {
-    border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 8px;
-    padding: 6px 11px; font: inherit; font-size: 12.5px; text-decoration: none; white-space: nowrap;
-  }
-  .btn:hover { border-color: var(--faint); }
+  .chip[aria-pressed="true"] { background: var(--red); border-color: var(--red); color: #fff; }
 
   .table-wrap { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th {
-    text-align: left; font-weight: 550; color: var(--muted); font-size: 12px; padding: 9px 12px;
-    border-bottom: 1px solid var(--border); white-space: nowrap; cursor: pointer; user-select: none; padding: 9px 10px;
-    position: sticky; top: 0; background: var(--surface);
+    text-align: left; font-weight: 700; font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--muted); padding: 12px 10px; border-bottom: 1px solid var(--line); white-space: nowrap;
+    cursor: pointer; user-select: none;
   }
-  th[aria-sort] { color: var(--text); }
+  th[aria-sort] { color: var(--red); }
   th[aria-sort="ascending"]::after { content: " ↑"; }
   th[aria-sort="descending"]::after { content: " ↓"; }
-  td { padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
-  tr:last-child td { border-bottom: 0; }
+  td { padding: 11px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
   tbody tr { cursor: pointer; }
-  tbody tr:hover td { background: var(--surface-2); }
+  tbody tr:hover td { background: rgba(255,255,255,.6); }
+  tbody tr.open td:first-child { box-shadow: inset 6px 0 0 var(--red); }
   tr.fresh td { animation: fresh 4s ease-out; }
-  @keyframes fresh { from { background: var(--new); } to { background: transparent; } }
-  .name { font-weight: 550; }
+  @keyframes fresh { from { background: rgba(168,24,24,.10); } to { background: transparent; } }
+  .name { font-weight: 700; color: var(--ink); }
   .sub-email { color: var(--muted); font-size: 12px; }
-  .num { text-align: right; font-variant-numeric: tabular-nums; }
-  .col-last { white-space: nowrap; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .col-last { white-space: nowrap; color: var(--muted); }
   .phones { font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .tag { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 4px; margin-right: 4px; }
-  .tag.m { background: var(--good-soft); color: var(--good); }
-  .tag.o { background: var(--accent-soft); color: var(--accent); }
-  .tag.img { background: var(--warn-soft); color: var(--warn); }
-  .muted { color: var(--faint); }
-  .detail td { background: var(--surface-2); cursor: default; }
-  .detail pre {
-    margin: 0; white-space: pre-wrap; font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted);
-  }
-  .footer-note { color: var(--faint); font-size: 12.5px; padding: 10px 12px; border-top: 1px solid var(--border); }
+  .tag { display: inline-block; font-weight: 700; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; padding: 2px 6px; border-radius: 6px; margin-right: 6px; color: var(--muted); background: rgba(110,99,96,.1); }
+  .badge { display: inline-block; font-weight: 800; font-size: 10px; letter-spacing: .04em; padding: 2px 7px; border-radius: 6px; margin-left: 6px; background: var(--red); color: #fff; vertical-align: 1px; }
+  .muted { color: #A39794; }
+  .detail td { background: rgba(255,255,255,.78); cursor: default; box-shadow: inset 6px 0 0 var(--red); }
+  .detail pre { margin: 0; white-space: pre-wrap; font: 500 12.5px/1.55 var(--font); color: var(--text); }
+  .footer-note { color: var(--muted); font-size: 12.5px; padding: 12px 14px; }
 
-  @media (max-width: 980px) {
+  /* Barra de sitio: cierre de toda pieza */
+  .sitebar { display: flex; justify-content: center; margin-top: 32px; }
+  .sitebar a {
+    display: inline-flex; align-items: center; gap: 12px; padding: 8px 22px 8px 9px; border: 3px solid var(--red);
+    border-radius: 100px; background: rgba(255,255,255,.7); color: var(--red); font-weight: 600; font-size: 15px; text-decoration: none;
+  }
+  .sitebar .globe { width: 30px; height: 30px; border-radius: 50%; background: var(--red); display: grid; place-items: center; }
+  .sitebar .globe svg { width: 18px; height: 18px; }
+
+  @media (max-width: 1060px) {
     .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .kpis .kpi:first-child { grid-column: 1 / -1; }
+    .kpis .kpi.lead { grid-column: 1 / -1; }
     .grid { grid-template-columns: minmax(0, 1fr); }
   }
   @media (max-width: 640px) {
-    .wrap { padding: 16px 16px 40px; }
-    .col-title, .col-office, .col-last { display: none; }
+    .wrap { padding: 18px 16px 32px; }
+    h1 { font-size: 30px; }
+    .actions { width: 100%; }
+    .actions .btn { flex: 1; justify-content: center; }
+    .col-title, .col-last { display: none; }
   }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <header>
-    <h1>Contactos del buzón</h1>
-    <span class="mailbox" id="mailbox"></span>
+  <div class="top">
+    <template id="wordmark"><div><div class="wordmark">D-industrimex<sup>®</sup></div><div class="tagline">Soluciones industriales eficientes</div></div></template>
+    <a class="brand" href="https://www.dindustrimex.com" target="_blank" rel="noopener" id="brand">
+      <img src="/static/logo.svg" alt="D-Industrimex · Soluciones industriales eficientes"
+           onerror="this.replaceWith(document.getElementById('wordmark').content.cloneNode(true))">
+    </a>
     <span class="spacer"></span>
-    <span class="pill" id="state"><span class="dot"></span><span id="state-text">Conectando…</span></span>
-    <span class="updated" id="updated"></span>
-  </header>
+    <div class="actions">
+      <span class="state" id="state"><span class="dot"></span><span id="state-text">Conectando</span></span>
+      <button class="btn btn-primary" id="start" type="button" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 5l11 7-11 7z"/></svg>
+        <span id="start-label">Iniciar escaneo</span>
+      </button>
+      <button class="btn btn-outline" id="stop" type="button" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>
+        Detener
+      </button>
+    </div>
+  </div>
 
-  <section class="card progress" id="progress">
+  <div class="eyebrow">Directorio del buzón</div>
+  <h1>Contactos de clientes y <em>proveedores</em></h1>
+  <p class="lede"><span id="mailbox-line">Leyendo firmas de correo</span> <span class="updated" id="updated"></span></p>
+
+  <section class="infobox">
     <div class="progress-top">
       <b id="progress-label">Esperando datos</b>
       <span id="progress-numbers"></span>
     </div>
     <div class="bar"><div id="progress-bar"></div></div>
-    <div class="error-msg" id="error" hidden></div>
+    <div class="notice" id="notice" hidden></div>
   </section>
 
   <section class="kpis">
-    <div class="card kpi"><div class="label">Contactos</div><div class="value" id="k-total">0</div><div class="sub" id="k-total-sub">&nbsp;</div></div>
-    <div class="card kpi"><div class="label">Con teléfono</div><div class="value" id="k-phone">0</div><div class="sub" id="k-phone-sub">&nbsp;</div></div>
-    <div class="card kpi"><div class="label">Con empresa</div><div class="value" id="k-company">0</div><div class="sub" id="k-company-sub">&nbsp;</div></div>
+    <div class="card kpi lead"><div class="label">Contactos</div><div class="value" id="k-total">0</div><div class="sub" id="k-total-sub"></div></div>
+    <div class="card kpi"><div class="label">Con teléfono</div><div class="value" id="k-phone">0</div><div class="sub" id="k-phone-sub"></div></div>
+    <div class="card kpi"><div class="label">Con empresa</div><div class="value" id="k-company">0</div><div class="sub" id="k-company-sub"></div></div>
     <div class="card kpi"><div class="label">Firmas en imagen</div><div class="value" id="k-image">0</div><div class="sub">leídas con OCR</div></div>
-    <div class="card kpi"><div class="label">Correos leídos</div><div class="value" id="k-messages">0</div><div class="sub" id="k-messages-sub">&nbsp;</div></div>
+    <div class="card kpi"><div class="label">Correos leídos</div><div class="value" id="k-messages">0</div><div class="sub" id="k-messages-sub"></div></div>
   </section>
 
   <div class="grid">
@@ -175,7 +241,7 @@
           <button class="chip" data-filter="signature" aria-pressed="false">Con firma</button>
           <button class="chip" data-filter="header" aria-pressed="false">Solo correo</button>
         </div>
-        <a class="btn" href="/contacts.csv" download="contacts.csv">Descargar CSV</a>
+        <a class="btn btn-ghost" href="/contacts.csv" download="contacts.csv">Descargar CSV</a>
       </div>
       <div class="table-wrap">
         <table>
@@ -183,8 +249,7 @@
             <th data-key="name">Nombre</th>
             <th data-key="company">Empresa</th>
             <th data-key="title" class="col-title">Puesto</th>
-            <th data-key="mobile_phones">Celular</th>
-            <th data-key="office_phones" class="col-office">Oficina</th>
+            <th data-key="mobile_phones">Teléfonos</th>
             <th data-key="messages" class="num">Correos</th>
             <th data-key="last_seen" class="col-last" aria-sort="descending">Último</th>
           </tr></thead>
@@ -193,6 +258,13 @@
       </div>
       <div class="footer-note" id="footer-note"></div>
     </section>
+  </div>
+
+  <div class="sitebar">
+    <a href="https://www.dindustrimex.com" target="_blank" rel="noopener">
+      <span class="globe"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3z"/></svg></span>
+      www.dindustrimex.com
+    </a>
   </div>
 </div>
 
@@ -205,7 +277,7 @@
 
   let contacts = [], version = "", known = new Set(), fresh = new Set();
   let filter = "all", query = "", sortKey = "last_seen", sortDir = -1, openEmail = null, limit = PAGE;
-  let lastUpdate = null, rateSamples = [];
+  let lastUpdate = null, rateSamples = [], pendingAction = null, actionError = "";
 
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const phoneFmt = (p) => {
@@ -228,28 +300,52 @@
     return isNaN(d) ? iso.slice(0, 10) : d.toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "2-digit" });
   };
 
-  function renderStatus(st) {
-    $("mailbox").textContent = st.mailbox || "";
-    const pill = $("state"), text = $("state-text"), prog = $("progress");
-    pill.className = "pill"; prog.classList.remove("done");
-    $("error").hidden = true;
-    if (st.error) {
-      pill.classList.add("error"); text.textContent = st.error === "Detenido" ? "Detenido" : "Error";
-      if (st.error !== "Detenido") { $("error").hidden = false; $("error").textContent = st.error; }
-    } else if (st.running) {
-      pill.classList.add("running"); text.textContent = "Leyendo correos";
-    } else if (st.updated_at) {
-      pill.classList.add("done"); text.textContent = "Terminado"; prog.classList.add("done");
-    }
+  function renderStatus(st, control) {
+    const alive = !!control.alive;
+    const running = alive && st.running;
+    $("mailbox-line").innerHTML = st.mailbox ? `Leyendo las firmas de <b>${esc(st.mailbox)}</b>.` : "Leyendo firmas de correo.";
 
+    // Estado + botones
+    const state = $("state"), text = $("state-text");
+    state.className = "state";
+    let notice = "";
+    if (pendingAction === "start" && !alive) { text.textContent = "Iniciando"; state.classList.add("running"); }
+    else if (pendingAction === "stop" && alive) { text.textContent = "Deteniendo"; state.classList.add("running"); }
+    else if (alive && !st.running) { text.textContent = "Iniciando"; state.classList.add("running"); }
+    else if (running) { text.textContent = st.folder ? "Leyendo correos" : "Conectando"; state.classList.add("running"); }
+    else if (control.failure) {
+      text.textContent = "No pudo iniciar"; state.classList.add("error");
+      notice = `El escaneo se detuvo antes de empezar. Revisa el archivo .env.<pre>${esc(control.failure)}</pre>`;
+    } else if (st.error && st.error !== "Detenido") {
+      text.textContent = "Error"; state.classList.add("error");
+      notice = /AUTHENTICATIONFAILED|Invalid credentials|LOGIN/i.test(st.error)
+        ? `Google rechazó la contraseña. Usa una contraseña de aplicación en IMAP_PASSWORD.<pre>${esc(st.error)}</pre>`
+        : esc(st.error);
+    } else if (st.error === "Detenido") { text.textContent = "Detenido"; }
+    else if (st.updated_at) { text.textContent = "Terminado"; state.classList.add("done"); }
+    else { text.textContent = "Sin escanear"; }
+    if (actionError) notice = esc(actionError) + (notice ? "<br>" + notice : "");
+    if ((pendingAction === "start" && alive) || (pendingAction === "stop" && !alive)) pendingAction = null;
+
+    $("start").hidden = alive || pendingAction === "start";
+    $("stop").hidden = !alive;
+    $("stop").disabled = pendingAction === "stop";
+    $("start-label").textContent = st.messages_total ? "Buscar correos nuevos" : "Iniciar escaneo";
+
+    $("notice").hidden = !notice;
+    $("notice").innerHTML = notice;
+
+    // Avance
     const done = st.folder_done || 0, pending = st.folder_pending || 0;
-    let label = "Preparando…", numbers = "", width = 0;
-    if (st.folder) {
-      label = st.running ? `Carpeta ${st.folder}` : `Carpeta ${st.folder} completa`;
-      width = pending ? pct(done, pending) : 100;
+    let label = "Listo para escanear", numbers = "", width = 0;
+    if (running && !st.folder) label = "Conectando con el buzón…";
+    else if (st.folder) {
+      const where = st.folder === "archivos locales" ? "Archivos locales" : `Carpeta ${st.folder}`;
+      label = running ? where : `${where}${st.error ? "" : (st.folder === "archivos locales" ? " leídos" : " completa")}`;
+      width = pending ? pct(done, pending) : (running ? 0 : 100);
       numbers = pending ? `${fmt.format(done)} de ${fmt.format(pending)} nuevos · ${width}%`
-        : st.running ? `${fmt.format(done)} leídos` : "sin correos nuevos";
-      if (st.running && pending) {
+        : done ? `${fmt.format(done)} leídos` : running ? "0 leídos" : "sin correos nuevos";
+      if (running && pending) {
         rateSamples.push([Date.now(), done]);
         rateSamples = rateSamples.filter(([t]) => Date.now() - t < 120000);
         const [t0, d0] = rateSamples[0];
@@ -258,16 +354,14 @@
           const mins = Math.ceil((pending - done) / rate / 60);
           numbers += ` · faltan ~${mins < 60 ? mins + " min" : (mins / 60).toFixed(1) + " h"}`;
         }
-      }
-    } else if (!st.running && st.updated_at) {
-      label = "Listo"; width = 100;
+      } else rateSamples = [];
     }
     $("progress-label").textContent = label;
     $("progress-numbers").textContent = numbers;
     $("progress-bar").style.width = width + "%";
 
     $("k-messages").textContent = fmt.format(st.messages_total || 0);
-    $("k-messages-sub").textContent = st.new_messages ? `${fmt.format(st.new_messages)} en esta corrida` : " ";
+    $("k-messages-sub").textContent = st.new_messages ? `${fmt.format(st.new_messages)} en esta corrida` : "";
     if (st.updated_at) lastUpdate = new Date(st.updated_at);
   }
 
@@ -277,11 +371,11 @@
     const withCompany = contacts.filter((c) => c.company).length;
     const fromImage = contacts.filter((c) => c.source.includes("image")).length;
     $("k-total").textContent = fmt.format(n);
-    $("k-total-sub").textContent = fresh.size ? `+${fmt.format(fresh.size)} en la última actualización` : " ";
+    $("k-total-sub").textContent = fresh.size ? `+${fmt.format(fresh.size)} en la última actualización` : "";
     $("k-phone").textContent = fmt.format(withPhone);
-    $("k-phone-sub").textContent = n ? `${pct(withPhone, n)}% del total` : " ";
+    $("k-phone-sub").textContent = n ? `${pct(withPhone, n)}% del total` : "";
     $("k-company").textContent = fmt.format(withCompany);
-    $("k-company-sub").textContent = n ? `${pct(withCompany, n)}% del total` : " ";
+    $("k-company-sub").textContent = n ? `${pct(withCompany, n)}% del total` : "";
     $("k-image").textContent = fmt.format(fromImage);
   }
 
@@ -319,9 +413,10 @@
     });
   }
 
-  function phoneCell(list, cls) {
+  function phoneCell(c) {
+    const list = [...phones(c.mobile_phones).map((p) => ["cel", p]), ...phones(c.office_phones).map((p) => ["tel", p])];
     if (!list.length) return '<span class="muted">—</span>';
-    const shown = list.slice(0, 2).map((p) => `<div><span class="tag ${cls}">${cls === "m" ? "cel" : "tel"}</span>${esc(p)}</div>`).join("");
+    const shown = list.slice(0, 2).map(([kind, p]) => `<div><span class="tag">${kind}</span>${esc(p)}</div>`).join("");
     return list.length > 2 ? shown + `<div class="muted">+${list.length - 2} más</div>` : shown;
   }
 
@@ -330,26 +425,25 @@
     const shown = rows.slice(0, limit);
     $("rows").innerHTML = shown.map((c) => {
       const isOpen = c.email === openEmail;
-      const main = `<tr data-email="${esc(c.email)}" class="${fresh.has(c.email) ? "fresh" : ""}">
-        <td><div class="name">${esc(c.name) || '<span class="muted">Sin nombre</span>'}
-          ${c.source.includes("image") ? '<span class="tag img">imagen</span>' : ""}</div>
+      const main = `<tr data-email="${esc(c.email)}" class="${fresh.has(c.email) ? "fresh" : ""}${isOpen ? " open" : ""}">
+        <td><div class="name">${esc(c.name) || '<span class="muted">Sin nombre</span>'}${c.source.includes("image") ? '<span class="badge">IMAGEN</span>' : ""}</div>
           <div class="sub-email">${esc(c.email)}</div></td>
         <td>${esc(c.company) || '<span class="muted">—</span>'}</td>
         <td class="col-title">${esc(c.title) || '<span class="muted">—</span>'}</td>
-        <td class="phones">${phoneCell(phones(c.mobile_phones), "m")}</td>
-        <td class="phones col-office">${phoneCell(phones(c.office_phones), "o")}</td>
+        <td class="phones">${phoneCell(c)}</td>
         <td class="num">${esc(c.messages)}</td>
         <td class="col-last">${esc(shortDate(c.last_seen))}</td></tr>`;
       if (!isOpen) return main;
       const extra = [
+        (c.mobile_phones || c.office_phones) && `Teléfonos: ${[...phones(c.mobile_phones).map((p) => "cel " + p), ...phones(c.office_phones).map((p) => "tel " + p)].join(", ")}`,
         c.other_emails && `Otros correos: ${c.other_emails}`,
         c.websites && `Web: ${c.websites}`,
         c.fax && `Fax: ${c.fax}`,
         c.first_seen && `Primer correo: ${shortDate(c.first_seen)}`,
       ].filter(Boolean).join("\n");
       const sig = (c.sample_signature || "").split(" | ").join("\n");
-      return main + `<tr class="detail"><td colspan="7"><pre>${esc(sig || "Sin firma detectada")}${extra ? "\n\n" + esc(extra) : ""}</pre></td></tr>`;
-    }).join("") || `<tr><td colspan="7" class="muted" style="padding:20px 12px">${contacts.length ? "Nada coincide con la búsqueda." : "Aún no hay contactos. Aparecerán aquí conforme se lean los correos."}</td></tr>`;
+      return main + `<tr class="detail"><td colspan="6"><pre>${esc(sig || "Sin firma detectada")}${extra ? "\n\n" + esc(extra) : ""}</pre></td></tr>`;
+    }).join("") || `<tr><td colspan="6" class="muted" style="padding:22px 12px">${contacts.length ? "Nada coincide con la búsqueda." : "Aún no hay contactos. Pulsa “Iniciar escaneo” y aparecerán aquí conforme se lean los correos."}</td></tr>`;
     $("footer-note").textContent = rows.length > shown.length
       ? `Mostrando ${fmt.format(shown.length)} de ${fmt.format(rows.length)}. Usa la búsqueda o haz clic aquí para ver más.`
       : `${fmt.format(rows.length)} contacto${rows.length === 1 ? "" : "s"}`;
@@ -360,11 +454,13 @@
     });
   }
 
+  let timer = null;
   async function poll() {
+    clearTimeout(timer);
     try {
       const res = await fetch(`/data?since=${encodeURIComponent(version)}`, { cache: "no-store" });
       const data = await res.json();
-      renderStatus(data.status || {});
+      renderStatus(data.status || {}, data.control || {});
       if (data.contacts) {
         const first = !version;
         version = data.version;
@@ -375,13 +471,29 @@
         renderKpis(); renderCompanies(); renderTable();
       }
     } catch (e) {
-      $("state").className = "pill error";
-      $("state-text").textContent = "Sin conexión con el scraper";
+      $("state").className = "state error";
+      $("state-text").textContent = "Dashboard cerrado";
+      $("start").hidden = true; $("stop").hidden = true;
     }
-    $("updated").textContent = lastUpdate ? `actualizado ${ago(lastUpdate)}` : "";
-    setTimeout(poll, POLL_MS);
+    $("updated").textContent = lastUpdate ? `· actualizado ${ago(lastUpdate)}` : "";
+    timer = setTimeout(poll, POLL_MS);
   }
 
+  async function action(kind) {
+    pendingAction = kind; actionError = "";
+    try {
+      const res = await fetch(`/${kind}`, { method: "POST", headers: { "X-Requested-With": "dashboard" } });
+      if (!res.ok && res.status !== 409) throw new Error(res.status);
+      if (res.status === 409) pendingAction = null;
+    } catch (e) {
+      pendingAction = null;
+      actionError = kind === "start" ? "No se pudo iniciar el escaneo." : "No se pudo detener el escaneo.";
+    }
+    poll();
+  }
+
+  $("start").addEventListener("click", () => action("start"));
+  $("stop").addEventListener("click", () => action("stop"));
   $("search").addEventListener("input", (e) => { query = e.target.value; limit = PAGE; renderTable(); });
   document.querySelectorAll(".chip").forEach((b) => b.addEventListener("click", () => {
     filter = b.dataset.filter; limit = PAGE;

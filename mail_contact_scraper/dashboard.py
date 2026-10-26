@@ -1,7 +1,7 @@
-"""Local live dashboard for output/contacts.csv.
+"""Local live dashboard for output/contacts.csv, with Start / Stop for the scraper.
 
-    python -m mail_contact_scraper.dashboard            # just the dashboard
-    python -m mail_contact_scraper --dashboard           # scrape + dashboard
+    python -m mail_contact_scraper --dashboard          # dashboard + start scraping right away
+    python -m mail_contact_scraper.dashboard            # dashboard only; start from the page
 
 Serves on 127.0.0.1 only, so the contact data never leaves this computer.
 """
@@ -9,9 +9,13 @@ import argparse
 import csv
 import json
 import logging
+import os
+import signal
+import subprocess
+import sys
 import threading
-import time
 import webbrowser
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 from pathlib import Path
@@ -19,6 +23,7 @@ from urllib.parse import parse_qs, urlparse
 
 log = logging.getLogger(__name__)
 DEFAULT_PORT = 8765
+STATIC_TYPES = {".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp"}
 
 
 def _read_json(path):
@@ -36,12 +41,99 @@ def _read_contacts(path):
         return []
 
 
-def make_handler(out_dir):
+def _pid_alive(pid):
+    if not pid:
+        return False
+    try:
+        os.kill(int(pid), 0)
+    except (OSError, ValueError):
+        return False
+    return True
+
+
+def _tail(path, lines=12):
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            return "".join(fh.readlines()[-lines:]).strip()
+    except OSError:
+        return ""
+
+
+class ScraperControl:
+    """Starts the scraper as a child process and reports whether a run is alive."""
+
+    def __init__(self, out_dir, scrape_args=()):
+        self.out_dir = Path(out_dir)
+        # A button click resumes; it must never wipe previous progress.
+        self.scrape_args = [a for a in scrape_args if a != "--fresh"]
+        self.first_args = list(scrape_args)
+        self.proc = None
+        self.started_at = None
+        self.lock = threading.Lock()
+
+    @property
+    def log_path(self):
+        return self.out_dir / "scraper.log"
+
+    def alive(self, status):
+        if self.proc and self.proc.poll() is None:
+            return True
+        return bool(status.get("running")) and _pid_alive(status.get("pid"))
+
+    def start(self, first=False):
+        with self.lock:
+            if self.alive(_read_json(self.out_dir / "status.json")):
+                return False
+            args = self.first_args if first else self.scrape_args
+            if "--output" not in args:
+                args = ["--output", str(self.out_dir)] + args
+            self.out_dir.mkdir(parents=True, exist_ok=True)
+            logfile = open(self.log_path, "w", encoding="utf-8")
+            env = dict(os.environ, PYTHONUNBUFFERED="1")
+            # Find this package even if the dashboard was started from another folder.
+            root = str(Path(__file__).resolve().parent.parent)
+            env["PYTHONPATH"] = os.pathsep.join(p for p in (root, env.get("PYTHONPATH")) if p)
+            self.proc = subprocess.Popen(
+                [sys.executable, "-m", "mail_contact_scraper", *args],
+                stdout=logfile, stderr=subprocess.STDOUT, env=env,
+                # Own session: Ctrl+C in the dashboard's terminal reaches it only via stop().
+                start_new_session=os.name != "nt",
+            )
+            logfile.close()
+            self.started_at = datetime.now().isoformat(timespec="seconds")
+            log.info("Scraper iniciado (pid %s)", self.proc.pid)
+            return True
+
+    def stop(self):
+        status = _read_json(self.out_dir / "status.json")
+        pid = self.proc.pid if self.proc and self.proc.poll() is None else status.get("pid")
+        if not self.alive(status) or not pid:
+            return False
+        try:
+            # SIGINT lets the scraper save progress and mark the run as stopped.
+            os.kill(int(pid), signal.CTRL_C_EVENT if os.name == "nt" else signal.SIGINT)
+        except OSError:
+            if self.proc:
+                self.proc.terminate()
+        return True
+
+    def report(self, status):
+        info = {"alive": self.alive(status), "can_control": True}
+        if self.proc and self.proc.poll() not in (None, 0):
+            info["exit_code"] = self.proc.poll()
+            # Failed before it could write status.json (e.g. missing .env): surface the log.
+            if (status.get("started_at") or "") < (self.started_at or ""):
+                info["failure"] = _tail(self.log_path)
+        return info
+
+
+def make_handler(out_dir, control):
     out_dir = Path(out_dir)
-    page = resources.files(__package__).joinpath("dashboard.html").read_bytes()
+    package = resources.files(__package__)
+    page = package.joinpath("dashboard.html").read_bytes()
 
     class Handler(BaseHTTPRequestHandler):
-        def log_message(self, *args):  # keep the scraper's console clean
+        def log_message(self, *args):  # keep the console clean
             pass
 
         def _send(self, body, ctype, status=200):
@@ -52,7 +144,17 @@ def make_handler(out_dir):
             self.end_headers()
             self.wfile.write(body)
 
+        def _json(self, payload, status=200):
+            self._send(json.dumps(payload, ensure_ascii=False).encode(), "application/json", status)
+
+        def _local_host(self):
+            # Blocks DNS-rebinding pages from reading the contacts.
+            host = (self.headers.get("Host") or "").rsplit(":", 1)[0]
+            return host in ("127.0.0.1", "localhost")
+
         def do_GET(self):
+            if not self._local_host():
+                return self._send(b"forbidden", "text/plain", 403)
             url = urlparse(self.path)
             csv_path = out_dir / "contacts.csv"
             if url.path == "/":
@@ -60,22 +162,45 @@ def make_handler(out_dir):
             elif url.path == "/data":
                 since = parse_qs(url.query).get("since", [""])[0]
                 version = str(csv_path.stat().st_mtime_ns) if csv_path.exists() else "0"
-                payload = {"status": _read_json(out_dir / "status.json"), "version": version}
+                status = _read_json(out_dir / "status.json")
+                payload = {"status": status, "version": version, "control": control.report(status)}
                 if since != version:
                     payload["contacts"] = _read_contacts(csv_path)
-                self._send(json.dumps(payload, ensure_ascii=False).encode(), "application/json")
+                self._json(payload)
             elif url.path == "/contacts.csv" and csv_path.exists():
                 self._send(csv_path.read_bytes(), "text/csv; charset=utf-8")
+            elif url.path.startswith("/static/"):
+                name = url.path.rsplit("/", 1)[-1]
+                asset = package.joinpath("static", name)
+                if name and asset.is_file() and Path(name).suffix in STATIC_TYPES:
+                    self._send(asset.read_bytes(), STATIC_TYPES[Path(name).suffix])
+                else:
+                    self._send(b"not found", "text/plain", 404)
+            else:
+                self._send(b"not found", "text/plain", 404)
+
+        def do_POST(self):
+            # A custom header can't be sent cross-site without a CORS preflight, which this
+            # server never grants, so other websites can't press these buttons.
+            if not self._local_host() or self.headers.get("X-Requested-With") != "dashboard":
+                return self._send(b"forbidden", "text/plain", 403)
+            if self.path == "/start":
+                started = control.start()
+                self._json({"ok": started}, 200 if started else 409)
+            elif self.path == "/stop":
+                stopped = control.stop()
+                self._json({"ok": stopped}, 200 if stopped else 409)
             else:
                 self._send(b"not found", "text/plain", 404)
 
     return Handler
 
 
-def serve(out_dir, port=DEFAULT_PORT, open_browser=True):
+def serve(out_dir, port=DEFAULT_PORT, open_browser=True, control=None):
+    control = control or ScraperControl(out_dir)
     for candidate in range(port, port + 20):
         try:
-            server = ThreadingHTTPServer(("127.0.0.1", candidate), make_handler(out_dir))
+            server = ThreadingHTTPServer(("127.0.0.1", candidate), make_handler(out_dir, control))
             break
         except OSError:
             continue
@@ -88,34 +213,37 @@ def serve(out_dir, port=DEFAULT_PORT, open_browser=True):
     return server, url
 
 
-def start_in_background(out_dir, port=DEFAULT_PORT):
-    server, url = serve(out_dir, port)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    return url
-
-
-def wait_forever():
-    log.info("Dashboard sigue abierto. Ctrl+C para cerrarlo.")
-    try:
-        while True:
-            time.sleep(3600)
-    except KeyboardInterrupt:
-        pass
-
-
 def main(argv=None):
     p = argparse.ArgumentParser(prog="mail_contact_scraper.dashboard")
-    p.add_argument("--output", default="output", help="Folder with contacts.csv (default: output)")
+    p.add_argument("--output", default=None, help="Folder with contacts.csv (default: OUTPUT_DIR or output)")
     p.add_argument("--port", type=int, default=DEFAULT_PORT)
     p.add_argument("--no-browser", action="store_true")
+    p.add_argument("--autostart", action="store_true", help="Start scraping as soon as the dashboard opens")
+    p.add_argument("scrape_args", nargs=argparse.REMAINDER, help="Arguments for the scraper, after --")
     args = p.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    server, _ = serve(args.output, args.port, not args.no_browser)
+
+    if args.output is None:
+        from .config import load_settings
+        args.output = load_settings().output_dir
+    scrape_args = args.scrape_args[1:] if args.scrape_args[:1] == ["--"] else args.scrape_args
+    control = ScraperControl(args.output, scrape_args)
+    server, _ = serve(args.output, args.port, not args.no_browser, control)
+    if args.autostart:
+        control.start(first=True)
     log.info("Ctrl+C para cerrar.")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
+    finally:
+        # Only the run this dashboard started; a run from another terminal keeps going.
+        if control.proc and control.proc.poll() is None and control.stop():
+            log.info("Deteniendo el scraper y guardando el avance…")
+            try:
+                control.proc.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                control.proc.kill()
     return 0
 
 

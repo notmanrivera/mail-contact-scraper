@@ -59,18 +59,35 @@ python -m mail_contact_scraper --local export.mbox carpeta_con_eml/   # sin IMAP
 ## Dashboard en vivo
 
 ```bash
-python -m mail_contact_scraper --dashboard              # escanea y abre el dashboard
-python -m mail_contact_scraper.dashboard                # solo el dashboard, sobre output/
+python -m mail_contact_scraper.dashboard                # abre el dashboard; el escaneo se inicia desde ahí
+python -m mail_contact_scraper --dashboard              # abre el dashboard y empieza a escanear de inmediato
 ```
 
-Se abre en el navegador (`http://127.0.0.1:8765`) y se actualiza cada 3 segundos
-mientras corre el scraper: avance de la carpeta con tiempo estimado, total de contactos,
-cuántos tienen teléfono y empresa, empresas con más contactos y una tabla con búsqueda,
-filtros y la firma completa de cada contacto al hacer clic. El CSV se reescribe cada
-50 correos, así que también puedes abrirlo a medio proceso.
+Se abre en el navegador (`http://127.0.0.1:8765`) con el estilo del Sistema de diseño
+D-Industrimex y se actualiza cada 3 segundos:
 
-Solo escucha en tu computadora (127.0.0.1); los datos no se publican en ningún lado.
-Ctrl+C lo cierra.
+- **Iniciar escaneo / Buscar correos nuevos** arranca el scraper con la configuración de
+  `.env`. Si ya hubo una corrida, solo procesa lo nuevo.
+- **Detener** lo para y guarda el avance; al volver a iniciar sigue donde se quedó.
+- Avance de la carpeta con tiempo estimado, total de contactos, cuántos tienen teléfono y
+  empresa, empresas con más contactos y una tabla con búsqueda, filtros y la firma completa
+  de cada contacto al hacer clic.
+- Si el escaneo falla (contraseña, `.env` incompleto), el error aparece en la página. El
+  detalle queda en `output/scraper.log`.
+
+El logo se toma de `mail_contact_scraper/static/logo.svg` (copia ahí el rojo horizontal
+oficial; ver `static/LEEME.md`). Sin ese archivo se muestra el nombre en Montserrat.
+
+Solo escucha en tu computadora (127.0.0.1) y los botones rechazan peticiones de otras
+páginas, así que los datos no se publican en ningún lado. Ctrl+C cierra el dashboard y
+detiene el escaneo que haya iniciado.
+
+### Contactos de la propia empresa
+
+Por defecto se omiten los contactos del dominio del buzón (`@dindustrimex.com` y sus
+subdominios), porque son compañeros, no prospectos. Para cambiarlo, en `.env`:
+`EXCLUDE_DOMAINS=dindustrimex.com,otrodominio.mx`, o `EXCLUDE_DOMAINS=none` para no omitir
+ninguno. Se aplica al CSV completo cada vez que se reescribe, también a lo ya escaneado.
 
 ## Contraseña según el proveedor
 

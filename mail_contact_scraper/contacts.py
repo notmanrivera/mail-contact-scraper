@@ -16,13 +16,23 @@ FIELDS = [
 
 
 class ContactBook:
-    def __init__(self, exclude=(), skip_automated=True):
+    def __init__(self, exclude=(), skip_automated=True, exclude_domains=()):
         self.exclude = {e.lower() for e in exclude if e}
         self.skip_automated = skip_automated
+        self.exclude_domains = tuple(d.lower() for d in exclude_domains if d)
         self.rows = {}
 
+    def _excluded_domain(self, addr):
+        domain = addr.rsplit("@", 1)[-1]
+        return any(domain == d or domain.endswith("." + d) for d in self.exclude_domains)
+
     def _skip(self, addr):
-        return not addr or addr in self.exclude or (self.skip_automated and AUTOMATED_RE.match(addr))
+        return (
+            not addr
+            or addr in self.exclude
+            or self._excluded_domain(addr)
+            or (self.skip_automated and AUTOMATED_RE.match(addr))
+        )
 
     def _row(self, addr):
         return self.rows.setdefault(addr, {
@@ -56,7 +66,7 @@ class ContactBook:
         for e164, label, _raw in info["phones"]:
             row["phones"].setdefault(e164, label or "office")
         for other in info["emails"]:
-            if other != addr and other not in self.exclude and other not in row["other_emails"]:
+            if other != addr and not self._skip(other) and other not in row["other_emails"]:
                 row["other_emails"].append(other)
         for url in info["websites"]:
             if url not in row["websites"]:
