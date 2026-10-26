@@ -75,7 +75,7 @@ img = Image.new("RGB", (900, 160), "white")
 ImageDraw.Draw(img).text((20, 40), "Tel. 81 8340 1122", fill="black", font=ImageFont.load_default(size=64))
 img.save(sys.argv[1])
 EOF
-TESSDATA_PREFIX="$RES/tesseract/tessdata" env -i PATH=/usr/bin:/bin "$RES/tesseract/bin/tesseract" "$SMOKE/firma.png" stdout -l spa+eng | tee "$SMOKE/ocr.txt"
+env -i PATH=/usr/bin:/bin TESSDATA_PREFIX="$RES/tesseract/tessdata" "$RES/tesseract/bin/tesseract" "$SMOKE/firma.png" stdout -l spa+eng | tee "$SMOKE/ocr.txt"
 grep -q "8340" "$SMOKE/ocr.txt"
 # The scraper through the app, reading the test emails.
 CONTACTOS_DATA_DIR="$SMOKE/data" "$EXE" -m mail_contact_scraper --local "$PWD/tests/fixtures" --output "$SMOKE/data/output"

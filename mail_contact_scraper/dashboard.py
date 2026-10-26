@@ -275,9 +275,10 @@ def make_handler(out_dir, control, env_path=".env", updater=None):
 
 def serve(out_dir, port=DEFAULT_PORT, open_browser=True, control=None, env_path=".env", updater=None):
     control = control or ScraperControl(out_dir)
+    handler = make_handler(out_dir, control, env_path, updater)  # outside the loop: its errors aren't port errors
     for candidate in range(port, port + 20):
         try:
-            server = ThreadingHTTPServer(("127.0.0.1", candidate), make_handler(out_dir, control, env_path, updater))
+            server = ThreadingHTTPServer(("127.0.0.1", candidate), handler)
             break
         except OSError:
             continue
