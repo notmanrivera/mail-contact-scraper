@@ -183,3 +183,45 @@ def test_image_tokens_dropped_without_ocr():
     rec = cli.analyze(_image_signature_eml(b"not really a png"), "MX", None)
     assert "[[IMG" not in rec["signature"]
     assert not rec["signature_from_image"]
+
+
+def test_status_and_csv_written_during_run(tmp_path, monkeypatch):
+    import json
+
+    monkeypatch.setenv("IMAP_USER", "pedro@dindustrimex.com")
+    monkeypatch.setenv("BATCH_SIZE", "2")
+    snapshots = []
+    real = cli.write_outputs
+
+    def spy(records, settings, out_dir, status, running=True):
+        count = real(records, settings, out_dir, status, running)
+        snapshots.append(json.loads((out_dir / "status.json").read_text()))
+        return count
+
+    monkeypatch.setattr(cli, "write_outputs", spy)
+    cli.main(["--local", str(FIXTURES), "--output", str(tmp_path), "--fresh", "--no-ocr"])
+    assert [s["running"] for s in snapshots] == [True, True, True, False]
+    assert snapshots[-1]["messages_total"] == 5
+    assert (tmp_path / "contacts.csv").exists()
+
+
+def test_dashboard_data_endpoint(tmp_path, monkeypatch):
+    import json
+    import threading
+    import urllib.request
+
+    from mail_contact_scraper import dashboard
+
+    monkeypatch.setenv("IMAP_USER", "pedro@dindustrimex.com")
+    cli.main(["--local", str(FIXTURES), "--output", str(tmp_path), "--fresh", "--no-ocr"])
+    server, url = dashboard.serve(tmp_path, port=8790, open_browser=False)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        assert b"Contactos del buz" in urllib.request.urlopen(url).read()
+        data = json.loads(urllib.request.urlopen(url + "data").read())
+        assert data["status"]["running"] is False
+        assert len(data["contacts"]) == 4
+        again = json.loads(urllib.request.urlopen(f"{url}data?since={data['version']}").read())
+        assert "contacts" not in again  # unchanged CSV is not resent
+    finally:
+        server.shutdown()

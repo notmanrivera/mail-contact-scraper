@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contactos del buzón</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --surface: #ffffff; --surface-2: #f0efeb; --border: #e3e1db;
+    --text: #1d1c1a; --muted: #6b6862; --faint: #9a968e;
+    --accent: #2f6fdb; --accent-soft: #e4edfc; --good: #1f8a5b; --good-soft: #def3e9;
+    --warn: #b4540f; --warn-soft: #fbeadb; --bad: #c23a3a; --bad-soft: #fbe3e3;
+    --new: #fff5cc;
+    --radius: 10px; --shadow: 0 1px 2px rgba(0,0,0,.04), 0 1px 1px rgba(0,0,0,.03);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141412; --surface: #1d1c1a; --surface-2: #262522; --border: #33312d;
+      --text: #eeece8; --muted: #a29e96; --faint: #75716a;
+      --accent: #7aa7f5; --accent-soft: #1f2b40; --good: #5cc796; --good-soft: #17302a;
+      --warn: #f0a062; --warn-soft: #3a2817; --bad: #f08080; --bad-soft: #3c1f1f;
+      --new: #3a3417; --shadow: none;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 24px 20px 48px; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; margin-bottom: 20px; }
+  h1 { font-size: 20px; font-weight: 650; margin: 0; letter-spacing: -.01em; }
+  .mailbox { color: var(--muted); }
+  .spacer { flex: 1; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px; padding: 4px 10px; border-radius: 999px;
+    font-size: 12.5px; font-weight: 550; background: var(--surface-2); color: var(--muted);
+  }
+  .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .pill.running { background: var(--accent-soft); color: var(--accent); }
+  .pill.running .dot { animation: pulse 1.4s ease-in-out infinite; }
+  .pill.done { background: var(--good-soft); color: var(--good); }
+  .pill.error { background: var(--bad-soft); color: var(--bad); }
+  @keyframes pulse { 50% { opacity: .25; } }
+  .updated { color: var(--faint); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .progress { padding: 14px 16px; margin-bottom: 16px; }
+  .progress-top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; margin-bottom: 8px; font-size: 13px; }
+  .progress-top b { font-weight: 600; }
+  .progress-top span { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .bar { height: 8px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+  .bar > div { height: 100%; width: 0; background: var(--accent); border-radius: 999px; transition: width .6s ease; }
+  .progress.done .bar > div { background: var(--good); }
+  .error-msg { margin-top: 8px; color: var(--bad); font-size: 13px; }
+
+  .kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .kpi { padding: 14px 16px; }
+  .kpi .label { color: var(--muted); font-size: 12.5px; }
+  .kpi .value { font-size: 26px; font-weight: 650; letter-spacing: -.02em; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .kpi .sub { color: var(--faint); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+  .grid { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 16px; align-items: start; }
+  .panel-title { font-size: 13px; font-weight: 600; padding: 14px 16px 6px; }
+  .companies { padding: 4px 16px 14px; }
+  .co { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; padding: 6px 0; cursor: pointer; }
+  .co:hover .co-name { color: var(--accent); }
+  .co-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; }
+  .co-count { color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  .co-bar { grid-column: 1 / -1; height: 5px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+  .co-bar > div { height: 100%; background: var(--accent); opacity: .75; border-radius: 999px; transition: width .6s ease; }
+  .empty { color: var(--faint); font-size: 13px; padding: 8px 0; }
+
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px 12px 10px; border-bottom: 1px solid var(--border); }
+  .search {
+    flex: 1 1 220px; min-width: 0; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--bg); color: var(--text); font: inherit;
+  }
+  .search:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    border: 1px solid var(--border); background: transparent; color: var(--muted); border-radius: 999px;
+    padding: 5px 11px; font: inherit; font-size: 12.5px; cursor: pointer;
+  }
+  .chip[aria-pressed="true"] { background: var(--text); color: var(--surface); border-color: var(--text); }
+  .btn {
+    border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 8px;
+    padding: 6px 11px; font: inherit; font-size: 12.5px; text-decoration: none; white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--faint); }
+
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    text-align: left; font-weight: 550; color: var(--muted); font-size: 12px; padding: 9px 12px;
+    border-bottom: 1px solid var(--border); white-space: nowrap; cursor: pointer; user-select: none; padding: 9px 10px;
+    position: sticky; top: 0; background: var(--surface);
+  }
+  th[aria-sort] { color: var(--text); }
+  th[aria-sort="ascending"]::after { content: " ↑"; }
+  th[aria-sort="descending"]::after { content: " ↓"; }
+  td { padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover td { background: var(--surface-2); }
+  tr.fresh td { animation: fresh 4s ease-out; }
+  @keyframes fresh { from { background: var(--new); } to { background: transparent; } }
+  .name { font-weight: 550; }
+  .sub-email { color: var(--muted); font-size: 12px; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .col-last { white-space: nowrap; }
+  .phones { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tag { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 4px; margin-right: 4px; }
+  .tag.m { background: var(--good-soft); color: var(--good); }
+  .tag.o { background: var(--accent-soft); color: var(--accent); }
+  .tag.img { background: var(--warn-soft); color: var(--warn); }
+  .muted { color: var(--faint); }
+  .detail td { background: var(--surface-2); cursor: default; }
+  .detail pre {
+    margin: 0; white-space: pre-wrap; font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted);
+  }
+  .footer-note { color: var(--faint); font-size: 12.5px; padding: 10px 12px; border-top: 1px solid var(--border); }
+
+  @media (max-width: 980px) {
+    .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .kpis .kpi:first-child { grid-column: 1 / -1; }
+    .grid { grid-template-columns: minmax(0, 1fr); }
+  }
+  @media (max-width: 640px) {
+    .wrap { padding: 16px 16px 40px; }
+    .col-title, .col-office, .col-last { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Contactos del buzón</h1>
+    <span class="mailbox" id="mailbox"></span>
+    <span class="spacer"></span>
+    <span class="pill" id="state"><span class="dot"></span><span id="state-text">Conectando…</span></span>
+    <span class="updated" id="updated"></span>
+  </header>
+
+  <section class="card progress" id="progress">
+    <div class="progress-top">
+      <b id="progress-label">Esperando datos</b>
+      <span id="progress-numbers"></span>
+    </div>
+    <div class="bar"><div id="progress-bar"></div></div>
+    <div class="error-msg" id="error" hidden></div>
+  </section>
+
+  <section class="kpis">
+    <div class="card kpi"><div class="label">Contactos</div><div class="value" id="k-total">0</div><div class="sub" id="k-total-sub">&nbsp;</div></div>
+    <div class="card kpi"><div class="label">Con teléfono</div><div class="value" id="k-phone">0</div><div class="sub" id="k-phone-sub">&nbsp;</div></div>
+    <div class="card kpi"><div class="label">Con empresa</div><div class="value" id="k-company">0</div><div class="sub" id="k-company-sub">&nbsp;</div></div>
+    <div class="card kpi"><div class="label">Firmas en imagen</div><div class="value" id="k-image">0</div><div class="sub">leídas con OCR</div></div>
+    <div class="card kpi"><div class="label">Correos leídos</div><div class="value" id="k-messages">0</div><div class="sub" id="k-messages-sub">&nbsp;</div></div>
+  </section>
+
+  <div class="grid">
+    <section class="card">
+      <div class="panel-title">Empresas con más contactos</div>
+      <div class="companies" id="companies"><div class="empty">Todavía no hay empresas.</div></div>
+    </section>
+
+    <section class="card">
+      <div class="toolbar">
+        <input class="search" id="search" type="search" placeholder="Buscar nombre, empresa, teléfono o correo" autocomplete="off">
+        <div class="chips" role="group" aria-label="Filtro">
+          <button class="chip" data-filter="all" aria-pressed="true">Todos</button>
+          <button class="chip" data-filter="phone" aria-pressed="false">Con teléfono</button>
+          <button class="chip" data-filter="signature" aria-pressed="false">Con firma</button>
+          <button class="chip" data-filter="header" aria-pressed="false">Solo correo</button>
+        </div>
+        <a class="btn" href="/contacts.csv" download="contacts.csv">Descargar CSV</a>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th data-key="name">Nombre</th>
+            <th data-key="company">Empresa</th>
+            <th data-key="title" class="col-title">Puesto</th>
+            <th data-key="mobile_phones">Celular</th>
+            <th data-key="office_phones" class="col-office">Oficina</th>
+            <th data-key="messages" class="num">Correos</th>
+            <th data-key="last_seen" class="col-last" aria-sort="descending">Último</th>
+          </tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <div class="footer-note" id="footer-note"></div>
+    </section>
+  </div>
+</div>
+
+<script>
+(() => {
+  const POLL_MS = 3000, PAGE = 300;
+  const $ = (id) => document.getElementById(id);
+  const fmt = new Intl.NumberFormat("es-MX");
+  const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
+
+  let contacts = [], version = "", known = new Set(), fresh = new Set();
+  let filter = "all", query = "", sortKey = "last_seen", sortDir = -1, openEmail = null, limit = PAGE;
+  let lastUpdate = null, rateSamples = [];
+
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const phoneFmt = (p) => {
+    const m = p.match(/^\+52(\d{10})(.*)$/);
+    if (!m) return p;
+    const d = m[1], two = /^(55|33|81)/.test(d);
+    return (two ? `${d.slice(0, 2)} ${d.slice(2, 6)} ${d.slice(6)}` : `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}`) + m[2];
+  };
+  const phones = (s) => (s ? s.split("; ").map(phoneFmt) : []);
+  const ago = (d) => {
+    const s = Math.max(0, Math.round((Date.now() - d) / 1000));
+    if (s < 5) return "ahora";
+    if (s < 60) return `hace ${s} s`;
+    if (s < 3600) return `hace ${Math.round(s / 60)} min`;
+    return `hace ${Math.round(s / 3600)} h`;
+  };
+  const shortDate = (iso) => {
+    if (!iso) return "";
+    const d = new Date(iso + "Z");
+    return isNaN(d) ? iso.slice(0, 10) : d.toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "2-digit" });
+  };
+
+  function renderStatus(st) {
+    $("mailbox").textContent = st.mailbox || "";
+    const pill = $("state"), text = $("state-text"), prog = $("progress");
+    pill.className = "pill"; prog.classList.remove("done");
+    $("error").hidden = true;
+    if (st.error) {
+      pill.classList.add("error"); text.textContent = st.error === "Detenido" ? "Detenido" : "Error";
+      if (st.error !== "Detenido") { $("error").hidden = false; $("error").textContent = st.error; }
+    } else if (st.running) {
+      pill.classList.add("running"); text.textContent = "Leyendo correos";
+    } else if (st.updated_at) {
+      pill.classList.add("done"); text.textContent = "Terminado"; prog.classList.add("done");
+    }
+
+    const done = st.folder_done || 0, pending = st.folder_pending || 0;
+    let label = "Preparando…", numbers = "", width = 0;
+    if (st.folder) {
+      label = st.running ? `Carpeta ${st.folder}` : `Carpeta ${st.folder} completa`;
+      width = pending ? pct(done, pending) : 100;
+      numbers = pending ? `${fmt.format(done)} de ${fmt.format(pending)} nuevos · ${width}%`
+        : st.running ? `${fmt.format(done)} leídos` : "sin correos nuevos";
+      if (st.running && pending) {
+        rateSamples.push([Date.now(), done]);
+        rateSamples = rateSamples.filter(([t]) => Date.now() - t < 120000);
+        const [t0, d0] = rateSamples[0];
+        const rate = (done - d0) / ((Date.now() - t0) / 1000);
+        if (rate > 0 && done < pending) {
+          const mins = Math.ceil((pending - done) / rate / 60);
+          numbers += ` · faltan ~${mins < 60 ? mins + " min" : (mins / 60).toFixed(1) + " h"}`;
+        }
+      }
+    } else if (!st.running && st.updated_at) {
+      label = "Listo"; width = 100;
+    }
+    $("progress-label").textContent = label;
+    $("progress-numbers").textContent = numbers;
+    $("progress-bar").style.width = width + "%";
+
+    $("k-messages").textContent = fmt.format(st.messages_total || 0);
+    $("k-messages-sub").textContent = st.new_messages ? `${fmt.format(st.new_messages)} en esta corrida` : " ";
+    if (st.updated_at) lastUpdate = new Date(st.updated_at);
+  }
+
+  function renderKpis() {
+    const n = contacts.length;
+    const withPhone = contacts.filter((c) => c.mobile_phones || c.office_phones).length;
+    const withCompany = contacts.filter((c) => c.company).length;
+    const fromImage = contacts.filter((c) => c.source.includes("image")).length;
+    $("k-total").textContent = fmt.format(n);
+    $("k-total-sub").textContent = fresh.size ? `+${fmt.format(fresh.size)} en la última actualización` : " ";
+    $("k-phone").textContent = fmt.format(withPhone);
+    $("k-phone-sub").textContent = n ? `${pct(withPhone, n)}% del total` : " ";
+    $("k-company").textContent = fmt.format(withCompany);
+    $("k-company-sub").textContent = n ? `${pct(withCompany, n)}% del total` : " ";
+    $("k-image").textContent = fmt.format(fromImage);
+  }
+
+  function renderCompanies() {
+    const counts = new Map();
+    for (const c of contacts) if (c.company) counts.set(c.company, (counts.get(c.company) || 0) + 1);
+    const top = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 12);
+    const box = $("companies");
+    if (!top.length) { box.innerHTML = '<div class="empty">Todavía no hay empresas.</div>'; return; }
+    const max = top[0][1];
+    box.innerHTML = top.map(([name, n]) => `
+      <div class="co" data-company="${esc(name)}" title="Filtrar por ${esc(name)}">
+        <div class="co-name">${esc(name)}</div><div class="co-count">${n}</div>
+        <div class="co-bar"><div style="width:${(n / max) * 100}%"></div></div>
+      </div>`).join("");
+  }
+
+  function visible() {
+    const q = query.trim().toLowerCase();
+    const digits = q.replace(/\D/g, "");
+    return contacts.filter((c) => {
+      if (filter === "phone" && !(c.mobile_phones || c.office_phones)) return false;
+      if (filter === "signature" && !c.source.includes("signature")) return false;
+      if (filter === "header" && c.source !== "header") return false;
+      if (!q) return true;
+      const hay = `${c.name} ${c.company} ${c.title} ${c.email} ${c.other_emails} ${c.websites}`.toLowerCase();
+      if (hay.includes(q)) return true;
+      return digits.length >= 3 && `${c.mobile_phones}${c.office_phones}${c.fax}`.replace(/\D/g, "").includes(digits);
+    }).sort((a, b) => {
+      let x = a[sortKey] || "", y = b[sortKey] || "";
+      if (sortKey === "messages") { x = +x; y = +y; }
+      if (!x && y) return 1;
+      if (x && !y) return -1;
+      return (x > y ? 1 : x < y ? -1 : 0) * sortDir;
+    });
+  }
+
+  function phoneCell(list, cls) {
+    if (!list.length) return '<span class="muted">—</span>';
+    const shown = list.slice(0, 2).map((p) => `<div><span class="tag ${cls}">${cls === "m" ? "cel" : "tel"}</span>${esc(p)}</div>`).join("");
+    return list.length > 2 ? shown + `<div class="muted">+${list.length - 2} más</div>` : shown;
+  }
+
+  function renderTable() {
+    const rows = visible();
+    const shown = rows.slice(0, limit);
+    $("rows").innerHTML = shown.map((c) => {
+      const isOpen = c.email === openEmail;
+      const main = `<tr data-email="${esc(c.email)}" class="${fresh.has(c.email) ? "fresh" : ""}">
+        <td><div class="name">${esc(c.name) || '<span class="muted">Sin nombre</span>'}
+          ${c.source.includes("image") ? '<span class="tag img">imagen</span>' : ""}</div>
+          <div class="sub-email">${esc(c.email)}</div></td>
+        <td>${esc(c.company) || '<span class="muted">—</span>'}</td>
+        <td class="col-title">${esc(c.title) || '<span class="muted">—</span>'}</td>
+        <td class="phones">${phoneCell(phones(c.mobile_phones), "m")}</td>
+        <td class="phones col-office">${phoneCell(phones(c.office_phones), "o")}</td>
+        <td class="num">${esc(c.messages)}</td>
+        <td class="col-last">${esc(shortDate(c.last_seen))}</td></tr>`;
+      if (!isOpen) return main;
+      const extra = [
+        c.other_emails && `Otros correos: ${c.other_emails}`,
+        c.websites && `Web: ${c.websites}`,
+        c.fax && `Fax: ${c.fax}`,
+        c.first_seen && `Primer correo: ${shortDate(c.first_seen)}`,
+      ].filter(Boolean).join("\n");
+      const sig = (c.sample_signature || "").split(" | ").join("\n");
+      return main + `<tr class="detail"><td colspan="7"><pre>${esc(sig || "Sin firma detectada")}${extra ? "\n\n" + esc(extra) : ""}</pre></td></tr>`;
+    }).join("") || `<tr><td colspan="7" class="muted" style="padding:20px 12px">${contacts.length ? "Nada coincide con la búsqueda." : "Aún no hay contactos. Aparecerán aquí conforme se lean los correos."}</td></tr>`;
+    $("footer-note").textContent = rows.length > shown.length
+      ? `Mostrando ${fmt.format(shown.length)} de ${fmt.format(rows.length)}. Usa la búsqueda o haz clic aquí para ver más.`
+      : `${fmt.format(rows.length)} contacto${rows.length === 1 ? "" : "s"}`;
+    $("footer-note").style.cursor = rows.length > shown.length ? "pointer" : "default";
+    document.querySelectorAll("th[data-key]").forEach((th) => {
+      if (th.dataset.key === sortKey) th.setAttribute("aria-sort", sortDir > 0 ? "ascending" : "descending");
+      else th.removeAttribute("aria-sort");
+    });
+  }
+
+  async function poll() {
+    try {
+      const res = await fetch(`/data?since=${encodeURIComponent(version)}`, { cache: "no-store" });
+      const data = await res.json();
+      renderStatus(data.status || {});
+      if (data.contacts) {
+        const first = !version;
+        version = data.version;
+        fresh = new Set();
+        for (const c of data.contacts) if (!first && !known.has(c.email)) fresh.add(c.email);
+        known = new Set(data.contacts.map((c) => c.email));
+        contacts = data.contacts;
+        renderKpis(); renderCompanies(); renderTable();
+      }
+    } catch (e) {
+      $("state").className = "pill error";
+      $("state-text").textContent = "Sin conexión con el scraper";
+    }
+    $("updated").textContent = lastUpdate ? `actualizado ${ago(lastUpdate)}` : "";
+    setTimeout(poll, POLL_MS);
+  }
+
+  $("search").addEventListener("input", (e) => { query = e.target.value; limit = PAGE; renderTable(); });
+  document.querySelectorAll(".chip").forEach((b) => b.addEventListener("click", () => {
+    filter = b.dataset.filter; limit = PAGE;
+    document.querySelectorAll(".chip").forEach((x) => x.setAttribute("aria-pressed", x === b));
+    renderTable();
+  }));
+  document.querySelectorAll("th[data-key]").forEach((th) => th.addEventListener("click", () => {
+    const k = th.dataset.key;
+    sortDir = k === sortKey ? -sortDir : (k === "messages" || k === "last_seen" ? -1 : 1);
+    sortKey = k; renderTable();
+  }));
+  $("rows").addEventListener("click", (e) => {
+    const tr = e.target.closest("tr[data-email]");
+    if (!tr) return;
+    openEmail = openEmail === tr.dataset.email ? null : tr.dataset.email;
+    renderTable();
+  });
+  $("companies").addEventListener("click", (e) => {
+    const co = e.target.closest(".co");
+    if (!co) return;
+    $("search").value = query = co.dataset.company; limit = PAGE; renderTable();
+  });
+  $("footer-note").addEventListener("click", () => { limit += PAGE; renderTable(); });
+
+  poll();
+})();
+</script>
+</body>
+</html>

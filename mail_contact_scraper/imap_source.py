@@ -41,7 +41,7 @@ def _quote(folder):
     return '"' + folder.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-def iter_messages(conn, folder, batch_size=50, delay=1.0, skip=None):
+def iter_messages(conn, folder, batch_size=50, delay=1.0, skip=None, on_folder=None):
     """Yield (folder, uidvalidity, uid, raw_bytes). `skip` is a set of (folder, uidvalidity, uid)."""
     typ, _ = conn.select(_quote(folder), readonly=True)
     if typ != "OK":
@@ -56,6 +56,8 @@ def iter_messages(conn, folder, batch_size=50, delay=1.0, skip=None):
     uids = data[0].split() if data and data[0] else []
     pending = [u.decode() for u in uids if (folder, uidvalidity, u.decode()) not in (skip or set())]
     log.info("%s: %d messages, %d to process", folder, len(uids), len(pending))
+    if on_folder:
+        on_folder(folder, len(uids), len(pending))
 
     for start in range(0, len(pending), batch_size):
         batch = pending[start : start + batch_size]
