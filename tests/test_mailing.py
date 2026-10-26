@@ -77,7 +77,7 @@ def test_esp_template_needs_hosted_images(tmp_path):
     finally:
         hosted.unlink()
     tpl = (tmp_path / "out" / "template-brevo.html").read_text()
-    assert "{{ contact.SALUDO }}" in tpl and 'src="https://cdn.example.com/qc-aro/logo-rojo.png"' in tpl
+    assert "{{ contact.SALUDO }}" in tpl and 'src="https://cdn.example.com/qc-aro/hero.png"' in tpl
 
 
 def test_require_signature_skips_header_only(tmp_path):
