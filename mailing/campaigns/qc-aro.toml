@@ -1,0 +1,74 @@
+# Mailing Q-Pumps Serie QC + ARO Doble Diafragma · octubre 2026
+# Copy final de ZLM Agency. Los textos entre **dobles asteriscos** salen en rojo.
+
+slug = "qc-aro"
+subject = "Bombeo sanitario e industrial resuelto en un solo proveedor"
+preheader = "Centrífuga sanitaria hecha en Querétaro y doble diafragma que aguanta todo. Cotiza hoy."
+
+[sender]
+name = "Pedro Marquina"
+email = "pedro@dindustrimex.com"
+reply_to = "ventas@dindustrimex.com"
+
+# Imágenes: deben estar en una URL pública (https) para que se vean en el correo.
+# Mientras estén vacías se usa el wordmark en texto y se omite la foto.
+[assets]
+logo_url = ""          # logos/d-industrimex/d-industrimex-rojo-horizontal.png, ≥ 200 px de ancho
+site_icon_url = ""     # globo de la barra de sitio, 42 px
+
+[hero]
+eyebrow = "Bombeo sanitario e industrial"
+headline = "Tu proceso no necesita más paros. **Necesita la bomba correcta.**"
+body = "Dos equipos que resuelven el 80% de los dolores de cabeza en planta. Los tenemos, los conocemos y te los dejamos funcionando."
+
+[[blocks]]
+brand = "Q-Pumps"
+title = "QC de Q-Pumps: la centrífuga que mantiene tu proceso **limpio y en marcha**"
+body = "Para alimentos, bebidas, lácteos y agroquímicos. Diseño de fácil ensamble, hecha aquí en Querétaro."
+image_url = ""
+image_alt = "Bomba centrífuga sanitaria Q-Pumps Serie QC"
+checks = [
+  "Certificación sanitaria 3-A",
+  "Partes húmedas en acero inoxidable 316L",
+  "Hasta 1,200 gpm, 600 cP y 120 °C",
+  "Motores NEMA o IEC",
+  "¿Ya tienes una QC? Conviértela a QC+ con un Kit+, sin cambiar de bomba",
+]
+cta_label = "Cotizar QC →"
+cta_url = "mailto:ventas@dindustrimex.com?subject=Cotizaci%C3%B3n%20Q-Pumps%20QC"
+
+[[blocks]]
+brand = "ARO"
+title = "ARO: la bomba que **no le tiene miedo a nada**"
+body = "Abrasivos, sólidos, corrosivos, químicos agresivos. Neumática de doble diafragma, sin sellos que fallen."
+image_url = ""
+image_alt = "Bomba neumática de doble diafragma ARO"
+checks = [
+  "Diseño sin sellos mecánicos: menos fugas, menos mantenimiento",
+  "Opciones en polipropileno, acetal, PVDF o metálicas",
+  "Hasta 275 gpm según modelo",
+  "Versiones certificadas ATEX para zonas con riesgo de explosión",
+  "Respaldo de garantía de fábrica",
+]
+cta_label = "Cotizar ARO →"
+cta_url = "mailto:ventas@dindustrimex.com?subject=Cotizaci%C3%B3n%20ARO%20doble%20diafragma"
+
+[closing]
+question = "¿No sabes cuál **te toca**?"
+body = [
+  "Fácil: si tu fluido es sanitario y fluye, va QC. Si es pesado, abrasivo o químico, va ARO. Si tienes duda, para eso estamos.",
+  "Mándanos tu fluido, caudal y presión. Te respondemos con la bomba exacta, no con un catálogo de 200 páginas.",
+]
+contact = "Correo: ventas@dindustrimex.com · Tel: 442 499 8283"
+cta_label = "Quiero mi cotización →"
+cta_url = "mailto:ventas@dindustrimex.com?subject=Quiero%20mi%20cotizaci%C3%B3n"
+
+[signature]
+name = "Pedro Marquina"
+title = "Director de Ventas · D-Industrimex"
+address = "C. Ignacio Pérez Sur 28 Int. 25, El Carrizal, Querétaro"
+
+[footer]
+site = "www.dindustrimex.com"
+site_url = "https://www.dindustrimex.com"
+reason = "Recibes este correo porque has tenido contacto con D-Industrimex."

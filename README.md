@@ -93,6 +93,35 @@ websites, source, messages, first_seen, last_seen, sample_signature`
 - Varios valores van separados por `; `. El archivo usa UTF-8 con BOM para que Excel
   muestre bien los acentos.
 
+## Mailings a prospectos (`python -m mailing`)
+
+Genera el mailing con la imagen de D-Industrimex (Montserrat, rojo #A81818, fondo acero,
+barra de sitio) personalizado para cada contacto de `output/contacts.csv`. **No envía nada.**
+
+```bash
+python -m mailing --excel                 # Excel para la macro de Outlook
+python -m mailing --esp brevo             # o mailchimp: plantilla + CSV para importar
+python -m mailing --eml                   # un borrador .eml por prospecto
+python -m mailing --require-signature     # solo contactos que tienen firma
+```
+
+Sale en `output/mailing/<campaña>/`: `preview.html` (ábrelo primero), `audience.csv` y lo
+que pidas. Quita automáticamente correos inválidos, los de `@dindustrimex.com` y los que
+estén en `output/suppression.txt` (uno por línea; ahí van las bajas).
+
+- **Campaña nueva:** copia `mailing/campaigns/qc-aro.toml` y cambia el copy. Lo que va entre
+  `**dobles asteriscos**` sale en rojo. Una sola marca aliada por pieza con logo; si hay dos,
+  van como badge rojo con el nombre (así está la de QC + ARO).
+- **Imágenes:** `logo_url`, `site_icon_url` e `image_url` deben ser URLs públicas `https`.
+  Vacías, se usa el wordmark en texto y no se muestra foto.
+- **Envío con Excel:** importa `mailing/excel/EnviarMailing.bas` en el libro generado
+  (Alt+F11 ▸ Archivo ▸ Importar). Requiere Outlook de escritorio en Windows. Arranca en modo
+  `BORRADOR` (deja todo en Borradores); cámbialo a `ENVIAR` cuando hayas revisado. Envía en
+  lotes con pausa y marca la columna `Enviado`, así que puede correrse varias veces.
+- **Baja:** cada correo trae el enlace "Ya no quiero recibir estos correos" y el encabezado
+  `List-Unsubscribe` hacia ventas@. Quien pida la baja va a `output/suppression.txt` antes
+  del siguiente envío.
+
 ## Pruebas
 
 ```bash
