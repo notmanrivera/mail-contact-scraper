@@ -4,261 +4,374 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light">
-<title>Contactos · D-Industrimex</title>
+<title>Directorio de contactos · D-Industrimex</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,500;0,600;0,700;0,800;1,600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   /* Tokens del Sistema de diseño D-Industrimex v2 (oct 2026) */
   :root {
-    --red: #A81818;          /* palabra clave, botones, acentos, badges (≈10%) */
-    --red-deep: #7E1010;     /* sombra guinda */
+    --red: #A81818;
+    --red-hover: #951414;
+    --red-deep: #7E1010;
     --red-tint: rgba(168, 24, 24, .08);
-    --red-line: rgba(168, 24, 24, .18);
-    --ink: #181212;          /* titulares */
-    --text: #2A2320;         /* texto informativo */
-    --muted: #6E6360;        /* eyebrows, descripciones */
-    --line: #E0DAD8;         /* bordes de filas */
-    --rail: #D8D0CE;         /* rieles */
-    --good: #1C8A4A;         /* solo semántico "correcto" */
-    --card: rgba(255, 255, 255, .66);
-    --card-strong: rgba(255, 255, 255, .82);
+    --red-line: rgba(168, 24, 24, .22);
+    --ink: #181212;
+    --text: #2A2320;
+    --muted: #6E6360;
+    --faint: #A39794;
+    --line: #E0DAD8;
+    --rail: #E7E1DF;
+    --good: #1C8A4A;
+    --panel: rgba(255, 255, 255, .78);
+    --panel-solid: #FFFFFF;
+    --shadow: 0 1px 2px rgba(24, 18, 18, .04), 0 10px 30px -12px rgba(24, 18, 18, .14);
+    --radius: 22px;
     --font: "Montserrat", "Helvetica Neue", Arial, sans-serif;
   }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
-  html { background: #E1E3E7; }
+  html { background: #E8EAED; }
   body {
-    margin: 0; min-height: 100vh; color: var(--text); font: 500 14px/1.45 var(--font);
+    margin: 0; min-height: 100vh; color: var(--text); font: 500 13.5px/1.45 var(--font);
     -webkit-font-smoothing: antialiased;
-    background: linear-gradient(118deg, #EEF0F2 0%, #E1E3E7 30%, #F4F5F7 52%, #DADDE1 74%, #ECEDEF 100%) fixed;
+    background:
+      radial-gradient(1200px 520px at 15% -10%, rgba(255,255,255,.9), transparent 60%),
+      linear-gradient(118deg, #EEF0F2 0%, #E1E3E7 30%, #F4F5F7 52%, #DADDE1 74%, #ECEDEF 100%) fixed;
   }
-  /* Textura de vetas del acero, al 45% en overlay */
   body::before {
-    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: .45; mix-blend-mode: overlay;
+    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: .3; mix-blend-mode: overlay;
     background: repeating-linear-gradient(118deg, rgba(255,255,255,.5) 0 3px, rgba(0,0,0,.05) 3px 6px);
   }
-  .wrap { position: relative; z-index: 1; max-width: 1280px; margin: 0 auto; padding: 28px 24px 40px; }
+  .wrap { position: relative; z-index: 1; max-width: 1360px; margin: 0 auto; padding: 22px 28px 36px; }
+  .panel {
+    background: var(--panel); border: 1px solid rgba(255,255,255,.8); border-radius: var(--radius);
+    box-shadow: var(--shadow); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  }
+  .num { font-variant-numeric: tabular-nums; }
 
-  /* Encabezado: logo arriba a la izquierda (≥ 200 px) */
-  .top { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 24px; margin-bottom: 28px; }
-  .brand { display: block; min-width: 200px; text-decoration: none; }
-  .brand img { display: block; width: 220px; height: auto; }
-  .wordmark { font-weight: 800; font-size: 26px; line-height: 1; letter-spacing: -.02em; color: var(--red); }
-  .wordmark sup { font-size: 11px; }
-  .tagline { font-weight: 600; font-style: italic; font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+  /* ---------- Barra superior ---------- */
+  .topbar { display: flex; align-items: center; gap: 14px; margin-bottom: 26px; flex-wrap: wrap; }
+  .brand { display: block; text-decoration: none; margin-right: 6px; }
+  .brand img { display: block; width: 200px; height: auto; }
+  .wordmark { font-weight: 800; font-size: 22px; line-height: 1; letter-spacing: -.02em; color: var(--red); }
+  .wordmark sup { font-size: 10px; }
   .spacer { flex: 1; }
-  .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-
-  .btn {
-    display: inline-flex; align-items: center; gap: 8px; border-radius: 100px; padding: 12px 24px;
-    font: 700 14px/1 var(--font); cursor: pointer; text-decoration: none; white-space: nowrap;
-    transition: transform .08s ease, box-shadow .15s ease, background .15s ease;
+  .chip-box {
+    display: inline-flex; align-items: center; gap: 10px; height: 42px; padding: 0 16px 0 12px;
+    border-radius: 100px; background: var(--panel); border: 1px solid rgba(255,255,255,.8); box-shadow: var(--shadow);
+    color: var(--text); font-weight: 600; font-size: 13px; white-space: nowrap; max-width: 100%;
   }
-  .btn:active { transform: translateY(1px); }
-  .btn[disabled] { opacity: .5; cursor: default; }
-  .btn-primary { background: var(--red); color: #fff; border: 0; box-shadow: 0 6px 16px -6px var(--red-deep); }
-  .btn-primary:hover:not([disabled]) { background: #951414; }
-  .btn-outline { background: var(--card-strong); color: var(--red); border: 3px solid var(--red); padding: 9px 21px; }
-  .btn-outline:hover:not([disabled]) { background: #fff; }
-  .btn-ghost { background: var(--card); color: var(--text); border: 1px solid var(--line); padding: 10px 18px; font-weight: 600; font-size: 13px; }
-  .btn svg { width: 16px; height: 16px; }
-
-  .state {
-    display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 11.5px;
-    letter-spacing: .14em; text-transform: uppercase; color: var(--muted);
-  }
-  .state .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--rail); }
-  .state.running { color: var(--red); }
-  .state.running .dot { background: var(--red); animation: pulse 1.3s ease-in-out infinite; }
+  .chip-box svg { width: 16px; height: 16px; color: var(--muted); flex: none; }
+  .chip-box .k { color: var(--muted); font-weight: 500; }
+  .chip-box .v { overflow: hidden; text-overflow: ellipsis; }
+  .state .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex: none; }
+  .state.running .dot { background: var(--red); box-shadow: 0 0 0 4px var(--red-tint); animation: pulse 1.3s ease-in-out infinite; }
   .state.done .dot { background: var(--good); }
   .state.error { color: var(--red); }
   .state.error .dot { background: var(--red); }
-  @keyframes pulse { 50% { opacity: .25; } }
+  @keyframes pulse { 50% { opacity: .35; } }
 
-  /* Titular */
-  .eyebrow { font-weight: 700; font-size: 12px; letter-spacing: .28em; text-transform: uppercase; color: var(--muted); }
-  h1 { margin: 10px 0 0; font-weight: 800; font-size: 40px; line-height: 1.06; letter-spacing: -.02em; color: var(--ink); }
-  h1 em { font-style: normal; color: var(--red); }
-  .lede { margin: 10px 0 24px; font-size: 15px; color: var(--text); }
-  .lede b { font-weight: 700; }
-  .updated { color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
-
-  /* Caja de información: avance */
-  .infobox {
-    background: rgba(255,255,255,.73); border: 1px solid var(--red-line); border-radius: 18px;
-    padding: 16px 20px; margin-bottom: 18px;
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 42px; border-radius: 100px;
+    padding: 0 22px; font: 700 13px/1 var(--font); cursor: pointer; text-decoration: none; white-space: nowrap;
+    border: 0; transition: background .15s ease, transform .08s ease, box-shadow .15s ease;
   }
-  .progress-top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; margin-bottom: 10px; }
-  .progress-top b { font-weight: 800; color: var(--ink); }
-  .progress-top span { color: var(--muted); font-variant-numeric: tabular-nums; }
-  .bar { height: 8px; background: var(--rail); border-radius: 100px; overflow: hidden; }
-  .bar > div { height: 100%; width: 0; background: var(--red); border-radius: 100px; transition: width .6s ease; }
-  .notice { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--red-tint); color: var(--red); font-size: 13px; }
-  .notice pre { margin: 6px 0 0; white-space: pre-wrap; font: 12px/1.45 ui-monospace, Menlo, monospace; color: var(--text); }
+  .btn:active { transform: translateY(1px); }
+  .btn[disabled] { opacity: .5; cursor: default; }
+  .btn svg { width: 15px; height: 15px; }
+  .btn-primary { background: var(--red); color: #fff; box-shadow: 0 8px 18px -8px var(--red-deep); }
+  .btn-primary:hover:not([disabled]) { background: var(--red-hover); }
+  .btn-outline { background: var(--panel-solid); color: var(--red); box-shadow: inset 0 0 0 2px var(--red); }
+  .icon-btn {
+    width: 42px; height: 42px; border-radius: 50%; display: inline-grid; place-items: center; flex: none;
+    background: var(--panel); border: 1px solid rgba(255,255,255,.8); box-shadow: var(--shadow); color: var(--ink);
+    cursor: pointer; text-decoration: none;
+  }
+  .icon-btn:hover { color: var(--red); }
+  .icon-btn svg { width: 17px; height: 17px; }
 
-  /* KPIs: filas de lista; el acento rojo solo en la principal */
-  .kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; }
-  .kpi { padding: 16px 18px; }
-  .kpi.lead { border-left: 6px solid var(--red); }
-  .kpi .label { font-weight: 700; font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
-  .kpi .value { font-weight: 800; font-size: 32px; letter-spacing: -.02em; color: var(--ink); font-variant-numeric: tabular-nums; margin-top: 4px; }
-  .kpi.lead .value { color: var(--red); }
-  .kpi .sub { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; min-height: 17px; }
+  /* ---------- Titular ---------- */
+  .head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px 32px; flex-wrap: wrap; margin-bottom: 20px; }
+  .eyebrow { font-weight: 700; font-size: 11px; letter-spacing: .28em; text-transform: uppercase; color: var(--muted); }
+  h1 { margin: 6px 0 4px; font-weight: 700; font-size: 34px; line-height: 1.08; letter-spacing: -.025em; color: var(--ink); }
+  h1 em { font-style: normal; color: var(--red); font-weight: 800; }
+  .sub { color: var(--muted); font-size: 13px; margin: 0; }
+  .metrics { display: flex; gap: 34px; flex-wrap: wrap; }
+  .metric .label { color: var(--muted); font-size: 12.5px; font-weight: 600; }
+  .metric .row { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+  .metric .value { font-weight: 700; font-size: 26px; letter-spacing: -.02em; color: var(--ink); }
+  .delta {
+    display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 6px;
+    font-weight: 700; font-size: 11px; background: rgba(110, 99, 96, .1); color: var(--muted);
+  }
+  .delta.hot { background: var(--red); color: #fff; }
 
-  .grid { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 18px; align-items: start; }
-  .panel-title { font-weight: 800; font-size: 16px; color: var(--ink); padding: 18px 18px 8px; letter-spacing: -.01em; }
-  .companies { padding: 2px 18px 16px; }
-  .co { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; padding: 7px 0; cursor: pointer; }
-  .co-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; font-size: 13px; color: var(--text); }
-  .co:hover .co-name { color: var(--red); }
-  .co-count { font-weight: 700; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .co-bar { grid-column: 1 / -1; height: 5px; background: var(--rail); border-radius: 100px; overflow: hidden; }
-  .co-bar > div { height: 100%; background: var(--red); border-radius: 100px; transition: width .6s ease; }
-  .empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
+  /* ---------- Escaneo + empresas ---------- */
+  .hero { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 18px; margin-bottom: 18px; }
+  .card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 20px 22px 0; }
+  .card-title { font-weight: 700; font-size: 16px; color: var(--ink); letter-spacing: -.01em; margin: 0; }
+  .card-kicker { color: var(--faint); font-size: 11.5px; font-weight: 600; letter-spacing: .02em; margin-bottom: 2px; }
+  .scan { padding-bottom: 22px; display: flex; flex-direction: column; }
+  .scan .stats { margin-top: auto; padding-top: 22px; }
+  .scan .track-wrap { padding-top: 34px; }
+  .track-wrap { padding: 26px 22px 6px; }
+  .track-top { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; font-size: 12.5px; color: var(--muted); }
+  .track-top b { color: var(--ink); font-weight: 700; }
+  .track {
+    position: relative; height: 46px; border-radius: 14px; overflow: hidden;
+    background: repeating-linear-gradient(135deg, #EFEAE9 0 7px, #F7F4F3 7px 14px);
+    box-shadow: inset 0 0 0 1px var(--line);
+  }
+  .fill {
+    position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 14px;
+    background: linear-gradient(90deg, var(--red) 0%, var(--red) calc(100% - 40px), rgba(168,24,24,.25) 100%);
+    transition: width .7s ease;
+  }
+  .progress-done .fill { background: var(--red); }
+  .fill-label {
+    position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: #fff; font-weight: 700; font-size: 12px;
+    letter-spacing: .04em; white-space: nowrap; text-shadow: 0 1px 1px rgba(0,0,0,.15);
+  }
+  .now {
+    position: absolute; top: -8px; bottom: -8px; width: 2px; background: var(--red); left: 0; transition: left .7s ease;
+  }
+  .now::before {
+    content: ""; position: absolute; top: -3px; left: -4px; width: 10px; height: 10px; border-radius: 50%; background: var(--red);
+  }
+  .track-outer { position: relative; padding: 8px 0; }
+  .ticks { display: flex; justify-content: space-between; color: var(--faint); font-size: 11px; margin-top: 6px; }
+  .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 16px 22px 0; }
+  .stat { background: rgba(255,255,255,.7); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+  .stat .k { color: var(--muted); font-size: 11.5px; font-weight: 600; }
+  .stat .v { color: var(--ink); font-weight: 700; font-size: 18px; letter-spacing: -.01em; margin-top: 2px; }
+  .notice { margin: 16px 22px 0; padding: 12px 14px; border-radius: 14px; background: var(--red-tint); color: var(--red); font-size: 13px; font-weight: 600; }
+  .notice pre { margin: 6px 0 0; white-space: pre-wrap; font: 500 12px/1.45 ui-monospace, Menlo, monospace; color: var(--text); }
 
-  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 14px; border-bottom: 1px solid var(--line); }
+  .companies-panel { display: flex; flex-direction: column; min-height: 0; }
+  .count-pill { font-weight: 700; font-size: 11px; letter-spacing: .14em; color: var(--muted); background: rgba(110,99,96,.1); border-radius: 100px; padding: 5px 10px; }
+  .co-list { padding: 14px 14px 16px; display: grid; gap: 6px; }
+  .co {
+    display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; align-items: center; gap: 10px;
+    padding: 9px 12px; border-radius: 14px; background: rgba(255,255,255,.85); border: 1px solid transparent; cursor: pointer;
+  }
+  .co:hover { border-color: var(--red-line); }
+  .co.active { border-color: var(--red); box-shadow: inset 4px 0 0 var(--red); }
+  .co .rank { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; font-weight: 700; font-size: 11px; background: rgba(110,99,96,.1); color: var(--muted); }
+  .co:first-child .rank { background: var(--red); color: #fff; }
+  .co-name { font-weight: 600; font-size: 12.5px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .co-meter { height: 4px; border-radius: 100px; background: var(--rail); margin-top: 5px; overflow: hidden; }
+  .co-meter > div { height: 100%; background: var(--red); border-radius: 100px; transition: width .6s ease; }
+  .co-count { font-weight: 700; font-size: 12.5px; color: var(--ink); }
+  .empty { color: var(--muted); font-size: 13px; padding: 10px 8px; }
+
+  /* ---------- Contactos recientes ---------- */
+  .recent-head { display: flex; align-items: baseline; justify-content: space-between; margin: 4px 4px 10px; }
+  .recent-head h2 { margin: 0; font-weight: 700; font-size: 15px; color: var(--ink); }
+  .recent-head span { color: var(--faint); font-size: 12px; }
+  .recent { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .rc {
+    text-align: left; font: inherit; color: inherit; cursor: pointer; padding: 14px 16px; border-radius: 18px;
+    background: var(--panel); border: 1px solid rgba(255,255,255,.8); box-shadow: var(--shadow); min-width: 0;
+    display: grid; grid-template-columns: minmax(0, 1fr) 36px; gap: 2px 10px; align-items: start;
+  }
+  .rc:hover { border-color: var(--red-line); }
+  .rc.active { border-color: var(--red); box-shadow: var(--shadow), inset 0 0 0 1px var(--red); }
+  .rc .k { color: var(--faint); font-size: 11px; font-weight: 600; grid-column: 1; }
+  .rc .n { font-weight: 700; font-size: 13.5px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; grid-column: 1; }
+  .rc .c { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; grid-column: 1; }
+  .rc .p { color: var(--text); font-size: 12px; font-weight: 600; grid-column: 1; margin-top: 4px; }
+  .avatar {
+    grid-column: 2; grid-row: 1 / span 4; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center;
+    background: rgba(110,99,96,.1); color: var(--muted); font-weight: 700; font-size: 12px;
+  }
+  .rc.active .avatar { background: var(--red); color: #fff; }
+  .recent .empty { grid-column: 1 / -1; }
+
+  /* ---------- Tabla ---------- */
+  .table-panel { overflow: hidden; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 16px 18px; }
+  .seg { display: inline-flex; padding: 4px; border-radius: 100px; background: rgba(110,99,96,.09); }
+  .seg button {
+    border: 0; background: transparent; color: var(--muted); font: 700 12.5px var(--font); padding: 8px 16px;
+    border-radius: 100px; cursor: pointer;
+  }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: #fff; }
   .search {
-    flex: 1 1 240px; min-width: 0; padding: 10px 16px; border: 1px solid var(--line); border-radius: 100px;
-    background: rgba(255,255,255,.85); color: var(--text); font: 500 13.5px var(--font);
+    flex: 1 1 240px; min-width: 0; height: 38px; padding: 0 16px; border: 1px solid var(--line); border-radius: 100px;
+    background: rgba(255,255,255,.9); color: var(--text); font: 500 13px var(--font);
   }
-  .search::placeholder { color: var(--muted); }
+  .search::placeholder { color: var(--faint); }
   .search:focus { outline: 0; border-color: var(--red); box-shadow: 0 0 0 3px var(--red-tint); }
-  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-  .chip {
-    border: 1px solid var(--line); background: rgba(255,255,255,.7); color: var(--text); border-radius: 100px;
-    padding: 7px 13px; font: 600 12.5px var(--font); cursor: pointer;
+  .filter {
+    height: 38px; padding: 0 34px 0 14px; border-radius: 100px; border: 1px solid var(--line); color: var(--text);
+    font: 600 12.5px var(--font); cursor: pointer; appearance: none; -webkit-appearance: none;
+    background: rgba(255,255,255,.9) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none' stroke='%236E6360' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1 1l4 4 4-4'/%3E%3C/svg%3E") no-repeat right 14px center;
   }
-  .chip[aria-pressed="true"] { background: var(--red); border-color: var(--red); color: #fff; }
-
-  .table-wrap { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .table-wrap { overflow-x: auto; padding: 0 10px 4px; }
+  table { width: 100%; border-collapse: separate; border-spacing: 0 6px; font-size: 13px; }
   th {
-    text-align: left; font-weight: 700; font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase;
-    color: var(--muted); padding: 12px 10px; border-bottom: 1px solid var(--line); white-space: nowrap;
+    text-align: left; font-weight: 600; font-size: 11.5px; color: var(--faint); padding: 4px 12px 2px; white-space: nowrap;
     cursor: pointer; user-select: none;
   }
   th[aria-sort] { color: var(--red); }
   th[aria-sort="ascending"]::after { content: " ↑"; }
   th[aria-sort="descending"]::after { content: " ↓"; }
-  td { padding: 11px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td { padding: 11px 12px; background: rgba(255,255,255,.82); vertical-align: top; }
+  td:first-child { border-radius: 14px 0 0 14px; }
+  td:last-child { border-radius: 0 14px 14px 0; }
   tbody tr { cursor: pointer; }
-  tbody tr:hover td { background: rgba(255,255,255,.6); }
-  tbody tr.open td:first-child { box-shadow: inset 6px 0 0 var(--red); }
+  tbody tr:hover td { background: #fff; }
+  tbody tr.open td { background: #fff; }
+  tbody tr.open td:first-child { box-shadow: inset 4px 0 0 var(--red); }
   tr.fresh td { animation: fresh 4s ease-out; }
-  @keyframes fresh { from { background: rgba(168,24,24,.10); } to { background: transparent; } }
+  @keyframes fresh { from { background: rgba(168,24,24,.1); } }
+  .person { display: flex; gap: 12px; align-items: center; min-width: 200px; }
+  .person .avatar { grid-column: auto; grid-row: auto; flex: none; width: 32px; height: 32px; font-size: 11px; }
   .name { font-weight: 700; color: var(--ink); }
   .sub-email { color: var(--muted); font-size: 12px; }
-  .num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .r { text-align: right; }
   .col-last { white-space: nowrap; color: var(--muted); }
-  .phones { font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .tag { display: inline-block; font-weight: 700; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; padding: 2px 6px; border-radius: 6px; margin-right: 6px; color: var(--muted); background: rgba(110,99,96,.1); }
-  .badge { display: inline-block; font-weight: 800; font-size: 10px; letter-spacing: .04em; padding: 2px 7px; border-radius: 6px; margin-left: 6px; background: var(--red); color: #fff; vertical-align: 1px; }
-  .muted { color: #A39794; }
-  .detail td { background: rgba(255,255,255,.78); cursor: default; box-shadow: inset 6px 0 0 var(--red); }
-  .detail pre { margin: 0; white-space: pre-wrap; font: 500 12.5px/1.55 var(--font); color: var(--text); }
-  .footer-note { color: var(--muted); font-size: 12.5px; padding: 12px 14px; }
+  .phones { white-space: nowrap; }
+  .tag { display: inline-block; min-width: 28px; font-weight: 700; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .badge { display: inline-block; font-weight: 800; font-size: 9.5px; letter-spacing: .05em; padding: 2px 7px; border-radius: 6px; margin-left: 6px; background: var(--red); color: #fff; vertical-align: 1px; }
+  .muted { color: var(--faint); }
+  .detail td { background: #fff; cursor: default; border-radius: 14px; box-shadow: inset 4px 0 0 var(--red); }
+  .detail-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; }
+  .detail .k { color: var(--faint); font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; margin-bottom: 6px; }
+  .detail pre { margin: 0; white-space: pre-wrap; font: 500 12.5px/1.6 var(--font); color: var(--text); }
+  .footer-note { color: var(--muted); font-size: 12.5px; padding: 6px 22px 18px; }
 
-  /* Barra de sitio: cierre de toda pieza */
-  .sitebar { display: flex; justify-content: center; margin-top: 32px; }
+  .sitebar { display: flex; justify-content: center; margin-top: 30px; }
   .sitebar a {
-    display: inline-flex; align-items: center; gap: 12px; padding: 8px 22px 8px 9px; border: 3px solid var(--red);
-    border-radius: 100px; background: rgba(255,255,255,.7); color: var(--red); font-weight: 600; font-size: 15px; text-decoration: none;
+    display: inline-flex; align-items: center; gap: 12px; padding: 7px 22px 7px 8px; border: 3px solid var(--red);
+    border-radius: 100px; background: rgba(255,255,255,.75); color: var(--red); font-weight: 600; font-size: 14px; text-decoration: none;
   }
-  .sitebar .globe { width: 30px; height: 30px; border-radius: 50%; background: var(--red); display: grid; place-items: center; }
-  .sitebar .globe svg { width: 18px; height: 18px; }
+  .sitebar .globe { width: 28px; height: 28px; border-radius: 50%; background: var(--red); display: grid; place-items: center; }
+  .sitebar .globe svg { width: 16px; height: 16px; }
 
-  @media (max-width: 1060px) {
-    .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .kpis .kpi.lead { grid-column: 1 / -1; }
-    .grid { grid-template-columns: minmax(0, 1fr); }
+  @media (max-width: 1180px) {
+    .hero { grid-template-columns: minmax(0, 1fr); }
+    .recent { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .recent .rc:nth-child(n+4) { display: none; }
   }
-  @media (max-width: 640px) {
-    .wrap { padding: 18px 16px 32px; }
-    h1 { font-size: 30px; }
-    .actions { width: 100%; }
-    .actions .btn { flex: 1; justify-content: center; }
-    .col-title, .col-last { display: none; }
+  @media (max-width: 760px) {
+    .wrap { padding: 16px 16px 28px; }
+    .brand img { width: 160px; }
+    .topbar .mailbox { order: 5; width: 100%; }
+    .topbar .actions { order: 4; width: 100%; display: flex; gap: 10px; }
+    .topbar .actions .btn { flex: 1; }
+    h1 { font-size: 27px; }
+    .metrics { gap: 18px 26px; }
+    .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .recent { grid-template-columns: minmax(0, 1fr); }
+    .recent .rc:nth-child(n+3) { display: none; }
+    .col-title, .col-last, .col-msgs { display: none; }
+    .detail-grid { grid-template-columns: minmax(0, 1fr); }
   }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="top">
-    <template id="wordmark"><div><div class="wordmark">D-industrimex<sup>®</sup></div><div class="tagline">Soluciones industriales eficientes</div></div></template>
-    <a class="brand" href="https://www.dindustrimex.com" target="_blank" rel="noopener" id="brand">
+  <header class="topbar">
+    <template id="wordmark"><div class="wordmark">D-industrimex<sup>®</sup></div></template>
+    <a class="brand" href="https://www.dindustrimex.com" target="_blank" rel="noopener">
       <img src="/static/logo.svg" alt="D-Industrimex · Soluciones industriales eficientes"
            onerror="this.replaceWith(document.getElementById('wordmark').content.cloneNode(true))">
     </a>
     <span class="spacer"></span>
-    <div class="actions">
-      <span class="state" id="state"><span class="dot"></span><span id="state-text">Conectando</span></span>
+    <div class="chip-box mailbox" title="Buzón que se está leyendo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+      <span class="k">Buzón:</span><span class="v" id="mailbox">—</span>
+    </div>
+    <div class="chip-box state" id="state"><span class="dot"></span><span id="state-text">Conectando</span></div>
+    <div class="actions" style="display:contents">
       <button class="btn btn-primary" id="start" type="button" hidden>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 5l11 7-11 7z"/></svg>
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.4-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"/></svg>
         <span id="start-label">Iniciar escaneo</span>
       </button>
       <button class="btn btn-outline" id="stop" type="button" hidden>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>
+        <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6.5" y="6.5" width="11" height="11" rx="2"/></svg>
         Detener
       </button>
     </div>
-  </div>
+    <a class="icon-btn" href="/contacts.csv" download="contacts.csv" title="Descargar CSV" aria-label="Descargar CSV">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M5 19.5h14"/></svg>
+    </a>
+  </header>
 
-  <div class="eyebrow">Directorio del buzón</div>
-  <h1>Contactos de clientes y <em>proveedores</em></h1>
-  <p class="lede"><span id="mailbox-line">Leyendo firmas de correo</span> <span class="updated" id="updated"></span></p>
-
-  <section class="infobox">
-    <div class="progress-top">
-      <b id="progress-label">Esperando datos</b>
-      <span id="progress-numbers"></span>
+  <section class="head">
+    <div>
+      <div class="eyebrow">Contactos de clientes y proveedores</div>
+      <h1>Directorio de <em>contactos</em></h1>
+      <p class="sub">Extraídos de las firmas de correo <span id="updated"></span></p>
     </div>
-    <div class="bar"><div id="progress-bar"></div></div>
-    <div class="notice" id="notice" hidden></div>
+    <div class="metrics">
+      <div class="metric"><div class="label">Contactos</div><div class="row"><span class="value num" id="k-total">0</span><span class="delta hot" id="k-total-delta" hidden></span></div></div>
+      <div class="metric"><div class="label">Con teléfono</div><div class="row"><span class="value num" id="k-phone">0</span><span class="delta" id="k-phone-delta" hidden></span></div></div>
+      <div class="metric"><div class="label">Con empresa</div><div class="row"><span class="value num" id="k-company">0</span><span class="delta" id="k-company-delta" hidden></span></div></div>
+      <div class="metric"><div class="label">Firmas en imagen</div><div class="row"><span class="value num" id="k-image">0</span><span class="delta">OCR</span></div></div>
+    </div>
   </section>
 
-  <section class="kpis">
-    <div class="card kpi lead"><div class="label">Contactos</div><div class="value" id="k-total">0</div><div class="sub" id="k-total-sub"></div></div>
-    <div class="card kpi"><div class="label">Con teléfono</div><div class="value" id="k-phone">0</div><div class="sub" id="k-phone-sub"></div></div>
-    <div class="card kpi"><div class="label">Con empresa</div><div class="value" id="k-company">0</div><div class="sub" id="k-company-sub"></div></div>
-    <div class="card kpi"><div class="label">Firmas en imagen</div><div class="value" id="k-image">0</div><div class="sub">leídas con OCR</div></div>
-    <div class="card kpi"><div class="label">Correos leídos</div><div class="value" id="k-messages">0</div><div class="sub" id="k-messages-sub"></div></div>
-  </section>
-
-  <div class="grid">
-    <section class="card">
-      <div class="panel-title">Empresas con más contactos</div>
-      <div class="companies" id="companies"><div class="empty">Todavía no hay empresas.</div></div>
-    </section>
-
-    <section class="card">
-      <div class="toolbar">
-        <input class="search" id="search" type="search" placeholder="Buscar nombre, empresa, teléfono o correo" autocomplete="off">
-        <div class="chips" role="group" aria-label="Filtro">
-          <button class="chip" data-filter="all" aria-pressed="true">Todos</button>
-          <button class="chip" data-filter="phone" aria-pressed="false">Con teléfono</button>
-          <button class="chip" data-filter="signature" aria-pressed="false">Con firma</button>
-          <button class="chip" data-filter="header" aria-pressed="false">Solo correo</button>
+  <section class="hero">
+    <div class="panel scan" id="progress">
+      <div class="card-head">
+        <div><div class="card-kicker" id="scan-kicker">Escaneo</div><h3 class="card-title" id="progress-label">Listo para escanear</h3></div>
+        <span class="count-pill" id="progress-pct">—</span>
+      </div>
+      <div class="track-wrap">
+        <div class="track-top"><span id="progress-numbers">Pulsa “Iniciar escaneo” para leer el buzón.</span><span id="eta"></span></div>
+        <div class="track-outer">
+          <div class="track"><div class="fill" id="progress-bar"><span class="fill-label" id="fill-label"></span></div></div>
+          <div class="now" id="now" hidden></div>
         </div>
-        <a class="btn btn-ghost" href="/contacts.csv" download="contacts.csv">Descargar CSV</a>
+        <div class="ticks"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
       </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr>
-            <th data-key="name">Nombre</th>
-            <th data-key="company">Empresa</th>
-            <th data-key="title" class="col-title">Puesto</th>
-            <th data-key="mobile_phones">Teléfonos</th>
-            <th data-key="messages" class="num">Correos</th>
-            <th data-key="last_seen" class="col-last" aria-sort="descending">Último</th>
-          </tr></thead>
-          <tbody id="rows"></tbody>
-        </table>
+      <div class="stats">
+        <div class="stat"><div class="k">Correos leídos</div><div class="v num" id="s-read">0</div></div>
+        <div class="stat"><div class="k">En esta corrida</div><div class="v num" id="s-new">0</div></div>
+        <div class="stat"><div class="k">Velocidad</div><div class="v num" id="s-rate">—</div></div>
+        <div class="stat"><div class="k">Tiempo restante</div><div class="v num" id="s-eta">—</div></div>
       </div>
-      <div class="footer-note" id="footer-note"></div>
-    </section>
-  </div>
+      <div class="notice" id="notice" hidden></div>
+    </div>
+
+    <aside class="panel companies-panel">
+      <div class="card-head">
+        <div><div class="card-kicker">Ranking</div><h3 class="card-title">Empresas principales</h3></div>
+        <span class="count-pill" id="co-total">0</span>
+      </div>
+      <div class="co-list" id="companies"><div class="empty">Todavía no hay empresas.</div></div>
+    </aside>
+  </section>
+
+  <div class="recent-head"><h2>Contactos recientes</h2><span>por último correo recibido</span></div>
+  <section class="recent" id="recent"><div class="empty">Aparecerán aquí conforme se lean los correos.</div></section>
+
+  <section class="panel table-panel">
+    <div class="toolbar">
+      <div class="seg" role="group" aria-label="Vista">
+        <button type="button" data-view="contacts" aria-pressed="true">Contactos</button>
+        <button type="button" data-view="companies" aria-pressed="false">Empresas</button>
+      </div>
+      <input class="search" id="search" type="search" placeholder="Buscar nombre, empresa, teléfono o correo" autocomplete="off">
+      <select class="filter" id="filter" aria-label="Filtro">
+        <option value="all">Todos</option>
+        <option value="phone">Con teléfono</option>
+        <option value="signature">Con firma</option>
+        <option value="image">Firma en imagen</option>
+        <option value="header">Solo correo</option>
+      </select>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead id="thead"></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <div class="footer-note" id="footer-note"></div>
+  </section>
 
   <div class="sitebar">
     <a href="https://www.dindustrimex.com" target="_blank" rel="noopener">
@@ -276,7 +389,8 @@
   const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
 
   let contacts = [], version = "", known = new Set(), fresh = new Set();
-  let filter = "all", query = "", sortKey = "last_seen", sortDir = -1, openEmail = null, limit = PAGE;
+  let view = "contacts", filter = "all", query = "", sortKey = "last_seen", sortDir = -1;
+  let openEmail = null, activeCompany = null, limit = PAGE;
   let lastUpdate = null, rateSamples = [], pendingAction = null, actionError = "";
 
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -287,6 +401,12 @@
     return (two ? `${d.slice(0, 2)} ${d.slice(2, 6)} ${d.slice(6)}` : `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}`) + m[2];
   };
   const phones = (s) => (s ? s.split("; ").map(phoneFmt) : []);
+  const allPhones = (c) => [...phones(c.mobile_phones).map((p) => ["cel", p]), ...phones(c.office_phones).map((p) => ["tel", p])];
+  const initials = (c) => {
+    const src = (c.name || c.email || "?").replace(/^(ing|lic|arq|dr|c\.?p)\.?\s+/i, "");
+    const parts = src.split(/[\s@._-]+/).filter(Boolean);
+    return ((parts[0] || "?")[0] + (parts[1] ? parts[1][0] : "")).toUpperCase();
+  };
   const ago = (d) => {
     const s = Math.max(0, Math.round((Date.now() - d) / 1000));
     if (s < 5) return "ahora";
@@ -299,15 +419,16 @@
     const d = new Date(iso + "Z");
     return isNaN(d) ? iso.slice(0, 10) : d.toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "2-digit" });
   };
+  const duration = (mins) => (mins < 1 ? "< 1 min" : mins < 60 ? `${Math.ceil(mins)} min` : `${(mins / 60).toFixed(1)} h`);
 
+  /* ---------- Estado del escaneo ---------- */
   function renderStatus(st, control) {
     const alive = !!control.alive;
     const running = alive && st.running;
-    $("mailbox-line").innerHTML = st.mailbox ? `Leyendo las firmas de <b>${esc(st.mailbox)}</b>.` : "Leyendo firmas de correo.";
+    $("mailbox").textContent = st.mailbox || "—";
 
-    // Estado + botones
     const state = $("state"), text = $("state-text");
-    state.className = "state";
+    state.className = "chip-box state";
     let notice = "";
     if (pendingAction === "start" && !alive) { text.textContent = "Iniciando"; state.classList.add("running"); }
     else if (pendingAction === "stop" && alive) { text.textContent = "Deteniendo"; state.classList.add("running"); }
@@ -331,82 +452,147 @@
     $("stop").hidden = !alive;
     $("stop").disabled = pendingAction === "stop";
     $("start-label").textContent = st.messages_total ? "Buscar correos nuevos" : "Iniciar escaneo";
-
     $("notice").hidden = !notice;
     $("notice").innerHTML = notice;
 
     // Avance
     const done = st.folder_done || 0, pending = st.folder_pending || 0;
-    let label = "Listo para escanear", numbers = "", width = 0;
-    if (running && !st.folder) label = "Conectando con el buzón…";
+    const local = st.folder === "archivos locales";
+    let kicker = "Escaneo", label = "Listo para escanear", numbers = "Pulsa “Iniciar escaneo” para leer el buzón.";
+    let width = 0, pctText = "—", rateText = "—", etaText = "—", eta = "";
+    if (running && !st.folder) { label = "Conectando con el buzón"; numbers = "Iniciando sesión en el servidor de correo…"; }
     else if (st.folder) {
-      const where = st.folder === "archivos locales" ? "Archivos locales" : `Carpeta ${st.folder}`;
-      label = running ? where : `${where}${st.error ? "" : (st.folder === "archivos locales" ? " leídos" : " completa")}`;
-      width = pending ? pct(done, pending) : (running ? 0 : 100);
-      numbers = pending ? `${fmt.format(done)} de ${fmt.format(pending)} nuevos · ${width}%`
-        : done ? `${fmt.format(done)} leídos` : running ? "0 leídos" : "sin correos nuevos";
-      if (running && pending) {
+      kicker = local ? "Archivos locales" : `Carpeta ${st.folder}`;
+      if (pending) {
+        width = pct(done, pending);
+        numbers = `${fmt.format(done)} de ${fmt.format(pending)} correos nuevos`;
+      } else {
+        width = running ? 0 : 100;
+        numbers = done ? `${fmt.format(done)} correos leídos` : "No había correos nuevos";
+      }
+      pctText = pending || !running ? `${width}%` : "—";
+      label = running ? "Leyendo correos" : st.error === "Detenido" ? "Escaneo detenido" : st.error ? "Escaneo con error" : "Escaneo completo";
+      if (running) {
         rateSamples.push([Date.now(), done]);
         rateSamples = rateSamples.filter(([t]) => Date.now() - t < 120000);
         const [t0, d0] = rateSamples[0];
-        const rate = (done - d0) / ((Date.now() - t0) / 1000);
-        if (rate > 0 && done < pending) {
-          const mins = Math.ceil((pending - done) / rate / 60);
-          numbers += ` · faltan ~${mins < 60 ? mins + " min" : (mins / 60).toFixed(1) + " h"}`;
+        const secs = (Date.now() - t0) / 1000;
+        const rate = secs > 0 ? (done - d0) / secs : 0;
+        if (rate > 0) {
+          rateText = `${fmt.format(Math.round(rate * 60))}/min`;
+          if (pending && done < pending) { etaText = duration((pending - done) / rate / 60); eta = `Faltan ~${etaText}`; }
         }
       } else rateSamples = [];
     }
+    $("scan-kicker").textContent = kicker;
     $("progress-label").textContent = label;
-    $("progress-numbers").textContent = numbers;
+    $("progress-numbers").innerHTML = esc(numbers).replace(/^([\d,.]+)/, "<b>$1</b>");
+    $("eta").textContent = eta;
+    $("progress-pct").textContent = pctText;
     $("progress-bar").style.width = width + "%";
-
-    $("k-messages").textContent = fmt.format(st.messages_total || 0);
-    $("k-messages-sub").textContent = st.new_messages ? `${fmt.format(st.new_messages)} en esta corrida` : "";
+    $("fill-label").textContent = width >= 12 ? `${width}%` : "";
+    $("now").hidden = !(running && pending);
+    $("now").style.left = `calc(${width}% - 1px)`;
+    $("progress").classList.toggle("progress-done", !running && width === 100);
+    $("s-read").textContent = fmt.format(st.messages_total || 0);
+    $("s-new").textContent = fmt.format(st.new_messages || 0);
+    $("s-rate").textContent = rateText;
+    $("s-eta").textContent = etaText;
     if (st.updated_at) lastUpdate = new Date(st.updated_at);
+  }
+
+  /* ---------- Métricas, ranking y recientes ---------- */
+  function companyStats() {
+    const map = new Map();
+    for (const c of contacts) {
+      if (!c.company) continue;
+      const s = map.get(c.company) || { name: c.company, contacts: 0, phones: 0, messages: 0, last: "" };
+      s.contacts += 1;
+      if (c.mobile_phones || c.office_phones) s.phones += 1;
+      s.messages += +c.messages || 0;
+      if ((c.last_seen || "") > s.last) s.last = c.last_seen;
+      map.set(c.company, s);
+    }
+    return [...map.values()];
   }
 
   function renderKpis() {
     const n = contacts.length;
     const withPhone = contacts.filter((c) => c.mobile_phones || c.office_phones).length;
     const withCompany = contacts.filter((c) => c.company).length;
-    const fromImage = contacts.filter((c) => c.source.includes("image")).length;
     $("k-total").textContent = fmt.format(n);
-    $("k-total-sub").textContent = fresh.size ? `+${fmt.format(fresh.size)} en la última actualización` : "";
+    $("k-total-delta").hidden = !fresh.size;
+    $("k-total-delta").textContent = `+${fmt.format(fresh.size)}`;
     $("k-phone").textContent = fmt.format(withPhone);
-    $("k-phone-sub").textContent = n ? `${pct(withPhone, n)}% del total` : "";
+    $("k-phone-delta").hidden = !n;
+    $("k-phone-delta").textContent = `${pct(withPhone, n)}%`;
     $("k-company").textContent = fmt.format(withCompany);
-    $("k-company-sub").textContent = n ? `${pct(withCompany, n)}% del total` : "";
-    $("k-image").textContent = fmt.format(fromImage);
+    $("k-company-delta").hidden = !n;
+    $("k-company-delta").textContent = `${pct(withCompany, n)}%`;
+    $("k-image").textContent = fmt.format(contacts.filter((c) => c.source.includes("image")).length);
   }
 
   function renderCompanies() {
-    const counts = new Map();
-    for (const c of contacts) if (c.company) counts.set(c.company, (counts.get(c.company) || 0) + 1);
-    const top = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 12);
+    const all = companyStats();
+    $("co-total").textContent = fmt.format(all.length);
+    const top = all.sort((a, b) => b.contacts - a.contacts || a.name.localeCompare(b.name)).slice(0, 6);
     const box = $("companies");
     if (!top.length) { box.innerHTML = '<div class="empty">Todavía no hay empresas.</div>'; return; }
-    const max = top[0][1];
-    box.innerHTML = top.map(([name, n]) => `
-      <div class="co" data-company="${esc(name)}" title="Filtrar por ${esc(name)}">
-        <div class="co-name">${esc(name)}</div><div class="co-count">${n}</div>
-        <div class="co-bar"><div style="width:${(n / max) * 100}%"></div></div>
+    const max = top[0].contacts;
+    box.innerHTML = top.map((s, i) => `
+      <div class="co${s.name === activeCompany ? " active" : ""}" data-company="${esc(s.name)}" title="Ver contactos de ${esc(s.name)}">
+        <div class="rank">${i + 1}</div>
+        <div><div class="co-name">${esc(s.name)}</div><div class="co-meter"><div style="width:${(s.contacts / max) * 100}%"></div></div></div>
+        <div class="co-count num">${s.contacts}</div>
       </div>`).join("");
   }
 
-  function visible() {
+  function renderRecent() {
+    const box = $("recent");
+    const recent = contacts.filter((c) => c.last_seen && c.source !== "header")
+      .sort((a, b) => (b.last_seen > a.last_seen ? 1 : -1)).slice(0, 5);
+    if (!recent.length) { box.innerHTML = '<div class="empty">Aparecerán aquí conforme se lean los correos.</div>'; return; }
+    box.innerHTML = recent.map((c) => {
+      const ph = allPhones(c)[0];
+      return `<button type="button" class="rc${c.email === openEmail ? " active" : ""}" data-email="${esc(c.email)}">
+        <span class="k">Último correo · ${esc(shortDate(c.last_seen))}</span>
+        <span class="n">${esc(c.name || c.email)}</span>
+        <span class="c">${esc(c.company || c.email)}</span>
+        <span class="p num">${ph ? esc(ph[1]) : '<span class="muted">Sin teléfono</span>'}</span>
+        <span class="avatar">${esc(initials(c))}</span>
+      </button>`;
+    }).join("");
+  }
+
+  /* ---------- Tabla ---------- */
+  const HEADS = {
+    contacts: [["name", "Contacto"], ["company", "Empresa"], ["title", "Puesto", "col-title"], ["mobile_phones", "Teléfonos"], ["messages", "Correos", "r col-msgs"], ["last_seen", "Último", "col-last"]],
+    companies: [["name", "Empresa"], ["contacts", "Contactos", "r"], ["phones", "Con teléfono", "r"], ["messages", "Correos", "r col-msgs"], ["last", "Último", "col-last"]],
+  };
+
+  function renderHead() {
+    $("thead").innerHTML = "<tr>" + HEADS[view].map(([k, label, cls]) =>
+      `<th data-key="${k}" class="${cls || ""}"${k === sortKey ? ` aria-sort="${sortDir > 0 ? "ascending" : "descending"}"` : ""}>${label}</th>`).join("") + "</tr>";
+  }
+
+  function matches(c) {
+    if (activeCompany && c.company !== activeCompany) return false;
+    if (filter === "phone" && !(c.mobile_phones || c.office_phones)) return false;
+    if (filter === "signature" && !c.source.includes("signature")) return false;
+    if (filter === "image" && !c.source.includes("image")) return false;
+    if (filter === "header" && c.source !== "header") return false;
     const q = query.trim().toLowerCase();
+    if (!q) return true;
+    const hay = `${c.name} ${c.company} ${c.title} ${c.email} ${c.other_emails} ${c.websites}`.toLowerCase();
+    if (hay.includes(q)) return true;
     const digits = q.replace(/\D/g, "");
-    return contacts.filter((c) => {
-      if (filter === "phone" && !(c.mobile_phones || c.office_phones)) return false;
-      if (filter === "signature" && !c.source.includes("signature")) return false;
-      if (filter === "header" && c.source !== "header") return false;
-      if (!q) return true;
-      const hay = `${c.name} ${c.company} ${c.title} ${c.email} ${c.other_emails} ${c.websites}`.toLowerCase();
-      if (hay.includes(q)) return true;
-      return digits.length >= 3 && `${c.mobile_phones}${c.office_phones}${c.fax}`.replace(/\D/g, "").includes(digits);
-    }).sort((a, b) => {
-      let x = a[sortKey] || "", y = b[sortKey] || "";
-      if (sortKey === "messages") { x = +x; y = +y; }
+    return digits.length >= 3 && `${c.mobile_phones}${c.office_phones}${c.fax}`.replace(/\D/g, "").includes(digits);
+  }
+
+  function sorted(list, numeric) {
+    return list.sort((a, b) => {
+      let x = a[sortKey] ?? "", y = b[sortKey] ?? "";
+      if (numeric.includes(sortKey)) { x = +x; y = +y; }
       if (!x && y) return 1;
       if (x && !y) return -1;
       return (x > y ? 1 : x < y ? -1 : 0) * sortDir;
@@ -414,46 +600,79 @@
   }
 
   function phoneCell(c) {
-    const list = [...phones(c.mobile_phones).map((p) => ["cel", p]), ...phones(c.office_phones).map((p) => ["tel", p])];
+    const list = allPhones(c);
     if (!list.length) return '<span class="muted">—</span>';
     const shown = list.slice(0, 2).map(([kind, p]) => `<div><span class="tag">${kind}</span>${esc(p)}</div>`).join("");
     return list.length > 2 ? shown + `<div class="muted">+${list.length - 2} más</div>` : shown;
   }
 
   function renderTable() {
-    const rows = visible();
+    renderHead();
+    const footer = $("footer-note");
+    if (view === "companies") {
+      const q = query.trim().toLowerCase();
+      const rows = sorted(companyStats().filter((s) => !q || s.name.toLowerCase().includes(q)), ["contacts", "phones", "messages"]);
+      $("rows").innerHTML = rows.map((s) => `<tr data-company="${esc(s.name)}">
+        <td><div class="name">${esc(s.name)}</div></td>
+        <td class="r num">${s.contacts}</td><td class="r num">${s.phones}</td>
+        <td class="r num col-msgs">${fmt.format(s.messages)}</td><td class="col-last">${esc(shortDate(s.last))}</td></tr>`).join("")
+        || '<tr><td colspan="5" class="muted">Todavía no hay empresas.</td></tr>';
+      footer.textContent = `${fmt.format(rows.length)} empresa${rows.length === 1 ? "" : "s"} · clic para ver sus contactos`;
+      footer.style.cursor = "default";
+      return;
+    }
+    const rows = sorted(contacts.filter(matches), ["messages"]);
     const shown = rows.slice(0, limit);
     $("rows").innerHTML = shown.map((c) => {
       const isOpen = c.email === openEmail;
       const main = `<tr data-email="${esc(c.email)}" class="${fresh.has(c.email) ? "fresh" : ""}${isOpen ? " open" : ""}">
-        <td><div class="name">${esc(c.name) || '<span class="muted">Sin nombre</span>'}${c.source.includes("image") ? '<span class="badge">IMAGEN</span>' : ""}</div>
-          <div class="sub-email">${esc(c.email)}</div></td>
+        <td><div class="person"><span class="avatar">${esc(initials(c))}</span><div>
+          <div class="name">${esc(c.name) || '<span class="muted">Sin nombre</span>'}${c.source.includes("image") ? '<span class="badge">IMAGEN</span>' : ""}</div>
+          <div class="sub-email">${esc(c.email)}</div></div></div></td>
         <td>${esc(c.company) || '<span class="muted">—</span>'}</td>
         <td class="col-title">${esc(c.title) || '<span class="muted">—</span>'}</td>
-        <td class="phones">${phoneCell(c)}</td>
-        <td class="num">${esc(c.messages)}</td>
+        <td class="phones num">${phoneCell(c)}</td>
+        <td class="r num col-msgs">${esc(c.messages)}</td>
         <td class="col-last">${esc(shortDate(c.last_seen))}</td></tr>`;
       if (!isOpen) return main;
-      const extra = [
-        (c.mobile_phones || c.office_phones) && `Teléfonos: ${[...phones(c.mobile_phones).map((p) => "cel " + p), ...phones(c.office_phones).map((p) => "tel " + p)].join(", ")}`,
+      const info = [
+        allPhones(c).length && `Teléfonos: ${allPhones(c).map(([k, p]) => `${k} ${p}`).join(", ")}`,
+        c.fax && `Fax: ${c.fax}`,
         c.other_emails && `Otros correos: ${c.other_emails}`,
         c.websites && `Web: ${c.websites}`,
-        c.fax && `Fax: ${c.fax}`,
         c.first_seen && `Primer correo: ${shortDate(c.first_seen)}`,
+        `Correos: ${c.messages}`,
       ].filter(Boolean).join("\n");
       const sig = (c.sample_signature || "").split(" | ").join("\n");
-      return main + `<tr class="detail"><td colspan="6"><pre>${esc(sig || "Sin firma detectada")}${extra ? "\n\n" + esc(extra) : ""}</pre></td></tr>`;
-    }).join("") || `<tr><td colspan="6" class="muted" style="padding:22px 12px">${contacts.length ? "Nada coincide con la búsqueda." : "Aún no hay contactos. Pulsa “Iniciar escaneo” y aparecerán aquí conforme se lean los correos."}</td></tr>`;
-    $("footer-note").textContent = rows.length > shown.length
-      ? `Mostrando ${fmt.format(shown.length)} de ${fmt.format(rows.length)}. Usa la búsqueda o haz clic aquí para ver más.`
-      : `${fmt.format(rows.length)} contacto${rows.length === 1 ? "" : "s"}`;
-    $("footer-note").style.cursor = rows.length > shown.length ? "pointer" : "default";
-    document.querySelectorAll("th[data-key]").forEach((th) => {
-      if (th.dataset.key === sortKey) th.setAttribute("aria-sort", sortDir > 0 ? "ascending" : "descending");
-      else th.removeAttribute("aria-sort");
-    });
+      return main + `<tr class="detail"><td colspan="6"><div class="detail-grid">
+        <div><div class="k">Firma</div><pre>${esc(sig || "Sin firma detectada")}</pre></div>
+        <div><div class="k">Datos</div><pre>${esc(info)}</pre></div></div></td></tr>`;
+    }).join("") || `<tr><td colspan="6" class="muted">${contacts.length ? "Nada coincide con la búsqueda." : "Aún no hay contactos. Pulsa “Iniciar escaneo” y aparecerán aquí conforme se lean los correos."}</td></tr>`;
+    const scope = activeCompany ? ` de ${activeCompany} · clic aquí para ver todos` : "";
+    footer.textContent = rows.length > shown.length
+      ? `Mostrando ${fmt.format(shown.length)} de ${fmt.format(rows.length)}. Clic aquí para ver más.`
+      : `${fmt.format(rows.length)} contacto${rows.length === 1 ? "" : "s"}${scope}`;
+    footer.style.cursor = rows.length > shown.length || activeCompany ? "pointer" : "default";
   }
 
+  function renderAll() { renderKpis(); renderCompanies(); renderRecent(); renderTable(); }
+
+  function setView(v) {
+    view = v; limit = PAGE;
+    sortKey = v === "companies" ? "contacts" : "last_seen"; sortDir = -1;
+    document.querySelectorAll(".seg button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.view === v));
+    $("filter").disabled = v === "companies";
+    renderTable();
+  }
+
+  function showCompany(name) {
+    activeCompany = activeCompany === name ? null : name;
+    openEmail = null;
+    if (view !== "contacts") setView("contacts");
+    renderCompanies(); renderTable();
+  }
+
+  /* ---------- Datos ---------- */
   let timer = null;
   async function poll() {
     clearTimeout(timer);
@@ -468,10 +687,10 @@
         for (const c of data.contacts) if (!first && !known.has(c.email)) fresh.add(c.email);
         known = new Set(data.contacts.map((c) => c.email));
         contacts = data.contacts;
-        renderKpis(); renderCompanies(); renderTable();
+        renderAll();
       }
     } catch (e) {
-      $("state").className = "state error";
+      $("state").className = "chip-box state error";
       $("state-text").textContent = "Dashboard cerrado";
       $("start").hidden = true; $("stop").hidden = true;
     }
@@ -495,28 +714,42 @@
   $("start").addEventListener("click", () => action("start"));
   $("stop").addEventListener("click", () => action("stop"));
   $("search").addEventListener("input", (e) => { query = e.target.value; limit = PAGE; renderTable(); });
-  document.querySelectorAll(".chip").forEach((b) => b.addEventListener("click", () => {
-    filter = b.dataset.filter; limit = PAGE;
-    document.querySelectorAll(".chip").forEach((x) => x.setAttribute("aria-pressed", x === b));
-    renderTable();
-  }));
-  document.querySelectorAll("th[data-key]").forEach((th) => th.addEventListener("click", () => {
+  $("filter").addEventListener("change", (e) => { filter = e.target.value; limit = PAGE; renderTable(); });
+  document.querySelectorAll(".seg button").forEach((b) => b.addEventListener("click", () => setView(b.dataset.view)));
+  $("thead").addEventListener("click", (e) => {
+    const th = e.target.closest("th[data-key]");
+    if (!th) return;
     const k = th.dataset.key;
-    sortDir = k === sortKey ? -sortDir : (k === "messages" || k === "last_seen" ? -1 : 1);
+    const numericFirst = ["messages", "last_seen", "contacts", "phones", "last"].includes(k);
+    sortDir = k === sortKey ? -sortDir : (numericFirst ? -1 : 1);
     sortKey = k; renderTable();
-  }));
+  });
   $("rows").addEventListener("click", (e) => {
+    const co = e.target.closest("tr[data-company]");
+    if (co) return showCompany(co.dataset.company);
     const tr = e.target.closest("tr[data-email]");
     if (!tr) return;
     openEmail = openEmail === tr.dataset.email ? null : tr.dataset.email;
-    renderTable();
+    renderRecent(); renderTable();
   });
   $("companies").addEventListener("click", (e) => {
     const co = e.target.closest(".co");
-    if (!co) return;
-    $("search").value = query = co.dataset.company; limit = PAGE; renderTable();
+    if (co) showCompany(co.dataset.company);
   });
-  $("footer-note").addEventListener("click", () => { limit += PAGE; renderTable(); });
+  $("recent").addEventListener("click", (e) => {
+    const card = e.target.closest(".rc");
+    if (!card) return;
+    openEmail = openEmail === card.dataset.email ? null : card.dataset.email;
+    activeCompany = null; query = ""; $("search").value = ""; filter = "all"; $("filter").value = "all";
+    if (view !== "contacts") setView("contacts");
+    renderRecent(); renderCompanies(); renderTable();
+    const row = document.querySelector(`tr[data-email="${CSS.escape(card.dataset.email)}"]`);
+    if (row) row.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
+  $("footer-note").addEventListener("click", () => {
+    if (activeCompany && contacts.filter(matches).length <= limit) { activeCompany = null; renderCompanies(); renderTable(); return; }
+    limit += PAGE; renderTable();
+  });
 
   poll();
 })();
