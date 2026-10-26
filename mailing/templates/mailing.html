@@ -1,0 +1,141 @@
+{#- Plantilla de mailing D-Industrimex. Tablas + estilos en línea para que funcione en
+    Gmail, Outlook y Apple Mail. Montserrat carga donde el cliente lo permite (Apple Mail,
+    iOS, Gmail app en algunos casos); en el resto cae a Arial. -#}
+{%- set FONT = "Montserrat, Arial, Helvetica, sans-serif" -%}
+{%- set RED = "#A81818" -%}
+{%- macro button(label, url, center=False) %}
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" class="btn" style="margin-top:20px;{% if center %}margin-left:auto;margin-right:auto;{% endif %}"><tr>
+  <td bgcolor="{{ RED }}" style="background-color:{{ RED }};border-radius:100px;">
+    <a href="{{ url }}" style="display:inline-block;padding:13px 28px;font-family:{{ FONT }};font-size:15px;line-height:1;font-weight:700;color:#FFFFFF;text-decoration:none;border-radius:100px;">{{ label }}</a>
+  </td>
+</tr></table>
+{%- endmacro -%}
+<!DOCTYPE html>
+<html lang="es" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="x-apple-disable-message-reformatting">
+<meta name="color-scheme" content="light">
+<meta name="supported-color-schemes" content="light">
+<title>{{ c.subject }}</title>
+<!--[if !mso]><!-->
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&display=swap" rel="stylesheet">
+<!--<![endif]-->
+<!--[if mso]><style>* { font-family: Arial, Helvetica, sans-serif !important; }</style><![endif]-->
+<style>
+  body { margin: 0; padding: 0; -webkit-text-size-adjust: 100%; }
+  a { color: {{ RED }}; }
+  @media (max-width: 620px) {
+    .wrap { width: 100% !important; }
+    .px { padding-left: 22px !important; padding-right: 22px !important; }
+    .h1 { font-size: 28px !important; }
+    .h2 { font-size: 21px !important; }
+    .btn a { display: block !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background-color:#E1E3E7;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">{{ c.preheader }}&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#E1E3E7"
+       style="background-color:#E1E3E7;background-image:linear-gradient(118deg,#EEF0F2 0%,#E1E3E7 30%,#F4F5F7 52%,#DADDE1 74%,#ECEDEF 100%);">
+<tr><td align="center" style="padding:24px 12px;">
+
+<table role="presentation" class="wrap" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;">
+
+  {# Encabezado: logo arriba a la izquierda, ≥ 200 px #}
+  <tr><td class="px" align="left" style="padding:12px 36px 28px 36px;">
+    {%- if c.assets.logo_url %}
+    <img src="{{ c.assets.logo_url }}" width="220" alt="D-Industrimex · Soluciones industriales eficientes"
+         style="display:block;width:220px;max-width:220px;height:auto;border:0;">
+    {%- else %}
+    <div style="font-family:{{ FONT }};font-size:26px;line-height:1;font-weight:800;color:{{ RED }};letter-spacing:-0.02em;">D-industrimex<sup style="font-size:11px;">&reg;</sup></div>
+    <div style="font-family:{{ FONT }};font-size:11px;line-height:1.4;font-weight:600;font-style:italic;color:#6E6360;padding-top:4px;">Soluciones industriales eficientes</div>
+    {%- endif %}
+  </td></tr>
+
+  {# Hero #}
+  <tr><td class="px" style="padding:0 36px 8px 36px;">
+    <div style="font-family:{{ FONT }};font-size:12px;line-height:1.4;font-weight:700;letter-spacing:0.26em;text-transform:uppercase;color:#6E6360;padding-bottom:14px;">{{ c.hero.eyebrow }}</div>
+    <h1 class="h1" style="margin:0;font-family:{{ FONT }};font-size:34px;line-height:1.08;font-weight:800;letter-spacing:-0.02em;color:#181212;">{{ c.hero.headline | accent }}</h1>
+    <p style="margin:18px 0 0 0;font-family:{{ FONT }};font-size:16px;line-height:1.5;font-weight:500;color:#2A2320;">{{ greeting }}</p>
+    <p style="margin:10px 0 0 0;font-family:{{ FONT }};font-size:16px;line-height:1.5;font-weight:500;color:#2A2320;">{{ c.hero.body }}</p>
+  </td></tr>
+
+  {# Bloques de producto: fila de lista con acento rojo de 6 px a la izquierda #}
+  {%- for b in c.blocks %}
+  <tr><td class="px" style="padding:24px 36px 0 36px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#FFFFFF"
+           style="background-color:#FFFFFF;border:1px solid #E0DAD8;border-left:6px solid {{ RED }};border-radius:16px;">
+      {%- if b.image_url %}
+      <tr><td align="center" style="padding:24px 24px 0 24px;">
+        <img src="{{ b.image_url }}" width="300" alt="{{ b.image_alt }}" style="display:block;width:300px;max-width:100%;height:auto;border:0;">
+      </td></tr>
+      {%- endif %}
+      <tr><td style="padding:24px 26px 26px 26px;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+          <td bgcolor="{{ RED }}" style="background-color:{{ RED }};border-radius:6px;padding:5px 12px;font-family:{{ FONT }};font-size:13px;line-height:1;font-weight:800;color:#FFFFFF;letter-spacing:0.04em;">{{ b.brand }}</td>
+        </tr></table>
+        <h2 class="h2" style="margin:14px 0 0 0;font-family:{{ FONT }};font-size:23px;line-height:1.15;font-weight:800;letter-spacing:-0.01em;color:#181212;">{{ b.title | accent }}</h2>
+        <p style="margin:10px 0 0 0;font-family:{{ FONT }};font-size:15px;line-height:1.5;font-weight:500;color:#6E6360;">{{ b.body }}</p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:14px;">
+          {%- for check in b.checks %}
+          <tr>
+            <td width="26" valign="top" style="padding:5px 0;font-family:{{ FONT }};font-size:15px;line-height:1.45;font-weight:800;color:{{ RED }};">&#10003;</td>
+            <td valign="top" style="padding:5px 0;font-family:{{ FONT }};font-size:15px;line-height:1.45;font-weight:500;color:#2A2320;">{{ check }}</td>
+          </tr>
+          {%- endfor %}
+        </table>
+        {{ button(b.cta_label, b.cta_url) }}
+      </td></tr>
+    </table>
+  </td></tr>
+  {%- endfor %}
+
+  {# Cierre: caja de información #}
+  <tr><td class="px" style="padding:32px 36px 0 36px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#FFFFFF"
+           style="background-color:#FFFFFF;border:1px solid #EBCFCF;border-radius:18px;">
+      <tr><td align="center" style="padding:30px 28px;">
+        <h2 class="h2" style="margin:0;font-family:{{ FONT }};font-size:26px;line-height:1.1;font-weight:800;letter-spacing:-0.01em;color:#181212;">{{ c.closing.question | accent }}</h2>
+        {%- for para in c.closing.body %}
+        <p style="margin:14px 0 0 0;font-family:{{ FONT }};font-size:15px;line-height:1.5;font-weight:500;color:#2A2320;">{{ para }}</p>
+        {%- endfor %}
+        <p style="margin:14px 0 0 0;font-family:{{ FONT }};font-size:14px;line-height:1.5;font-weight:700;color:#181212;">{{ c.closing.contact }}</p>
+        {{ button(c.closing.cta_label, c.closing.cta_url, center=True) }}
+      </td></tr>
+    </table>
+  </td></tr>
+
+  {# Firma #}
+  <tr><td class="px" style="padding:30px 36px 0 36px;">
+    <p style="margin:0;font-family:{{ FONT }};font-size:16px;line-height:1.4;font-weight:800;color:#181212;">{{ c.signature.name }}</p>
+    <p style="margin:2px 0 0 0;font-family:{{ FONT }};font-size:14px;line-height:1.4;font-weight:600;color:{{ RED }};">{{ c.signature.title }}</p>
+    <p style="margin:2px 0 0 0;font-family:{{ FONT }};font-size:13px;line-height:1.4;font-weight:500;color:#6E6360;">{{ c.signature.address }}</p>
+  </td></tr>
+
+  {# Barra de sitio: cierre de toda pieza #}
+  <tr><td class="px" align="center" style="padding:30px 36px 0 36px;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+      <td bgcolor="#FFFFFF" style="background-color:#FFFFFF;border:3px solid {{ RED }};border-radius:100px;padding:9px 24px 9px 12px;">
+        <a href="{{ c.footer.site_url }}" style="text-decoration:none;font-family:{{ FONT }};font-size:17px;line-height:1;font-weight:600;color:{{ RED }};">
+          {%- if c.assets.site_icon_url %}<img src="{{ c.assets.site_icon_url }}" width="24" height="24" alt="" style="vertical-align:middle;border:0;margin-right:8px;">{% else %}<span style="display:inline-block;width:24px;height:24px;line-height:24px;border-radius:12px;background-color:{{ RED }};color:#FFFFFF;font-size:13px;text-align:center;vertical-align:middle;margin-right:8px;">&#9673;</span>{% endif -%}
+          <span style="vertical-align:middle;">{{ c.footer.site }}</span></a>
+      </td>
+    </tr></table>
+  </td></tr>
+
+  {# Pie legal y baja #}
+  <tr><td class="px" align="center" style="padding:26px 36px 8px 36px;font-family:{{ FONT }};font-size:11px;line-height:1.6;font-weight:500;color:#8A807D;">
+    {{ c.footer.reason }}<br>
+    D-Industrimex · {{ c.signature.address }}<br>
+    <a href="{{ unsubscribe_url }}" style="color:#8A807D;text-decoration:underline;">Ya no quiero recibir estos correos</a>
+  </td></tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>
+
