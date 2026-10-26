@@ -1,11 +1,13 @@
 # PyInstaller spec for "Contactos D-Industrimex.app". Run through packaging/build_mac.sh.
 import os
+import sys
 
 from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules
 
 APP = "Contactos D-Industrimex"
 ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
 VERSION = os.environ.get("APP_VERSION", "0.0.0")
+sys.path.insert(0, ROOT)  # so the collect_* helpers below find the package
 
 datas = collect_data_files("mail_contact_scraper")  # dashboard.html, static/, Apps Script
 binaries = []
