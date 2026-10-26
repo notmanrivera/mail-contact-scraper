@@ -9,3 +9,4 @@ venv/
 mail_contact_scraper/_build_info.py
 build/
 dist/
+ignorados.txt

@@ -296,6 +296,14 @@
   .col-last { white-space: nowrap; color: var(--muted); }
   .phones { white-space: nowrap; }
   .tag { display: inline-block; min-width: 28px; font-weight: 700; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 30; max-width: calc(100vw - 32px);
+    background: var(--ink); color: #fff; padding: 12px 18px; border-radius: 14px; font-weight: 600; font-size: 13px;
+    box-shadow: 0 16px 40px -12px rgba(24,18,18,.5);
+  }
+  .badge.dark { background: var(--ink); }
+  .ignore-row { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; color: var(--muted); font-size: 12px; font-weight: 600; }
+  .link-btn { border: 0; background: none; padding: 0; color: var(--red); font: 700 12px var(--font); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
   .badge { display: inline-block; font-weight: 800; font-size: 9.5px; letter-spacing: .05em; padding: 2px 7px; border-radius: 6px; margin-left: 6px; background: var(--red); color: #fff; vertical-align: 1px; }
   .muted { color: var(--faint); }
   .detail td { background: #fff; cursor: default; border-radius: 14px; box-shadow: inset 4px 0 0 var(--red); }
@@ -425,6 +433,7 @@
       <div class="seg" role="group" aria-label="Vista">
         <button type="button" data-view="contacts" aria-pressed="true">Contactos</button>
         <button type="button" data-view="companies" aria-pressed="false">Empresas</button>
+        <button type="button" data-view="dormant" aria-pressed="false" title="Empresas que no les escriben desde hace tiempo">Dormidos</button>
       </div>
       <input class="search" id="search" type="search" placeholder="Buscar nombre, empresa, ciudad, teléfono o correo" autocomplete="off">
       <select class="filter" id="filter" aria-label="Filtro">
@@ -433,7 +442,14 @@
         <option value="signature">Con firma</option>
         <option value="image">Firma en imagen</option>
         <option value="header">Solo correo</option>
+        <option value="bounced">Rebotados</option>
       </select>
+      <select class="filter" id="months" aria-label="Sin correos desde" hidden>
+        <option value="3">Sin correos en 3 meses</option>
+        <option value="6" selected>Sin correos en 6 meses</option>
+        <option value="12">Sin correos en 12 meses</option>
+      </select>
+      <button class="btn btn-outline" id="dormant-csv" type="button" hidden style="height:38px">Descargar lista</button>
       <select class="filter" id="box-filter" aria-label="Buzón" hidden></select>
     </div>
     <div class="table-wrap">
@@ -454,6 +470,7 @@
 </div>
 
 
+<div class="toast" id="toast" role="status" hidden></div>
 <div class="scrim" id="scrim" hidden></div>
 <aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title" hidden>
   <div class="drawer-head">
@@ -476,6 +493,17 @@
         <button class="btn btn-primary" id="mb-save" type="submit">Probar y guardar</button>
       </form>
       <div class="msg" id="mb-msg" hidden></div>
+    </section>
+
+    <section class="set">
+      <h3>Ignorados</h3>
+      <p class="hint" id="ig-summary">Correos y dominios que no son prospectos. Ya se omiten solos las apps (Uber, Didi, Rappi), bancos, tiendas en línea, redes sociales, avisos automáticos y correos masivos.</p>
+      <div class="mb-list" id="ig-list"></div>
+      <form class="actions-row" id="ig-form" autocomplete="off">
+        <input class="input" id="ig-value" placeholder="uber.com o juan@empresa.mx" style="flex:1;min-width:0">
+        <button class="btn btn-outline" type="submit">Ignorar</button>
+      </form>
+      <div class="msg" id="ig-msg" hidden></div>
     </section>
 
     <section class="set">
@@ -524,7 +552,7 @@
   let contacts = [], version = "", known = new Set(), fresh = new Set();
   let view = "contacts", filter = "all", query = "", sortKey = "last_seen", sortDir = -1;
   let openEmail = null, activeCompany = null, limit = PAGE;
-  let mailboxes = [], boxFilter = "all";
+  let mailboxes = [], boxFilter = "all", months = 6;
   let lastUpdate = null, rateSamples = [], pendingAction = null, actionError = "";
 
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -725,6 +753,7 @@
   const HEADS = {
     contacts: [["name", "Contacto"], ["company", "Empresa"], ["title", "Puesto", "col-title"], ["mobile_phones", "Teléfonos"], ["messages", "Correos", "r col-msgs"], ["last_seen", "Último", "col-last"]],
     companies: [["name", "Empresa"], ["contacts", "Contactos", "r"], ["phones", "Con teléfono", "r"], ["messages", "Correos", "r col-msgs"], ["last", "Último", "col-last"]],
+    dormant: [["name", "Empresa"], ["contacts", "Contactos", "r"], ["phones", "Con teléfono", "r"], ["messages", "Correos", "r col-msgs"], ["last", "Último correo", "col-last"]],
   };
 
   function renderHead() {
@@ -747,13 +776,50 @@
     return true;
   }
 
+  /* Clientes dormidos: empresas (o dominios propios) sin correos desde hace N meses. */
+  const FREE_MAIL = /^(gmail|hotmail|outlook|live|yahoo|icloud|me|aol|prodigy|msn)\./;
+  const groupOf = (c) => {
+    if (c.company) return c.company;
+    const domain = c.email.split("@")[1] || "";
+    return FREE_MAIL.test(domain) ? "" : domain;
+  };
+  function dormantStats() {
+    const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - months);
+    const limitIso = cutoff.toISOString().slice(0, 19);
+    const map = new Map();
+    for (const c of contacts) {
+      const key = groupOf(c);
+      if (!key) continue;
+      const s = map.get(key) || { name: key, contacts: 0, phones: 0, messages: 0, last: "", people: [] };
+      s.contacts += 1; s.people.push(c);
+      if (c.mobile_phones || c.office_phones) s.phones += 1;
+      s.messages += +c.messages || 0;
+      if ((c.last_seen || "") > s.last) s.last = c.last_seen;
+      map.set(key, s);
+    }
+    return [...map.values()].filter((s) => s.last && s.last < limitIso);
+  }
+  function downloadDormant() {
+    const cols = ["company", "name", "title", "email", "mobile_phones", "office_phones", "location", "last_seen"];
+    const quote = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const lines = [cols.join(",")];
+    for (const s of dormantStats()) for (const c of s.people) {
+      if (c.bounced) continue;
+      lines.push(cols.map((k) => quote(k === "company" ? s.name : c[k])).join(","));
+    }
+    const url = URL.createObjectURL(new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv" }));
+    const a = Object.assign(document.createElement("a"), { href: url, download: `clientes-dormidos-${months}-meses.csv` });
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
   function matches(c) {
     if (boxFilter !== "all" && !(c.mailboxes || "").split("; ").includes(boxFilter)) return false;
-    if (activeCompany && c.company !== activeCompany) return false;
+    if (activeCompany && groupOf(c) !== activeCompany) return false;
     if (filter === "phone" && !(c.mobile_phones || c.office_phones)) return false;
     if (filter === "signature" && !c.source.includes("signature")) return false;
     if (filter === "image" && !c.source.includes("image")) return false;
     if (filter === "header" && c.source !== "header") return false;
+    if (filter === "bounced" && !c.bounced) return false;
     const q = query.trim().toLowerCase();
     if (!q) return true;
     const hay = `${c.name} ${c.company} ${c.location || ""} ${c.title} ${c.email} ${c.other_emails} ${c.websites}`.toLowerCase();
@@ -782,15 +848,18 @@
   function renderTable() {
     renderHead();
     const footer = $("footer-note");
-    if (view === "companies") {
+    if (view === "companies" || view === "dormant") {
       const q = query.trim().toLowerCase();
-      const rows = sorted(companyStats().filter((s) => !q || s.name.toLowerCase().includes(q)), ["contacts", "phones", "messages"]);
+      const base = view === "dormant" ? dormantStats() : companyStats();
+      const rows = sorted(base.filter((s) => !q || s.name.toLowerCase().includes(q)), ["contacts", "phones", "messages"]);
       $("rows").innerHTML = rows.map((s) => `<tr data-company="${esc(s.name)}">
         <td><div class="name">${esc(s.name)}</div></td>
         <td class="r num">${s.contacts}</td><td class="r num">${s.phones}</td>
         <td class="r num col-msgs">${fmt.format(s.messages)}</td><td class="col-last">${esc(shortDate(s.last))}</td></tr>`).join("")
-        || '<tr><td colspan="5" class="muted">Todavía no hay empresas.</td></tr>';
-      footer.textContent = `${fmt.format(rows.length)} empresa${rows.length === 1 ? "" : "s"} · clic para ver sus contactos`;
+        || `<tr><td colspan="5" class="muted">${view === "dormant" ? `Ninguna empresa lleva ${months} meses sin escribir.` : "Todavía no hay empresas."}</td></tr>`;
+      footer.textContent = view === "dormant"
+        ? `${fmt.format(rows.length)} empresa${rows.length === 1 ? "" : "s"} sin correos en ${months} meses · clic para ver sus contactos`
+        : `${fmt.format(rows.length)} empresa${rows.length === 1 ? "" : "s"} · clic para ver sus contactos`;
       footer.style.cursor = "default";
       return;
     }
@@ -800,7 +869,7 @@
       const isOpen = c.email === openEmail;
       const main = `<tr data-email="${esc(c.email)}" class="${fresh.has(c.email) ? "fresh" : ""}${isOpen ? " open" : ""}">
         <td><div class="person"><span class="avatar">${esc(initials(c))}</span><div>
-          <div class="name">${esc(c.name) || '<span class="muted">Sin nombre</span>'}${c.source.includes("image") ? '<span class="badge">IMAGEN</span>' : ""}</div>
+          <div class="name">${esc(c.name) || '<span class="muted">Sin nombre</span>'}${c.source.includes("image") ? '<span class="badge">IMAGEN</span>' : ""}${c.bounced ? '<span class="badge dark" title="El último correo que le mandaron rebotó">REBOTÓ</span>' : ""}</div>
           <div class="sub-email">${esc(c.email)}</div></div></div></td>
         <td>${esc(c.company) || '<span class="muted">—</span>'}${c.location ? `<div class="sub-email">${esc(c.location)}</div>` : ""}</td>
         <td class="col-title">${esc(c.title) || '<span class="muted">—</span>'}</td>
@@ -816,11 +885,17 @@
         c.first_seen && `Primer correo: ${shortDate(c.first_seen)}`,
         mailboxes.length > 1 && c.mailboxes && `Buzones: ${c.mailboxes.split("; ").join(", ")}`,
         `Correos: ${c.messages}`,
+        c.bounced && `Rebotó: ${c.bounced === "sí" ? "sí" : shortDate(c.bounced)} (no se le enviarán mailings)`,
       ].filter(Boolean).join("\n");
+      const domain = c.email.split("@")[1] || "";
       const sig = (c.sample_signature || "").split(" | ").join("\n");
       return main + `<tr class="detail"><td colspan="6"><div class="detail-grid">
         <div><div class="k">Firma</div><pre>${esc(sig || "Sin firma detectada")}</pre></div>
-        <div><div class="k">Datos</div><pre>${esc(info)}</pre></div></div></td></tr>`;
+        <div><div class="k">Datos</div><pre>${esc(info)}</pre>
+          <div class="ignore-row">No es prospecto:
+            <button type="button" class="link-btn" data-ignore="${esc(c.email)}">Ignorar este correo</button>
+            ${FREE_MAIL.test(domain) ? "" : `<button type="button" class="link-btn" data-ignore="${esc(domain)}">Ignorar todo @${esc(domain)}</button>`}
+          </div></div></div></td></tr>`;
     }).join("") || `<tr><td colspan="6" class="muted">${contacts.length ? "Nada coincide con la búsqueda." : "Aún no hay contactos. Pulsa “Iniciar escaneo” y aparecerán aquí conforme se lean los correos."}</td></tr>`;
     const scope = activeCompany ? ` de ${activeCompany} · clic aquí para ver todos` : "";
     footer.textContent = rows.length > shown.length
@@ -833,10 +908,12 @@
 
   function setView(v) {
     view = v; limit = PAGE;
-    sortKey = v === "companies" ? "contacts" : "last_seen"; sortDir = -1;
+    sortKey = v === "companies" ? "contacts" : v === "dormant" ? "last" : "last_seen"; sortDir = v === "dormant" ? 1 : -1;
     document.querySelectorAll(".seg button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.view === v));
+    $("filter").hidden = v === "dormant";
     $("filter").disabled = v === "companies";
-    $("box-filter").disabled = v === "companies";
+    $("box-filter").disabled = v !== "contacts";
+    $("months").hidden = $("dormant-csv").hidden = v !== "dormant";
     renderTable();
   }
 
@@ -894,6 +971,24 @@
   $("stop").addEventListener("click", () => action("stop"));
   $("search").addEventListener("input", (e) => { query = e.target.value; limit = PAGE; renderTable(); });
   $("filter").addEventListener("change", (e) => { filter = e.target.value; limit = PAGE; renderTable(); });
+  $("months").addEventListener("change", (e) => { months = +e.target.value; renderTable(); });
+  $("dormant-csv").addEventListener("click", downloadDormant);
+  let toastTimer = null;
+  function flash(text) {
+    $("toast").textContent = text; $("toast").hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { $("toast").hidden = true; }, 5000);
+  }
+  async function ignore(value) {
+    const r = await settingsCall("/settings/ignore", { add: value });
+    if (!r.ok) return alert(r.error);
+    openEmail = null;
+    flash(`Listo: ${value} ya no aparece. Lo puedes deshacer en Configuración ▸ Ignorados.`);
+    poll();
+  }
+  $("rows").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-ignore]");
+    if (b) { e.stopPropagation(); ignore(b.dataset.ignore); }
+  }, true);
   $("box-filter").addEventListener("change", (e) => { boxFilter = e.target.value; limit = PAGE; renderTable(); });
   document.querySelectorAll(".seg button").forEach((b) => b.addEventListener("click", () => setView(b.dataset.view)));
   $("thead").addEventListener("click", (e) => {
@@ -942,7 +1037,13 @@
     if (data.mailboxes) renderSettings(data);
     return data;
   }
+  const OMIT = { service: "de servicios y apps", bulk: "de correos masivos", automated: "automáticos", ignored: "ignorados por ti" };
   function renderSettings(cfg) {
+    $("ig-list").innerHTML = (cfg.ignored || []).map((v) => `<div class="mb"><span class="e">${esc(v)}</span>
+        <button type="button" data-unignore="${esc(v)}" title="Dejar de ignorar" aria-label="Dejar de ignorar">×</button></div>`).join("");
+    const om = (lastStatus && lastStatus.omitted) || {};
+    const parts = Object.entries(OMIT).filter(([k]) => om[k]).map(([k, label]) => `${fmt.format(om[k])} ${label}`);
+    if (parts.length) $("ig-summary").textContent = `Remitentes omitidos: ${parts.join(", ")}. Agrega aquí los que se hayan colado.`;
     $("mb-list").innerHTML = (cfg.mailboxes || []).map((m) => `<div class="mb">
         <span class="e" title="${esc(m.host || "")}">${esc(m.email)}</span>
         <span class="t${m.has_password ? "" : " bad"}">${m.main ? "Principal" : m.has_password ? "Listo" : "Sin contraseña"}</span>
@@ -983,6 +1084,20 @@
       else showMsg("mb-msg", r.error, false);
     } catch (err) { showMsg("mb-msg", "No se pudo guardar.", false); }
     btn.disabled = false; btn.textContent = "Probar y guardar";
+  });
+  $("ig-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const value = $("ig-value").value.trim();
+    const r = await settingsCall("/settings/ignore", { add: value });
+    showMsg("ig-msg", r.ok ? `Listo: ${value} ya no aparece en los contactos.` : r.error, r.ok);
+    if (r.ok) { $("ig-value").value = ""; poll(); }
+  });
+  $("ig-list").addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-unignore]");
+    if (!b) return;
+    const r = await settingsCall("/settings/ignore", { remove: b.dataset.unignore });
+    showMsg("ig-msg", r.ok ? `${b.dataset.unignore} vuelve a aparecer.` : r.error, r.ok);
+    if (r.ok) poll();
   });
   $("mb-list").addEventListener("click", async (e) => {
     const b = e.target.closest("[data-remove]");
