@@ -31,9 +31,12 @@ def main(argv=None):
 
     from .build import load_campaign
     out = args.out or Path("output") / "mailing" / load_campaign(args.campaign)["slug"]
-    people, skipped = build(args.campaign, args.contacts, out, esp=args.esp, eml=args.eml, excel=args.excel,
-                            exclude_domains=args.exclude_domain, suppression_path=args.suppression,
-                            require_signature=args.require_signature)
+    try:
+        people, skipped = build(args.campaign, args.contacts, out, esp=args.esp, eml=args.eml, excel=args.excel,
+                                exclude_domains=args.exclude_domain, suppression_path=args.suppression,
+                                require_signature=args.require_signature)
+    except ValueError as err:
+        sys.exit(str(err))
     print(f"{len(people)} prospectos → {out}")
     print("Omitidos: " + ", ".join(f"{k} {v}" for k, v in skipped.items() if v) if any(skipped.values()) else "Omitidos: 0")
     print(f"Revisa {Path(out) / 'preview.html'} antes de importar o enviar.")

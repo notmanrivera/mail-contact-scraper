@@ -1,13 +1,20 @@
 {#- Plantilla de mailing D-Industrimex. Tablas + estilos en línea para que funcione en
     Gmail, Outlook y Apple Mail. Montserrat carga donde el cliente lo permite (Apple Mail,
-    iOS, Gmail app en algunos casos); en el resto cae a Arial. -#}
+    iOS); en el resto cae a Arial. Estructura: secciones a todo lo ancho que alternan
+    blanco y acero, foto de producto grande y centrada, un botón por sección. -#}
 {%- set FONT = "Montserrat, Arial, Helvetica, sans-serif" -%}
 {%- set RED = "#A81818" -%}
-{%- macro button(label, url, center=False) %}
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" class="btn" style="margin-top:20px;{% if center %}margin-left:auto;margin-right:auto;{% endif %}"><tr>
+{%- set STEEL = "background-color:#EEF0F2;background-image:linear-gradient(118deg,#EEF0F2 0%,#E1E3E7 30%,#F4F5F7 52%,#DADDE1 74%,#ECEDEF 100%);" -%}
+{%- macro button(label, url) -%}
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" class="btn" style="margin:24px auto 0 auto;"><tr>
   <td bgcolor="{{ RED }}" style="background-color:{{ RED }};border-radius:100px;">
-    <a href="{{ url }}" style="display:inline-block;padding:13px 28px;font-family:{{ FONT }};font-size:15px;line-height:1;font-weight:700;color:#FFFFFF;text-decoration:none;border-radius:100px;">{{ label }}</a>
+    <a href="{{ url }}" style="display:inline-block;padding:14px 34px;font-family:{{ FONT }};font-size:15px;line-height:1;font-weight:700;color:#FFFFFF;text-decoration:none;border-radius:100px;">{{ label }}</a>
   </td>
+</tr></table>
+{%- endmacro -%}
+{%- macro badge(text) -%}
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center"><tr>
+  <td bgcolor="{{ RED }}" style="background-color:{{ RED }};border-radius:100px;padding:6px 14px;font-family:{{ FONT }};font-size:11px;line-height:1;font-weight:800;color:#FFFFFF;letter-spacing:0.14em;text-transform:uppercase;">{{ text }}</td>
 </tr></table>
 {%- endmacro -%}
 <!DOCTYPE html>
@@ -28,109 +35,108 @@
   a { color: {{ RED }}; }
   @media (max-width: 620px) {
     .wrap { width: 100% !important; }
-    .px { padding-left: 22px !important; padding-right: 22px !important; }
-    .h1 { font-size: 28px !important; }
-    .h2 { font-size: 21px !important; }
-    .btn a { display: block !important; }
+    .px { padding-left: 24px !important; padding-right: 24px !important; }
+    .h1 { font-size: 29px !important; }
+    .h2 { font-size: 23px !important; }
+    .col { width: 100% !important; max-width: 100% !important; }
   }
 </style>
 </head>
 <body style="margin:0;padding:0;background-color:#E1E3E7;">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">{{ c.preheader }}&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;</div>
 
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#E1E3E7"
-       style="background-color:#E1E3E7;background-image:linear-gradient(118deg,#EEF0F2 0%,#E1E3E7 30%,#F4F5F7 52%,#DADDE1 74%,#ECEDEF 100%);">
-<tr><td align="center" style="padding:24px 12px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#E1E3E7" style="background-color:#E1E3E7;">
+<tr><td align="center" style="padding:24px 0;">
 
-<table role="presentation" class="wrap" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;">
+<table role="presentation" class="wrap" width="600" cellpadding="0" cellspacing="0" border="0" bgcolor="#FFFFFF" style="width:600px;max-width:600px;background-color:#FFFFFF;">
 
-  {# Encabezado: logo arriba a la izquierda, ≥ 200 px #}
-  <tr><td class="px" align="left" style="padding:12px 36px 28px 36px;">
-    {%- if c.assets.logo_url %}
-    <img src="{{ c.assets.logo_url }}" width="220" alt="D-Industrimex · Soluciones industriales eficientes"
-         style="display:block;width:220px;max-width:220px;height:auto;border:0;">
-    {%- else %}
-    <div style="font-family:{{ FONT }};font-size:26px;line-height:1;font-weight:800;color:{{ RED }};letter-spacing:-0.02em;">D-industrimex<sup style="font-size:11px;">&reg;</sup></div>
-    <div style="font-family:{{ FONT }};font-size:11px;line-height:1.4;font-weight:600;font-style:italic;color:#6E6360;padding-top:4px;">Soluciones industriales eficientes</div>
+  {# Encabezado: logo arriba a la izquierda, 220 px #}
+  <tr><td class="px" align="left" bgcolor="#FFFFFF" style="padding:26px 40px;background-color:#FFFFFF;border-bottom:3px solid {{ RED }};">
+    <a href="{{ c.footer.site_url }}"><img src="{{ asset(c.assets.logo) }}" width="220" alt="D-Industrimex · Soluciones industriales eficientes"
+         style="display:block;width:220px;max-width:220px;height:auto;border:0;font-family:{{ FONT }};font-size:20px;font-weight:800;color:{{ RED }};"></a>
+  </td></tr>
+
+  {# Hero sobre acero: eyebrow, titular, foto de los dos equipos, saludo, botón #}
+  <tr><td class="px" align="center" style="padding:44px 40px 40px 40px;{{ STEEL }}">
+    <div style="font-family:{{ FONT }};font-size:12px;line-height:1.4;font-weight:700;letter-spacing:0.28em;text-transform:uppercase;color:#6E6360;">{{ c.hero.eyebrow }}</div>
+    <h1 class="h1" style="margin:14px 0 0 0;font-family:{{ FONT }};font-size:36px;line-height:1.08;font-weight:800;letter-spacing:-0.02em;color:#181212;">{{ c.hero.headline | accent }}</h1>
+    {%- if c.hero.image %}
+    <img src="{{ asset(c.hero.image) }}" width="500" alt="{{ c.hero.image_alt }}" style="display:block;width:500px;max-width:100%;height:auto;border:0;margin:30px auto 0 auto;">
     {%- endif %}
+    <p style="margin:28px 0 0 0;font-family:{{ FONT }};font-size:16px;line-height:1.55;font-weight:700;color:#181212;">{{ greeting }}</p>
+    <p style="margin:6px auto 0 auto;max-width:460px;font-family:{{ FONT }};font-size:16px;line-height:1.55;font-weight:500;color:#2A2320;">{{ c.hero.body }}</p>
+    {{ button(c.hero.cta_label, c.hero.cta_url) }}
   </td></tr>
 
-  {# Hero #}
-  <tr><td class="px" style="padding:0 36px 8px 36px;">
-    <div style="font-family:{{ FONT }};font-size:12px;line-height:1.4;font-weight:700;letter-spacing:0.26em;text-transform:uppercase;color:#6E6360;padding-bottom:14px;">{{ c.hero.eyebrow }}</div>
-    <h1 class="h1" style="margin:0;font-family:{{ FONT }};font-size:34px;line-height:1.08;font-weight:800;letter-spacing:-0.02em;color:#181212;">{{ c.hero.headline | accent }}</h1>
-    <p style="margin:18px 0 0 0;font-family:{{ FONT }};font-size:16px;line-height:1.5;font-weight:500;color:#2A2320;">{{ greeting }}</p>
-    <p style="margin:10px 0 0 0;font-family:{{ FONT }};font-size:16px;line-height:1.5;font-weight:500;color:#2A2320;">{{ c.hero.body }}</p>
-  </td></tr>
-
-  {# Bloques de producto: fila de lista con acento rojo de 6 px a la izquierda #}
+  {# Un bloque por producto, alternando blanco y acero #}
   {%- for b in c.blocks %}
-  <tr><td class="px" style="padding:24px 36px 0 36px;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#FFFFFF"
-           style="background-color:#FFFFFF;border:1px solid #E0DAD8;border-left:6px solid {{ RED }};border-radius:16px;">
-      {%- if b.image_url %}
-      <tr><td align="center" style="padding:24px 24px 0 24px;">
-        <img src="{{ b.image_url }}" width="300" alt="{{ b.image_alt }}" style="display:block;width:300px;max-width:100%;height:auto;border:0;">
-      </td></tr>
-      {%- endif %}
-      <tr><td style="padding:24px 26px 26px 26px;">
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-          <td bgcolor="{{ RED }}" style="background-color:{{ RED }};border-radius:6px;padding:5px 12px;font-family:{{ FONT }};font-size:13px;line-height:1;font-weight:800;color:#FFFFFF;letter-spacing:0.04em;">{{ b.brand }}</td>
-        </tr></table>
-        <h2 class="h2" style="margin:14px 0 0 0;font-family:{{ FONT }};font-size:23px;line-height:1.15;font-weight:800;letter-spacing:-0.01em;color:#181212;">{{ b.title | accent }}</h2>
-        <p style="margin:10px 0 0 0;font-family:{{ FONT }};font-size:15px;line-height:1.5;font-weight:500;color:#6E6360;">{{ b.body }}</p>
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:14px;">
-          {%- for check in b.checks %}
-          <tr>
-            <td width="26" valign="top" style="padding:5px 0;font-family:{{ FONT }};font-size:15px;line-height:1.45;font-weight:800;color:{{ RED }};">&#10003;</td>
-            <td valign="top" style="padding:5px 0;font-family:{{ FONT }};font-size:15px;line-height:1.45;font-weight:500;color:#2A2320;">{{ check }}</td>
-          </tr>
-          {%- endfor %}
-        </table>
-        {{ button(b.cta_label, b.cta_url) }}
-      </td></tr>
+  <tr><td class="px" align="center" bgcolor="{{ '#FFFFFF' if loop.index is odd else '#F4F5F7' }}" style="padding:48px 40px;{{ 'background-color:#FFFFFF;' if loop.index is odd else STEEL }}">
+    {%- if b.image %}
+    {%- set w = b.image_width or 340 %}
+    <img src="{{ asset(b.image) }}" width="{{ w }}" alt="{{ b.image_alt }}" style="display:block;width:{{ w }}px;max-width:100%;height:auto;border:0;margin:0 auto 28px auto;">
+    {%- endif %}
+    {{ badge(b.brand) }}
+    <h2 class="h2" style="margin:16px 0 0 0;font-family:{{ FONT }};font-size:27px;line-height:1.12;font-weight:800;letter-spacing:-0.015em;color:#181212;">{{ b.title | accent }}</h2>
+    <p style="margin:12px auto 0 auto;max-width:440px;font-family:{{ FONT }};font-size:15px;line-height:1.55;font-weight:500;color:#6E6360;">{{ b.body }}</p>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:20px auto 0 auto;max-width:440px;">
+      {%- for check in b.checks %}
+      <tr>
+        <td width="28" valign="top" style="padding:6px 0;font-family:{{ FONT }};font-size:15px;line-height:1.45;font-weight:800;color:{{ RED }};">&#10003;</td>
+        <td valign="top" align="left" style="padding:6px 0;font-family:{{ FONT }};font-size:15px;line-height:1.45;font-weight:500;color:#2A2320;text-align:left;">{{ check }}</td>
+      </tr>
+      {%- endfor %}
     </table>
+    {{ button(b.cta_label, b.cta_url) }}
   </td></tr>
   {%- endfor %}
 
-  {# Cierre: caja de información #}
-  <tr><td class="px" style="padding:32px 36px 0 36px;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#FFFFFF"
-           style="background-color:#FFFFFF;border:1px solid #EBCFCF;border-radius:18px;">
-      <tr><td align="center" style="padding:30px 28px;">
-        <h2 class="h2" style="margin:0;font-family:{{ FONT }};font-size:26px;line-height:1.1;font-weight:800;letter-spacing:-0.01em;color:#181212;">{{ c.closing.question | accent }}</h2>
-        {%- for para in c.closing.body %}
-        <p style="margin:14px 0 0 0;font-family:{{ FONT }};font-size:15px;line-height:1.5;font-weight:500;color:#2A2320;">{{ para }}</p>
-        {%- endfor %}
-        <p style="margin:14px 0 0 0;font-family:{{ FONT }};font-size:14px;line-height:1.5;font-weight:700;color:#181212;">{{ c.closing.contact }}</p>
-        {{ button(c.closing.cta_label, c.closing.cta_url, center=True) }}
-      </td></tr>
-    </table>
+  {# Cierre: ¿cuál te toca? con dos tarjetas lado a lado (se apilan en móvil) #}
+  <tr><td class="px" align="center" bgcolor="#FFFFFF" style="padding:48px 28px;background-color:#FFFFFF;border-top:1px solid #E0DAD8;">
+    <h2 class="h2" style="margin:0;font-family:{{ FONT }};font-size:30px;line-height:1.1;font-weight:800;letter-spacing:-0.015em;color:#181212;">{{ c.closing.question | accent }}</h2>
+    <p style="margin:10px 0 22px 0;font-family:{{ FONT }};font-size:15px;line-height:1.5;font-weight:500;color:#6E6360;">{{ c.closing.intro }}</p>
+    <!--[if mso]><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><![endif]-->
+    {%- for ch in c.closing.choices %}
+    <!--[if mso]><td width="50%" valign="top"><![endif]-->
+    <div class="col" style="display:inline-block;width:250px;max-width:250px;vertical-align:top;margin:0 6px 12px 6px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="{{ STEEL }}border:1px solid #E0DAD8;border-radius:16px;">
+        <tr><td align="center" style="padding:22px 18px;">
+          <img src="{{ asset(ch.image) }}" width="130" height="110" alt="" style="display:block;width:130px;height:110px;object-fit:contain;border:0;margin:0 auto;">
+          <div style="padding-top:14px;font-family:{{ FONT }};font-size:14px;line-height:1.4;font-weight:600;color:#2A2320;">{{ ch.label }}</div>
+          <div style="padding-top:4px;font-family:{{ FONT }};font-size:12px;line-height:1.4;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:#6E6360;">va</div>
+          <div style="padding-top:2px;font-family:{{ FONT }};font-size:30px;line-height:1.1;font-weight:800;color:{{ RED }};">{{ ch.pick }}</div>
+        </td></tr>
+      </table>
+    </div>
+    <!--[if mso]></td><![endif]-->
+    {%- endfor %}
+    <!--[if mso]></tr></table><![endif]-->
+    {%- for para in c.closing.body %}
+    <p style="margin:14px auto 0 auto;max-width:460px;font-family:{{ FONT }};font-size:15px;line-height:1.55;font-weight:500;color:#2A2320;">{{ para }}</p>
+    {%- endfor %}
+    {{ button(c.closing.cta_label, c.closing.cta_url) }}
+    <p style="margin:16px 0 0 0;font-family:{{ FONT }};font-size:14px;line-height:1.5;font-weight:700;color:#181212;">{{ c.closing.contact }}</p>
   </td></tr>
 
   {# Firma #}
-  <tr><td class="px" style="padding:30px 36px 0 36px;">
+  <tr><td class="px" align="center" style="padding:30px 40px;{{ STEEL }}">
     <p style="margin:0;font-family:{{ FONT }};font-size:16px;line-height:1.4;font-weight:800;color:#181212;">{{ c.signature.name }}</p>
     <p style="margin:2px 0 0 0;font-family:{{ FONT }};font-size:14px;line-height:1.4;font-weight:600;color:{{ RED }};">{{ c.signature.title }}</p>
-    <p style="margin:2px 0 0 0;font-family:{{ FONT }};font-size:13px;line-height:1.4;font-weight:500;color:#6E6360;">{{ c.signature.address }}</p>
-  </td></tr>
-
-  {# Barra de sitio: cierre de toda pieza #}
-  <tr><td class="px" align="center" style="padding:30px 36px 0 36px;">
-    <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-      <td bgcolor="#FFFFFF" style="background-color:#FFFFFF;border:3px solid {{ RED }};border-radius:100px;padding:9px 24px 9px 12px;">
-        <a href="{{ c.footer.site_url }}" style="text-decoration:none;font-family:{{ FONT }};font-size:17px;line-height:1;font-weight:600;color:{{ RED }};">
-          {%- if c.assets.site_icon_url %}<img src="{{ c.assets.site_icon_url }}" width="24" height="24" alt="" style="vertical-align:middle;border:0;margin-right:8px;">{% else %}<span style="display:inline-block;width:24px;height:24px;line-height:24px;border-radius:12px;background-color:{{ RED }};color:#FFFFFF;font-size:13px;text-align:center;vertical-align:middle;margin-right:8px;">&#9673;</span>{% endif -%}
-          <span style="vertical-align:middle;">{{ c.footer.site }}</span></a>
+    {# Barra de sitio #}
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:20px auto 0 auto;"><tr>
+      <td bgcolor="#FFFFFF" style="background-color:#FFFFFF;border:3px solid {{ RED }};border-radius:100px;padding:8px 22px 8px 10px;">
+        <a href="{{ c.footer.site_url }}" style="text-decoration:none;font-family:{{ FONT }};font-size:16px;line-height:24px;font-weight:600;color:{{ RED }};"><img src="{{ asset(c.assets.site_icon) }}" width="24" height="24" alt="" style="vertical-align:middle;border:0;margin-right:8px;"><span style="vertical-align:middle;">{{ c.footer.site }}</span></a>
       </td>
     </tr></table>
   </td></tr>
 
-  {# Pie legal y baja #}
-  <tr><td class="px" align="center" style="padding:26px 36px 8px 36px;font-family:{{ FONT }};font-size:11px;line-height:1.6;font-weight:500;color:#8A807D;">
-    {{ c.footer.reason }}<br>
-    D-Industrimex · {{ c.signature.address }}<br>
-    <a href="{{ unsubscribe_url }}" style="color:#8A807D;text-decoration:underline;">Ya no quiero recibir estos correos</a>
+  {# Pie oscuro: logo blanco, dirección y baja #}
+  <tr><td class="px" align="center" bgcolor="#181212" style="padding:34px 40px 30px 40px;background-color:#181212;">
+    <img src="{{ asset(c.assets.logo_footer) }}" width="130" alt="D-Industrimex" style="display:block;width:130px;height:auto;border:0;margin:0 auto 18px auto;font-family:{{ FONT }};font-size:16px;font-weight:800;color:#FFFFFF;">
+    <p style="margin:0;font-family:{{ FONT }};font-size:12px;line-height:1.7;font-weight:500;color:#B8AFAD;">
+      {{ c.signature.address }}<br>
+      {{ c.footer.reason }}<br>
+      <a href="{{ unsubscribe_url }}" style="color:#FFFFFF;text-decoration:underline;">Ya no quiero recibir estos correos</a>
+    </p>
   </td></tr>
 
 </table>
@@ -138,4 +144,3 @@
 </table>
 </body>
 </html>
-

@@ -3,6 +3,8 @@ from email import message_from_bytes
 from email.policy import default
 
 import openpyxl
+import pytest
+from pathlib import Path
 
 from mailing.build import build, load_campaign, render_html, split_name
 
@@ -42,19 +44,40 @@ def test_build_filters_and_writes_outputs(tmp_path):
     ])
     supp = tmp_path / "suppression.txt"
     supp.write_text("BAJA@cliente.com\n")
-    people, skipped = build(CAMPAIGN, contacts, tmp_path / "out", esp="brevo", excel=True, eml=True,
+    people, skipped = build(CAMPAIGN, contacts, tmp_path / "out", excel=True, eml=True,
                             suppression_path=supp)
     assert [p["email"] for p in people] == ["laura@aceros.mx", "cc@cliente.com"]
     assert skipped == {"invalid": 1, "internal": 1, "suppressed": 1, "no_signature": 0}
 
     out = tmp_path / "out"
-    assert "Hola Laura," in (out / "preview.html").read_text()
-    assert "{{ contact.SALUDO }}" in (out / "template-brevo.html").read_text()
+    preview = (out / "preview.html").read_text()
+    assert "Hola Laura," in preview and 'src="data:image/png;base64,' in preview
+    assert (out / "imagenes" / "logo-rojo.png").exists()
     rows = list(openpyxl.load_workbook(out / "mailing-qc-aro.xlsx").active.iter_rows(values_only=True))
     assert rows[0][0] == "Correo" and rows[2][2] == "Hola,"
     assert rows[1][6].startswith("<!DOCTYPE html>")
     eml = message_from_bytes((out / "eml" / "laura@aceros.mx.eml").read_bytes(), policy=default)
     assert eml["List-Unsubscribe"].startswith("<mailto:ventas@dindustrimex.com")
+    html_part = eml.get_body(("html",))
+    assert 'src="cid:logo-rojo.png"' in html_part.get_content()
+    cids = {p["Content-ID"] for p in eml.walk() if p.get_content_maintype() == "image"}
+    assert "<logo-rojo.png>" in cids and "<qc.png>" in cids
+
+
+def test_esp_template_needs_hosted_images(tmp_path):
+    contacts = tmp_path / "contacts.csv"
+    write_contacts(contacts, [{"email": "a@x.com", "name": "Ana", "source": "signature"}])
+    with pytest.raises(ValueError, match="base_url"):
+        build(CAMPAIGN, contacts, tmp_path / "out", esp="brevo")
+
+    hosted = Path(CAMPAIGN).parent / "_test-hosted.toml"
+    hosted.write_text(Path(CAMPAIGN).read_text().replace('base_url = ""', 'base_url = "https://cdn.example.com/qc-aro/"'))
+    try:
+        build(hosted, contacts, tmp_path / "out", esp="brevo")
+    finally:
+        hosted.unlink()
+    tpl = (tmp_path / "out" / "template-brevo.html").read_text()
+    assert "{{ contact.SALUDO }}" in tpl and 'src="https://cdn.example.com/qc-aro/logo-rojo.png"' in tpl
 
 
 def test_require_signature_skips_header_only(tmp_path):
