@@ -105,3 +105,16 @@ def test_yamm_template_uses_sheet_columns_and_no_own_unsubscribe(tmp_path):
     rows = list(csv.reader(open(tmp_path / "out" / "audience-yamm.csv", encoding="utf-8-sig")))
     assert rows == [["Email", "Nombre", "Apellido", "Saludo", "Empresa", "Puesto"],
                     ["a@x.com", "Ana", "López", "Hola Ana,", "", ""]]
+
+
+def test_per_image_urls_for_wix(tmp_path):
+    from mailing.build import asset_files, render_html
+    c = load_campaign(CAMPAIGN)
+    c["assets"]["urls"] = {f.name: f"https://static.wixstatic.com/media/{f.stem}.png" for f in asset_files(c)}
+    out = render_html(c, "Hola,", "", images="cid")
+    assert 'src="https://static.wixstatic.com/media/logo-rojo.png"' in out and "cid:" not in out
+    del c["assets"]["urls"]["qc.png"]
+    contacts = tmp_path / "contacts.csv"
+    write_contacts(contacts, [{"email": "a@x.com", "name": "Ana", "source": "signature"}])
+    with pytest.raises(ValueError, match="qc.png"):
+        build(CAMPAIGN, contacts, tmp_path / "out", esp="yamm")
