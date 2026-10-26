@@ -58,7 +58,7 @@ def test_build_filters_and_writes_outputs(tmp_path, local_campaign):
     people, skipped = build(local_campaign, contacts, tmp_path / "out", excel=True, eml=True,
                             suppression_path=supp)
     assert [p["email"] for p in people] == ["laura@aceros.mx", "cc@cliente.com"]
-    assert skipped == {"invalid": 1, "internal": 1, "suppressed": 1, "no_signature": 0}
+    assert skipped == {"invalid": 1, "internal": 1, "suppressed": 1, "bounced": 0, "no_signature": 0}
 
     out = tmp_path / "out"
     preview = (out / "preview.html").read_text()
@@ -138,3 +138,15 @@ def test_qc_aro_is_ready_for_yamm(tmp_path):
     tpl = (tmp_path / "out" / "template-yamm.html").read_text()
     srcs = re.findall(r'src="([^"]+)"', tpl)
     assert srcs and all(s.startswith("https://static.wixstatic.com/") for s in srcs)
+
+
+def test_bounced_contacts_get_no_mailing(tmp_path):
+    contacts = tmp_path / "contacts.csv"
+    with open(contacts, "w", newline="", encoding="utf-8-sig") as fh:
+        w = csv.DictWriter(fh, fieldnames=FIELDS + ["bounced"])
+        w.writeheader()
+        w.writerows([{"email": "a@x.com", "name": "Ana", "source": "signature", "bounced": ""},
+                     {"email": "b@x.com", "name": "Beto", "source": "signature", "bounced": "2025-10-02T10:00:00"}])
+    people, skipped = build(CAMPAIGN, contacts, tmp_path / "out")
+    assert [p["email"] for p in people] == ["a@x.com"]
+    assert skipped["bounced"] == 1

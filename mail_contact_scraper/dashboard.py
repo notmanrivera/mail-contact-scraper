@@ -130,8 +130,12 @@ class ScraperControl:
 def settings_payload(out_dir, env_path):
     from . import accounts, schedule, sheets
 
+    from .config import load_settings
+    from .contacts import read_ignore_file
+
     cfg = sheets.config(env_path)
     return {
+        "ignored": read_ignore_file(load_settings(env_path).ignore_file),
         "mailboxes": accounts.list_mailboxes(env_path),
         "schedule": schedule.status(),
         "sheets": {"configured": bool(cfg["url"] and cfg["token"]), "tab": cfg["tab"], "auto": cfg["auto"],
@@ -139,11 +143,22 @@ def settings_payload(out_dir, env_path):
     }
 
 
-def settings_action(path, body, out_dir, env_path):
+def settings_action(path, body, out_dir, env_path, control=None):
     """POST /settings/<action>. Returns (status code, payload)."""
     from . import accounts, schedule, sheets
 
     try:
+        if path == "/settings/ignore":
+            from . import cli
+            from .config import load_settings
+            from .contacts import update_ignore_file
+
+            settings = load_settings(env_path)
+            update_ignore_file(settings.ignore_file, add=body.get("add"), remove=body.get("remove"))
+            # A running scan re-reads the list on its next batch; otherwise apply it now.
+            if not (control and control.alive(_read_json(Path(out_dir) / "status.json"))):
+                cli.rebuild(out_dir, settings)
+            return 200, {"ok": True, **settings_payload(out_dir, env_path)}
         if path == "/settings/mailbox":
             email, password = (body.get("email") or "").strip(), body.get("password") or ""
             if not accounts.EMAIL_RE.match(email) or not password:
@@ -265,7 +280,7 @@ def make_handler(out_dir, control, env_path=".env", updater=None):
                 if self.path == "/update":
                     code, payload = update_action(updater, body, control, out_dir)
                 else:
-                    code, payload = settings_action(self.path, body, out_dir, env_path)
+                    code, payload = settings_action(self.path, body, out_dir, env_path, control)
                 self._json(payload, code)
             else:
                 self._send(b"not found", "text/plain", 404)

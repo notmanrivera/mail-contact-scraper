@@ -1,0 +1,100 @@
+# Remitentes que nunca son prospectos: apps, bancos, tiendas en línea, redes sociales, avisos.
+# A propósito NO están empresas grandes que también pueden ser clientes (Amazon, Walmart, DHL,
+# aerolíneas...): sus avisos automáticos se omiten por el remitente (no-reply@...) o por ser
+# correos masivos.
+# Un dominio cubre sus subdominios. "nombre.*" cubre nombre.com, nombre.com.mx, nombre.mx...
+# Para agregar los tuyos usa el botón "Ignorar" del dashboard (se guardan en ignorados.txt).
+
+# Apps de transporte y comida
+uber.*
+ubereats.*
+didiglobal.com
+didi.*
+rappi.*
+cabify.*
+# Reservaciones de viaje
+booking.*
+airbnb.*
+expedia.*
+hotels.*
+despegar.*
+# Tiendas en línea y pagos
+amazonses.com
+mercadolibre.*
+mercadopago.*
+paypal.*
+stripe.*
+shein.*
+temu.*
+aliexpress.*
+ebay.*
+clip.mx
+openpay.*
+conekta.*
+# Bancos y finanzas
+bbva.*
+banorte.*
+santander.*
+hsbc.*
+citibanamex.*
+banamex.*
+scotiabank.*
+inbursa.*
+banregio.*
+afirme.*
+bancoazteca.*
+banbajio.*
+americanexpress.*
+aexp.com
+nu.com.mx
+nubank.*
+klar.mx
+gbm.*
+# Gobierno y servicios
+sat.gob.mx
+telmex.*
+telcel.*
+izzi.*
+totalplay.*
+megacable.*
+# Software, nube y redes sociales
+google.com
+accounts.google.com
+youtube.*
+facebook.*
+facebookmail.com
+instagram.*
+meta.com
+whatsapp.*
+linkedin.*
+twitter.*
+x.com
+tiktok.*
+microsoft.*
+microsoftonline.com
+office.com
+apple.*
+zoom.*
+zoom.us
+slack.*
+dropbox.*
+docusign.*
+adobe.*
+canva.*
+notion.*
+github.*
+atlassian.*
+hubspot.*
+hubspotemail.net
+mailchimp.*
+mailchimpapp.net
+sendgrid.*
+sendgrid.net
+mailgun.*
+godaddy.*
+hostinger.*
+wix.*
+shopify.*
+netflix.*
+spotify.*
+openai.*

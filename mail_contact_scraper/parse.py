@@ -133,6 +133,43 @@ def body_text(msg):
     return "", [], images
 
 
+def bulk_reason(msg):
+    """Why this looks like a mass mailing (newsletter, promo, notification), or ""."""
+    get = lambda name: (msg.get(name) or "").strip().lower()
+    if msg.get("List-Unsubscribe-Post"):  # one-click unsubscribe: required for bulk senders
+        return "list-unsubscribe"
+    if get("Precedence") in ("bulk", "junk"):
+        return "precedence"
+    if get("Auto-Submitted") not in ("", "no"):
+        return "auto-submitted"
+    if msg.get("Feedback-ID") or msg.get("X-Mailgun-Sid") or msg.get("X-SG-EID") or msg.get("X-MC-User"):
+        return "esp"  # Gmail feedback loop, Mailgun, SendGrid, Mailchimp
+    return ""
+
+
+def bounced_addresses(msg):
+    """Recipients a delivery-failure report (DSN) says could not be reached."""
+    failed = []
+    for part in msg.walk():
+        if part.get_content_type() != "message/delivery-status":
+            continue
+        for block in part.get_payload() or []:
+            if not hasattr(block, "get"):
+                continue
+            action = (block.get("Action") or "").strip().lower()
+            status = (block.get("Status") or "").strip()
+            recipient = block.get("Final-Recipient") or block.get("Original-Recipient") or ""
+            addr = recipient.split(";", 1)[-1].strip().strip("<>").lower()
+            if "@" in addr and (action == "failed" or status.startswith("5")) and addr not in failed:
+                failed.append(addr)
+    for value in msg.get_all("X-Failed-Recipients") or []:
+        for _, addr in getaddresses([value]):
+            addr = addr.lower()
+            if "@" in addr and addr not in failed:
+                failed.append(addr)
+    return failed
+
+
 def _raw_headers(msg, name):
     """Header values as original strings (compat32's .get() mangles raw 8-bit headers)."""
     return [v for k, v in msg.raw_items() if k.lower() == name.lower()]
@@ -166,4 +203,6 @@ def parse_message(raw_bytes):
         "body": body,
         "image_srcs": image_srcs,
         "images": images,
+        "bulk": bulk_reason(msg),
+        "bounced": bounced_addresses(msg),
     }
