@@ -170,7 +170,24 @@ def settings_action(path, body, out_dir, env_path):
     return 200, {"ok": True, **settings_payload(out_dir, env_path)}
 
 
-def make_handler(out_dir, control, env_path=".env"):
+def update_action(updater, body, control, out_dir):
+    """POST /update/<...> from the packaged app. Returns (status code, payload)."""
+    from .updater import UpdateError
+
+    try:
+        if "token" in body:
+            updater.save_token(str(body.get("token") or ""))
+        if body.get("apply"):
+            updater.apply_now(busy=control.alive(_read_json(Path(out_dir) / "status.json")))
+        else:
+            updater.check()
+            threading.Thread(target=updater.download_quietly, daemon=True).start()
+    except (UpdateError, OSError) as exc:
+        return 400, {"ok": False, "error": str(exc), "update": updater.status()}
+    return 200, {"ok": True, "update": updater.status()}
+
+
+def make_handler(out_dir, control, env_path=".env", updater=None):
     out_dir = Path(out_dir)
     package = resources.files(__package__)
     page = package.joinpath("dashboard.html").read_bytes()
@@ -206,7 +223,8 @@ def make_handler(out_dir, control, env_path=".env"):
                 since = parse_qs(url.query).get("since", [""])[0]
                 version = str(csv_path.stat().st_mtime_ns) if csv_path.exists() else "0"
                 status = _read_json(out_dir / "status.json")
-                payload = {"status": status, "version": version, "control": control.report(status)}
+                payload = {"status": status, "version": version, "control": control.report(status),
+                           "update": updater.status() if updater else None}
                 if since != version:
                     payload["contacts"] = _read_contacts(csv_path)
                 self._json(payload)
@@ -235,7 +253,7 @@ def make_handler(out_dir, control, env_path=".env"):
             elif self.path == "/stop":
                 stopped = control.stop()
                 self._json({"ok": stopped}, 200 if stopped else 409)
-            elif self.path.startswith("/settings/"):
+            elif self.path.startswith("/settings/") or (self.path == "/update" and updater):
                 length = int(self.headers.get("Content-Length") or 0)
                 if length > 65536:
                     return self._send(b"too large", "text/plain", 413)
@@ -243,7 +261,11 @@ def make_handler(out_dir, control, env_path=".env"):
                     body = json.loads(self.rfile.read(length) or b"{}")
                 except ValueError:
                     body = {}
-                code, payload = settings_action(self.path, body if isinstance(body, dict) else {}, out_dir, env_path)
+                body = body if isinstance(body, dict) else {}
+                if self.path == "/update":
+                    code, payload = update_action(updater, body, control, out_dir)
+                else:
+                    code, payload = settings_action(self.path, body, out_dir, env_path)
                 self._json(payload, code)
             else:
                 self._send(b"not found", "text/plain", 404)
@@ -251,11 +273,11 @@ def make_handler(out_dir, control, env_path=".env"):
     return Handler
 
 
-def serve(out_dir, port=DEFAULT_PORT, open_browser=True, control=None, env_path=".env"):
+def serve(out_dir, port=DEFAULT_PORT, open_browser=True, control=None, env_path=".env", updater=None):
     control = control or ScraperControl(out_dir)
     for candidate in range(port, port + 20):
         try:
-            server = ThreadingHTTPServer(("127.0.0.1", candidate), make_handler(out_dir, control, env_path))
+            server = ThreadingHTTPServer(("127.0.0.1", candidate), make_handler(out_dir, control, env_path, updater))
             break
         except OSError:
             continue

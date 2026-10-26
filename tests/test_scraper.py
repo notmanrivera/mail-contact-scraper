@@ -124,7 +124,8 @@ def test_list_folders():
 def _signature_png():
     from PIL import Image, ImageDraw, ImageFont
 
-    font = ImageFont.truetype("DejaVuSans.ttf", 15) if _has_dejavu() else ImageFont.load_default()
+    # macOS has no DejaVu; Pillow's scalable default font reads as well (the bitmap one is too small).
+    font = ImageFont.truetype("DejaVuSans.ttf", 15) if _has_dejavu() else ImageFont.load_default(size=15)
     img = Image.new("RGB", (420, 110), "white")
     draw = ImageDraw.Draw(img)
     draw.rectangle([0, 0, 70, 110], fill=(20, 60, 140))  # logo block
