@@ -12,6 +12,7 @@ AUTOMATED_RE = re.compile(
 FIELDS = [
     "email", "name", "title", "company", "mobile_phones", "office_phones", "fax",
     "other_emails", "websites", "source", "messages", "first_seen", "last_seen", "sample_signature",
+    "mailboxes",
 ]
 
 
@@ -39,10 +40,13 @@ class ContactBook:
             "names": Counter(), "titles": Counter(), "companies": Counter(),
             "phones": {}, "other_emails": [], "websites": [], "sources": set(),
             "messages": 0, "first_seen": None, "last_seen": None, "signature": "",
+            "mailboxes": [],
         })
 
-    def _seen(self, row, date):
+    def _seen(self, row, date, mailbox=None):
         row["messages"] += 1
+        if mailbox and mailbox not in row["mailboxes"]:
+            row["mailboxes"].append(mailbox)
         if date:
             row["first_seen"] = min(filter(None, [row["first_seen"], date]))
             row["last_seen"] = max(filter(None, [row["last_seen"], date]))
@@ -53,7 +57,7 @@ class ContactBook:
             return
         info = record["contact"]
         row = self._row(addr)
-        self._seen(row, record.get("date"))
+        self._seen(row, record.get("date"), record.get("mailbox"))
         if record.get("signature_from_image"):
             row["sources"].add("image")
         row["sources"].add("signature" if record["signature"] else "header")
@@ -74,12 +78,12 @@ class ContactBook:
         if record["signature"] and len(record["signature"]) > len(row["signature"]):
             row["signature"] = record["signature"]
 
-    def add_header_contact(self, name, addr, date=None):
+    def add_header_contact(self, name, addr, date=None, mailbox=None):
         addr = (addr or "").lower()
         if "@" not in addr or self._skip(addr):
             return
         row = self._row(addr)
-        self._seen(row, date)
+        self._seen(row, date, mailbox)
         row["sources"].add("header")
         if name and "@" not in name:
             row["names"][name.strip().strip('"')] += 1
@@ -104,6 +108,7 @@ class ContactBook:
                 "first_seen": row["first_seen"] or "",
                 "last_seen": row["last_seen"] or "",
                 "sample_signature": row["signature"].replace("\n", " | "),
+                "mailboxes": "; ".join(row["mailboxes"]),
             })
         return out
 

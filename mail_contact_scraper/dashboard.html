@@ -149,6 +149,20 @@
   .notice pre { margin: 6px 0 0; white-space: pre-wrap; font: 500 12px/1.45 ui-monospace, Menlo, monospace; color: var(--text); }
 
   .companies-panel { display: flex; flex-direction: column; min-height: 0; }
+  .boxes { display: flex; flex-wrap: wrap; gap: 8px; padding: 18px 22px 0; }
+  .box {
+    display: inline-flex; align-items: center; gap: 8px; max-width: 100%; padding: 7px 12px; border-radius: 100px;
+    background: rgba(255,255,255,.85); border: 1px solid var(--line); font-size: 12px; font-weight: 600; color: var(--text);
+  }
+  .box .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex: none; }
+  .box .e { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .box .s { color: var(--muted); font-weight: 500; white-space: nowrap; }
+  .box.running { border-color: var(--red); }
+  .box.running .dot { background: var(--red); animation: pulse 1.3s ease-in-out infinite; }
+  .box.done .dot { background: var(--good); }
+  .box.error { color: var(--red); border-color: rgba(168,24,24,.35); }
+  .box.error .dot { background: var(--red); }
+  .box.error .s { color: var(--red); }
   .count-pill { font-weight: 700; font-size: 11px; letter-spacing: .14em; color: var(--muted); background: rgba(110,99,96,.1); border-radius: 100px; padding: 5px 10px; }
   .co-list { padding: 14px 14px 16px; display: grid; gap: 6px; }
   .co {
@@ -280,9 +294,9 @@
            onerror="this.replaceWith(document.getElementById('wordmark').content.cloneNode(true))">
     </a>
     <span class="spacer"></span>
-    <div class="chip-box mailbox" title="Buzón que se está leyendo">
+    <div class="chip-box mailbox" id="mailbox-chip" title="Buzón que se está leyendo">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
-      <span class="k">Buzón:</span><span class="v" id="mailbox">—</span>
+      <span class="k" id="mailbox-k">Buzón:</span><span class="v" id="mailbox">—</span>
     </div>
     <div class="chip-box state" id="state"><span class="dot"></span><span id="state-text">Conectando</span></div>
     <div class="actions" style="display:contents">
@@ -328,6 +342,7 @@
         </div>
         <div class="ticks"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
       </div>
+      <div class="boxes" id="boxes" hidden></div>
       <div class="stats">
         <div class="stat"><div class="k">Correos leídos</div><div class="v num" id="s-read">0</div></div>
         <div class="stat"><div class="k">En esta corrida</div><div class="v num" id="s-new">0</div></div>
@@ -363,6 +378,7 @@
         <option value="image">Firma en imagen</option>
         <option value="header">Solo correo</option>
       </select>
+      <select class="filter" id="box-filter" aria-label="Buzón" hidden></select>
     </div>
     <div class="table-wrap">
       <table>
@@ -391,6 +407,7 @@
   let contacts = [], version = "", known = new Set(), fresh = new Set();
   let view = "contacts", filter = "all", query = "", sortKey = "last_seen", sortDir = -1;
   let openEmail = null, activeCompany = null, limit = PAGE;
+  let mailboxes = [], boxFilter = "all";
   let lastUpdate = null, rateSamples = [], pendingAction = null, actionError = "";
 
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -425,7 +442,21 @@
   function renderStatus(st, control) {
     const alive = !!control.alive;
     const running = alive && st.running;
-    $("mailbox").textContent = st.mailbox || "—";
+    const boxes = st.mailboxes || [];
+    const multi = boxes.length > 1;
+    const current = boxes.findIndex((b) => b.state === "running");
+    $("mailbox-k").textContent = multi ? (running && current >= 0 ? `Buzón ${current + 1} de ${boxes.length}:` : "Buzones:") : "Buzón:";
+    $("mailbox").textContent = multi && !(running && current >= 0) ? `${boxes.length} conectados` : st.mailbox || "—";
+    $("mailbox-chip").title = multi ? boxes.map((b) => b.email).join("\n") : "Buzón que se está leyendo";
+    const STATE = { pending: "en espera", running: "leyendo", done: "listo", error: "error", stopped: "detenido" };
+    $("boxes").hidden = !multi;
+    $("boxes").innerHTML = boxes.map((b) => {
+      const cls = b.state === "running" && !running ? "stopped" : b.state;
+      const extra = b.new ? ` · ${fmt.format(b.new)} nuevos` : "";
+      return `<span class="box ${esc(cls)}" title="${esc(b.error || b.email)}"><span class="dot"></span>` +
+        `<span class="e">${esc(b.email)}</span><span class="s">${esc(STATE[cls] || cls)}${extra}</span></span>`;
+    }).join("");
+    const failedBoxes = boxes.filter((b) => b.state === "error");
 
     const state = $("state"), text = $("state-text");
     state.className = "chip-box state";
@@ -443,8 +474,17 @@
         ? `Google rechazó la contraseña. Usa una contraseña de aplicación en IMAP_PASSWORD.<pre>${esc(st.error)}</pre>`
         : esc(st.error);
     } else if (st.error === "Detenido") { text.textContent = "Detenido"; }
-    else if (st.updated_at) { text.textContent = "Terminado"; state.classList.add("done"); }
+    else if (st.updated_at) {
+      const failed = (st.mailboxes || []).filter((b) => b.state === "error").length;
+      text.textContent = failed ? `Terminado, ${failed} buzón${failed === 1 ? "" : "es"} con error` : "Terminado";
+      state.classList.add(failed ? "error" : "done");
+    }
     else { text.textContent = "Sin escanear"; }
+    if (!notice && failedBoxes.length && !running) {
+      notice = failedBoxes.map((b) => `No se pudo leer ${esc(b.email)}` +
+        (/AUTHENTICATIONFAILED|Invalid credentials|LOGIN/i.test(b.error || "") ? ": revisa su contraseña de aplicación en .env." : ".") +
+        `<pre>${esc(b.error || "")}</pre>`).join("");
+    }
     if (actionError) notice = esc(actionError) + (notice ? "<br>" + notice : "");
     if ((pendingAction === "start" && alive) || (pendingAction === "stop" && !alive)) pendingAction = null;
 
@@ -460,9 +500,9 @@
     const local = st.folder === "archivos locales";
     let kicker = "Escaneo", label = "Listo para escanear", numbers = "Pulsa “Iniciar escaneo” para leer el buzón.";
     let width = 0, pctText = "—", rateText = "—", etaText = "—", eta = "";
-    if (running && !st.folder) { label = "Conectando con el buzón"; numbers = "Iniciando sesión en el servidor de correo…"; }
+    if (running && !st.folder) { label = "Conectando con el buzón"; numbers = `Iniciando sesión${st.mailbox ? " en " + st.mailbox : ""}…`; }
     else if (st.folder) {
-      kicker = local ? "Archivos locales" : `Carpeta ${st.folder}`;
+      kicker = local ? "Archivos locales" : `${multi ? st.mailbox + " · " : ""}Carpeta ${st.folder}`;
       if (pending) {
         width = pct(done, pending);
         numbers = `${fmt.format(done)} de ${fmt.format(pending)} correos nuevos`;
@@ -575,7 +615,23 @@
       `<th data-key="${k}" class="${cls || ""}"${k === sortKey ? ` aria-sort="${sortDir > 0 ? "ascending" : "descending"}"` : ""}>${label}</th>`).join("") + "</tr>";
   }
 
+  function renderBoxFilter(st) {
+    const seen = new Set((st.mailboxes || []).map((b) => b.email));
+    for (const c of contacts) for (const m of (c.mailboxes || "").split("; ")) if (m) seen.add(m);
+    const list = [...seen].sort();
+    if (list.join() === mailboxes.join()) return false;
+    mailboxes = list;
+    if (boxFilter !== "all" && !list.includes(boxFilter)) boxFilter = "all";
+    const sel = $("box-filter");
+    sel.hidden = list.length < 2;
+    sel.innerHTML = '<option value="all">Todos los buzones</option>' +
+      list.map((m) => `<option value="${esc(m)}">${esc(m)}</option>`).join("");
+    sel.value = boxFilter;
+    return true;
+  }
+
   function matches(c) {
+    if (boxFilter !== "all" && !(c.mailboxes || "").split("; ").includes(boxFilter)) return false;
     if (activeCompany && c.company !== activeCompany) return false;
     if (filter === "phone" && !(c.mobile_phones || c.office_phones)) return false;
     if (filter === "signature" && !c.source.includes("signature")) return false;
@@ -641,6 +697,7 @@
         c.other_emails && `Otros correos: ${c.other_emails}`,
         c.websites && `Web: ${c.websites}`,
         c.first_seen && `Primer correo: ${shortDate(c.first_seen)}`,
+        mailboxes.length > 1 && c.mailboxes && `Buzones: ${c.mailboxes.split("; ").join(", ")}`,
         `Correos: ${c.messages}`,
       ].filter(Boolean).join("\n");
       const sig = (c.sample_signature || "").split(" | ").join("\n");
@@ -662,6 +719,7 @@
     sortKey = v === "companies" ? "contacts" : "last_seen"; sortDir = -1;
     document.querySelectorAll(".seg button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.view === v));
     $("filter").disabled = v === "companies";
+    $("box-filter").disabled = v === "companies";
     renderTable();
   }
 
@@ -673,13 +731,15 @@
   }
 
   /* ---------- Datos ---------- */
-  let timer = null;
+  let timer = null, lastStatus = {};
   async function poll() {
     clearTimeout(timer);
     try {
       const res = await fetch(`/data?since=${encodeURIComponent(version)}`, { cache: "no-store" });
       const data = await res.json();
       renderStatus(data.status || {}, data.control || {});
+      lastStatus = data.status || {};
+      if (!data.contacts && renderBoxFilter(lastStatus)) renderTable();
       if (data.contacts) {
         const first = !version;
         version = data.version;
@@ -687,6 +747,7 @@
         for (const c of data.contacts) if (!first && !known.has(c.email)) fresh.add(c.email);
         known = new Set(data.contacts.map((c) => c.email));
         contacts = data.contacts;
+        renderBoxFilter(lastStatus);
         renderAll();
       }
     } catch (e) {
@@ -715,6 +776,7 @@
   $("stop").addEventListener("click", () => action("stop"));
   $("search").addEventListener("input", (e) => { query = e.target.value; limit = PAGE; renderTable(); });
   $("filter").addEventListener("change", (e) => { filter = e.target.value; limit = PAGE; renderTable(); });
+  $("box-filter").addEventListener("change", (e) => { boxFilter = e.target.value; limit = PAGE; renderTable(); });
   document.querySelectorAll(".seg button").forEach((b) => b.addEventListener("click", () => setView(b.dataset.view)));
   $("thead").addEventListener("click", (e) => {
     const th = e.target.closest("th[data-key]");

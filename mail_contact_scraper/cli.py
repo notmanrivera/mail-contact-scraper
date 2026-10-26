@@ -53,8 +53,9 @@ def analyze(raw_bytes, region="MX", ocr=None):
     }
 
 
-def _load_done(jsonl_path):
-    done, records = set(), []
+def _load_done(jsonl_path, primary=""):
+    """Previous records plus, per mailbox, the (folder, uidvalidity, uid) already read."""
+    done, records = {}, []
     if jsonl_path.exists():
         with open(jsonl_path, encoding="utf-8") as fh:
             for line in fh:
@@ -62,9 +63,12 @@ def _load_done(jsonl_path):
                     rec = json.loads(line)
                 except json.JSONDecodeError:
                     continue
+                if rec.get("uid") and not rec.get("mailbox") and primary:
+                    rec["mailbox"] = primary  # written before multi-mailbox support
                 records.append(rec)
                 if rec.get("uid"):
-                    done.add((rec["folder"], rec["uidvalidity"], rec["uid"]))
+                    key = (rec.get("mailbox") or "").lower()
+                    done.setdefault(key, set()).add((rec["folder"], rec["uidvalidity"], rec["uid"]))
     return done, records
 
 
@@ -83,7 +87,7 @@ def iter_local(paths):
 def write_outputs(records, settings, out_dir, status, running=True):
     """Rebuild contacts.csv and status.json; called every batch so the dashboard stays live."""
     book = ContactBook(
-        exclude=[settings.email] if settings.exclude_self else [],
+        exclude=[b.email for b in settings.mailboxes] if settings.exclude_self else [],
         skip_automated=settings.skip_automated,
         exclude_domains=settings.exclude_domains,
     )
@@ -91,7 +95,7 @@ def write_outputs(records, settings, out_dir, status, running=True):
         book.add_sender(rec)
         if settings.include_header_contacts:
             for name, addr in rec.get("recipients", []):
-                book.add_header_contact(name, addr, rec.get("date"))
+                book.add_header_contact(name, addr, rec.get("date"), rec.get("mailbox"))
     count = book.write_csv(out_dir / "contacts.csv.tmp")
     os.replace(out_dir / "contacts.csv.tmp", out_dir / "contacts.csv")
     status.update(running=running, contacts=count, messages_total=len(records),
@@ -110,6 +114,8 @@ def build_parser():
     p.add_argument("--folders", help="Comma separated IMAP folders, or ALL (default: IMAP_FOLDERS or INBOX)")
     p.add_argument("--list-folders", action="store_true", help="Print the mailbox folders and exit")
     p.add_argument("--detect", action="store_true", help="Print the IMAP host guessed from MX records and exit")
+    p.add_argument("--mailbox", help="Only these mailboxes (comma separated emails). With --local: "
+                   "the mailbox the files came from")
     p.add_argument("--local", nargs="+", metavar="PATH", help="Read .eml files / folders / .mbox instead of IMAP")
     p.add_argument("--output", help="Output directory (default: OUTPUT_DIR or ./output)")
     p.add_argument("--fresh", action="store_true", help="Ignore previous progress and start over")
@@ -142,17 +148,24 @@ def main(argv=None):
     jsonl_path = out_dir / "messages.jsonl"
     if args.fresh and jsonl_path.exists():
         jsonl_path.unlink()
-    done, records = _load_done(jsonl_path)
+    done, records = _load_done(jsonl_path, settings.mailboxes[0].email if settings.mailboxes else "")
+    wanted = [m.strip().lower() for m in (args.mailbox or "").split(",") if m.strip()]
 
+    boxes = []
     if not args.local:
-        if not settings.email:
+        boxes = [b for b in settings.mailboxes if not wanted or b.email.lower() in wanted]
+        if not settings.mailboxes:
             sys.exit("Set IMAP_USER (and IMAP_PASSWORD or IMAP_OAUTH_TOKEN) in .env")
-        if not settings.imap_host:
-            from .provider import guess_imap_host
-            settings.imap_host, reason = guess_imap_host(settings.email)
-            log.info("IMAP host: %s (%s)", settings.imap_host, reason)
+        if not boxes:
+            sys.exit("No configured mailbox matches --mailbox. Configured: "
+                     + ", ".join(b.email for b in settings.mailboxes))
+        for box in boxes:
+            if not box.imap_host:
+                from .provider import guess_imap_host
+                box.imap_host, reason = guess_imap_host(box.email)
+                log.info("%s IMAP host: %s (%s)", box.email, box.imap_host, reason)
         if args.detect:
-            print(settings.imap_host)
+            print("\n".join(b.imap_host if len(boxes) == 1 else f"{b.email}: {b.imap_host}" for b in boxes))
             return 0
 
     ocr = None
@@ -160,7 +173,10 @@ def main(argv=None):
         from .ocr import SignatureOCR
         ocr = SignatureOCR(settings.ocr_lang, settings.ocr_remote_images)
 
-    status = {"started_at": datetime.now().isoformat(timespec="seconds"), "mailbox": settings.email,
+    local_box = wanted[0] if args.local and len(wanted) == 1 else ""
+    status = {"started_at": datetime.now().isoformat(timespec="seconds"),
+              "mailbox": boxes[0].email if boxes else local_box,
+              "mailboxes": [{"email": b.email, "state": "pending", "new": 0} for b in boxes],
               "pid": os.getpid(), "folder": "", "folder_total": 0, "folder_pending": 0, "new_messages": 0}
     write_outputs(records, settings, out_dir, status)
 
@@ -170,7 +186,7 @@ def main(argv=None):
     try:
         new = 0
         with open(jsonl_path, "a", encoding="utf-8") as sink:
-            def handle(raw, meta):
+            def handle(raw, meta, entry=None):
                 nonlocal new
                 try:
                     rec = analyze(raw, settings.default_region, ocr)
@@ -183,6 +199,8 @@ def main(argv=None):
                 new += 1
                 status["new_messages"] = new
                 status["folder_done"] = status.get("folder_done", 0) + 1
+                if entry is not None:
+                    entry["new"] += 1
                 if new % settings.batch_size == 0:
                     sink.flush()
                     write_outputs(records, settings, out_dir, status)
@@ -190,40 +208,43 @@ def main(argv=None):
             if args.local:
                 seen = {r.get("source") for r in records}
                 status.update(folder="archivos locales", folder_pending=0, folder_done=0)
+                meta = {"mailbox": local_box} if local_box else {}
                 for source, raw in iter_local(args.local):
                     if source in seen:
                         continue
-                    handle(raw, {"source": source})
+                    handle(raw, {"source": source, **meta})
                     if args.limit and new >= args.limit:
                         break
             else:
                 from . import imap_source
-                conn = imap_source.connect(settings)
-                try:
-                    if args.list_folders:
-                        print("\n".join(imap_source.list_folders(conn)))
-                        write_outputs(records, settings, out_dir, status, running=False)
-                        return 0
-                    folders = (args.folders.split(",") if args.folders else settings.folders)
-                    if [f.upper() for f in folders] == ["ALL"]:
-                        folders = imap_source.list_folders(conn)
-                    for folder in folders:
-                        for fold, uidv, uid, raw in imap_source.iter_messages(
-                            conn, folder.strip(), settings.batch_size, settings.batch_delay, done, on_folder
-                        ):
-                            handle(raw, {"folder": fold, "uidvalidity": uidv, "uid": uid})
-                            if args.limit and new >= args.limit:
-                                break
-                        else:
-                            continue
+                for box, entry in zip(boxes, status["mailboxes"]):
+                    if args.limit and new >= args.limit:
                         break
-                finally:
+                    entry["state"] = "running"
+                    previous = {k: status.get(k) for k in ("mailbox", "folder", "folder_total", "folder_pending", "folder_done")}
+                    status.update(mailbox=box.email, folder="", folder_total=0, folder_pending=0, folder_done=0)
+                    write_outputs(records, settings, out_dir, status)
                     try:
-                        conn.logout()
-                    except Exception:
-                        pass
+                        scan_mailbox(imap_source, box, args, settings, done.get(box.email.lower(), set()),
+                                     on_folder, lambda raw, meta: handle(raw, {"mailbox": box.email, **meta}, entry),
+                                     lambda: bool(args.limit and new >= args.limit))
+                    except Exception as exc:
+                        # One bad password should not stop the other mailboxes.
+                        log.error("%s: %s", box.email, exc)
+                        entry.update(state="error", error=str(exc) or exc.__class__.__name__)
+                        if not status["folder"] and previous["folder"]:
+                            status.update(previous)  # keep showing the last mailbox that was read
+                        continue
+                    entry["state"] = "done"
+                failed = [e for e in status["mailboxes"] if e["state"] == "error"]
+                if failed and len(failed) == len(boxes):
+                    raise RuntimeError(failed[0]["error"] if len(failed) == 1 else
+                                       "; ".join(f"{e['email']}: {e['error']}" for e in failed))
 
     except BaseException as exc:
+        for entry in status["mailboxes"]:
+            if entry["state"] == "running":
+                entry["state"] = "stopped" if isinstance(exc, KeyboardInterrupt) else "error"
         status["error"] = "Detenido" if isinstance(exc, KeyboardInterrupt) else (str(exc) or exc.__class__.__name__)
         write_outputs(records, settings, out_dir, status, running=False)
         raise
@@ -231,6 +252,33 @@ def main(argv=None):
     log.info("Processed %d new messages (%d total). Wrote %d contacts to %s",
              new, len(records), count, out_dir / "contacts.csv")
     return 0
+
+
+def scan_mailbox(imap_source, box, args, settings, done, on_folder, handle, reached_limit):
+    conn = imap_source.connect(box)
+    try:
+        if args.list_folders:
+            names = imap_source.list_folders(conn)
+            if len(settings.mailboxes) > 1:
+                print(f"{box.email}:")
+                names = ["  " + n for n in names]
+            print("\n".join(names))
+            return
+        folders = args.folders.split(",") if args.folders else box.folders
+        if [f.upper() for f in folders] == ["ALL"]:
+            folders = imap_source.list_folders(conn)
+        for folder in folders:
+            for fold, uidv, uid, raw in imap_source.iter_messages(
+                conn, folder.strip(), settings.batch_size, settings.batch_delay, done, on_folder
+            ):
+                handle(raw, {"folder": fold, "uidvalidity": uidv, "uid": uid})
+                if reached_limit():
+                    return
+    finally:
+        try:
+            conn.logout()
+        except Exception:
+            pass
 
 
 def _passthrough(argv):
