@@ -67,6 +67,7 @@ echo "== Pruebas"
 EXE="$BUNDLE/Contents/MacOS/$APP"
 SMOKE="$(mktemp -d)"
 "$EXE" -m mail_contact_scraper --help >/dev/null
+"$EXE" -m mail_contact_scraper.vision  # Claude SDK for hard image signatures
 # OCR with the bundled Tesseract only.
 python - "$SMOKE/firma.png" <<'EOF'
 import sys

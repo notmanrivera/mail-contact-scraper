@@ -3,6 +3,8 @@ dnspython>=2.4
 # OCR de firmas en imagen (también requiere el programa Tesseract, ver README)
 pytesseract>=0.3.10
 Pillow>=10.0
+# Opcional: Claude para firmas en imagen difíciles (OCR_ENGINE=auto)
+anthropic>=2.3
 # Mailings (python -m mailing)
 Jinja2>=3.1
 openpyxl>=3.1

@@ -28,6 +28,14 @@ FREE_MAIL = {
     "live.com.mx", "icloud.com", "aol.com", "prodigy.net.mx", "msn.com", "protonmail.com",
     "proton.me", "hotmail.es", "outlook.es",
 }
+SIGNOFF_RE = re.compile(
+    r"^(atte|att|atentamente|saludos(\s+cordiales)?|un\s+saludo|cordialmente|gracias|quedo\s+a\s+sus\s+[oó]rdenes|"
+    r"best\s+regards|kind\s+regards|regards|thanks|sincerely)\b[.,:!\s]*",
+    re.I,
+)
+LABELED_COMPANY_RE = re.compile(r"^(empresa|compa[nñ][ií]a|company)\s*:\s*(.+)$", re.I)
+LEGAL_FORM_RE = re.compile(r"\b(s\.?\s?a|de|c\.?\s?v|s\.?\s?de\s?r\.?\s?l|r\.?\s?l|s\.?\s?a\.?\s?p\.?\s?i|s\.?\s?c|inc|llc|ltd)\b\.?", re.I)
+OCR_JUNK_RE = re.compile(r"[<>»«”“=~^{}\[\]¿]")
 NAME_RE = re.compile(r"^[A-ZÁÉÍÓÚÑÜ][\wÁÉÍÓÚÑÜáéíóúñü'.-]+(\s+[A-ZÁÉÍÓÚÑÜa-z][\wÁÉÍÓÚÑÜáéíóúñü'.-]+){1,4}$")
 
 
@@ -87,6 +95,13 @@ def _looks_like_name(line):
     return bool(NAME_RE.match(line)) and not any(ch.isdigit() for ch in line) and "@" not in line
 
 
+def _junk(line):
+    """OCR noise such as '< Y MA PIE SA': symbols, or no real word besides a legal form."""
+    if OCR_JUNK_RE.search(line):
+        return True
+    return not re.search(r"[^\W\d_]{3}", LEGAL_FORM_RE.sub(" ", line))
+
+
 def _best_name(header_name, signature_name):
     """Header display names are often 'pgarcia' or an address; prefer a real full name."""
     header_name = (header_name or "").strip()
@@ -104,7 +119,9 @@ def company_from_domain(addr_or_url):
 
 
 def parse_signature(signature, from_name="", from_email="", region="MX"):
-    lines = [l.strip() for l in (signature or "").splitlines() if l.strip()]
+    # "Atte. Mario Loera" -> "Mario Loera"; a sign-off alone on its line disappears.
+    lines = [SIGNOFF_RE.sub("", l.strip()) for l in (signature or "").splitlines()]
+    lines = [l for l in lines if l and not _junk(l)]
     name, title, company = "", "", ""
 
     for i, line in enumerate(lines[:4]):
@@ -119,6 +136,11 @@ def parse_signature(signature, from_name="", from_email="", region="MX"):
         if not title and TITLE_RE.search(line) and not EMAIL_RE.search(line) and len(line) < 80:
             title = line
     for line in lines:
+        labeled = LABELED_COMPANY_RE.match(line)
+        if labeled:
+            company = labeled.group(2).strip()
+            break
+    for line in lines if not company else ():
         if COMPANY_RE.search(line) and not EMAIL_RE.search(line) and len(line) < 80:
             if not TITLE_RE.search(line) or re.search(r"s\.?\s?a\.?|inc|llc|ltd|gmbh|grupo|industria", line, re.I):
                 company = line
