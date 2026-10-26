@@ -37,6 +37,8 @@ class Settings:
     include_header_contacts: bool = True
     exclude_self: bool = True
     skip_automated: bool = True
+    skip_services: bool = True
+    ignore_file: str = "ignorados.txt"
     exclude_domains: list = field(default_factory=list)
     ocr_images: bool = True
     ocr_remote_images: bool = False
@@ -97,6 +99,8 @@ def load_settings(env_file=".env", base=None):
         include_header_contacts=_bool(env("INCLUDE_HEADER_CONTACTS"), True),
         exclude_self=_bool(env("EXCLUDE_SELF"), True),
         skip_automated=_bool(env("SKIP_AUTOMATED"), True),
+        skip_services=_bool(env("SKIP_SERVICES"), True),
+        ignore_file=env("IGNORE_FILE", "") or "ignorados.txt",
         exclude_domains=exclude_domains,
         ocr_images=_bool(env("OCR_IMAGES"), True),
         ocr_remote_images=_bool(env("OCR_REMOTE_IMAGES"), False),

@@ -127,7 +127,7 @@ def load_audience(csv_path, campaign, exclude_domains=(), suppression_path=None,
     if suppression_path and Path(suppression_path).exists():
         suppressed = {l.strip().lower() for l in Path(suppression_path).read_text().splitlines()
                       if l.strip() and not l.startswith("#")}
-    out, seen, skipped = [], set(), {"invalid": 0, "internal": 0, "suppressed": 0, "no_signature": 0}
+    out, seen, skipped = [], set(), {"invalid": 0, "internal": 0, "suppressed": 0, "bounced": 0, "no_signature": 0}
     with open(csv_path, newline="", encoding="utf-8-sig") as fh:
         for row in csv.DictReader(fh):
             email = (row.get("email") or "").strip().lower()
@@ -139,6 +139,9 @@ def load_audience(csv_path, campaign, exclude_domains=(), suppression_path=None,
                 continue
             if email in suppressed:
                 skipped["suppressed"] += 1
+                continue
+            if (row.get("bounced") or "").strip():  # the scraper saw a delivery failure
+                skipped["bounced"] += 1
                 continue
             if require_signature and "signature" not in (row.get("source") or "") and "image" not in (row.get("source") or ""):
                 skipped["no_signature"] += 1

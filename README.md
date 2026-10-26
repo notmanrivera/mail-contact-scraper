@@ -107,6 +107,32 @@ Solo escucha en tu computadora (127.0.0.1) y los botones rechazan peticiones de 
 páginas, así que los datos no se publican en ningún lado. Ctrl+C cierra el dashboard y
 detiene el escaneo que haya iniciado.
 
+### Lo que no es prospecto
+
+Se omiten solos:
+
+- **Servicios y apps**: Uber, Didi, Rappi, bancos, tiendas en línea, redes sociales, SAT,
+  telefonía, software (lista en `mail_contact_scraper/services.txt`). A propósito no están
+  empresas grandes que también pueden ser clientes (Amazon, Walmart, DHL, aerolíneas): de ellas
+  se omiten solo los avisos automáticos.
+- **Correos masivos**: boletines y promociones (encabezados `List-Unsubscribe-Post`,
+  `Precedence: bulk`, `Auto-Submitted` o de plataformas de envío). Los grupos de Google
+  como ventas@ no cuentan como masivos.
+- **Remitentes automáticos**: `no-reply@`, `notificaciones@`, `avisos@`, `marketing@`...
+
+Si se cuela alguno, ábrelo en la tabla y pulsa **Ignorar este correo** o **Ignorar todo
+@dominio**. Se guarda en `ignorados.txt` (junto a `.env`), se quita del CSV en ese momento y
+se deshace en Configuración ▸ Ignorados. `SKIP_SERVICES=false` apaga la lista integrada.
+Lo de correos masivos solo aplica a correos leídos desde esta versión.
+
+### Rebotes y clientes dormidos
+
+- Los avisos de "no se pudo entregar" marcan al contacto en la columna `bounced` (insignia
+  REBOTÓ en el dashboard, filtro Rebotados). El mailing ya no les envía. Si después esa
+  persona vuelve a escribir, la marca se quita sola.
+- La vista **Dormidos** muestra las empresas sin correos en 3, 6 o 12 meses, y **Descargar
+  lista** baja sus contactos (sin los rebotados) en CSV para llamarles.
+
 ### Contactos de la propia empresa
 
 Por defecto se omiten los contactos de los dominios de los buzones (`@dindustrimex.com` y sus
@@ -233,7 +259,7 @@ falla, pon `IMAP_HOST` en `.env`.
 ## Columnas del CSV
 
 `email, name, title, company, location, mobile_phones, office_phones, fax, other_emails,
-websites, source, messages, first_seen, last_seen, sample_signature, mailboxes`
+websites, source, messages, first_seen, last_seen, sample_signature, mailboxes, bounced`
 
 - `source`: `signature` (salió de una firma), `image` (de una firma en imagen vía OCR)
   o `header` (solo aparece en De/Para/CC).

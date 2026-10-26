@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .config import load_settings
-from .contacts import ContactBook
+from .contacts import ContactBook, read_ignore_file
 from .extract import parse_signature
 from .parse import parse_message
 from .signature import IMG_TOKEN_RE, extract_signature
@@ -50,6 +50,8 @@ def analyze(raw_bytes, region="MX", ocr=None):
         "signature": signature,
         "signature_from_image": from_image,
         "contact": contact,
+        "bulk": msg["bulk"],
+        "bounced": msg["bounced"],
     }
 
 
@@ -106,21 +108,49 @@ def iter_local(paths):
             yield str(path), path.read_bytes()
 
 
-def write_outputs(records, settings, out_dir, status, running=True):
-    """Rebuild contacts.csv and status.json; called every batch so the dashboard stays live."""
+def build_contacts(records, settings, out_dir):
+    """Write contacts.csv from the parsed messages. Returns (count, omitted)."""
     book = ContactBook(
         exclude=[b.email for b in settings.mailboxes] if settings.exclude_self else [],
         skip_automated=settings.skip_automated,
         exclude_domains=settings.exclude_domains,
+        skip_services=settings.skip_services,
+        # Read every time: the dashboard's "Ignorar" button edits it while a scan runs.
+        ignore=read_ignore_file(settings.ignore_file),
     )
     for rec in records:
         book.add_sender(rec)
-        if settings.include_header_contacts:
+        if settings.include_header_contacts and not rec.get("bulk"):
             for name, addr in rec.get("recipients", []):
                 book.add_header_contact(name, addr, rec.get("date"), rec.get("mailbox"))
     count = book.write_csv(out_dir / "contacts.csv.tmp")
     os.replace(out_dir / "contacts.csv.tmp", out_dir / "contacts.csv")
-    status.update(running=running, contacts=count, messages_total=len(records),
+    return count, book.omitted_counts()
+
+
+def rebuild(out_dir, settings=None):
+    """Re-apply filters to everything already read, without scanning (dashboard "Ignorar")."""
+    settings = settings or load_settings()
+    _, records = _load_done(Path(out_dir) / "messages.jsonl",
+                            settings.mailboxes[0].email if settings.mailboxes else "")
+    count, omitted = build_contacts(records, settings, Path(out_dir))
+    status_path = Path(out_dir) / "status.json"
+    try:
+        status = json.loads(status_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        status = {}
+    if status and not status.get("running"):
+        status.update(contacts=count, omitted=omitted)
+        tmp = Path(out_dir) / "status.json.tmp"
+        tmp.write_text(json.dumps(status, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, status_path)
+    return count
+
+
+def write_outputs(records, settings, out_dir, status, running=True):
+    """Rebuild contacts.csv and status.json; called every batch so the dashboard stays live."""
+    count, omitted = build_contacts(records, settings, out_dir)
+    status.update(running=running, contacts=count, messages_total=len(records), omitted=omitted,
                   updated_at=datetime.now().isoformat(timespec="seconds"))
     tmp = out_dir / "status.json.tmp"
     tmp.write_text(json.dumps(status, ensure_ascii=False), encoding="utf-8")
