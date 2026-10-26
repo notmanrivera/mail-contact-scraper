@@ -1,0 +1,3 @@
+# Only to build the Mac app (packaging/build_mac.sh), on top of requirements.txt
+pyinstaller==6.11.1
+rumps==0.4.0

@@ -147,6 +147,52 @@ como texto. `SHEETS_AUTO=false` apaga el envío automático. Si tu Workspace no 
 "cualquier usuario", pídele al admin que lo habilite para apps web; si no, sube el CSV a mano.
 El token evita que alguien más escriba en tu hoja: no lo compartas.
 
+## App de Mac (para compartir con la oficina)
+
+Para quien no usa la terminal: **Contactos D-Industrimex.app** trae Python, las librerías y
+Tesseract adentro. Se instala arrastrándola a Aplicaciones y al abrirla pone un sobre en la
+barra de menú y abre el panel en el navegador. Los buzones se agregan desde el panel
+(Configuración ▸ Buzones).
+
+- **Dónde se guardan los datos:** `~/Library/Application Support/Contactos D-Industrimex/`
+  (`.env` con los buzones y contraseñas, `output/` con `contacts.csv`). Cada usuario de la Mac
+  tiene los suyos; la app no lleva ninguna credencial. Menú del sobre ▸ *Abrir carpeta de
+  contactos* abre `output/`.
+- **Cómo se publica:** cada merge a `main` corre `.github/workflows/mac-app.yml` en Macs de
+  GitHub (Apple Silicon e Intel), arma la app, la prueba (OCR, scraper con los correos de
+  `tests/fixtures`, panel) y crea un release `v1.0.N` con `…-arm64.dmg` / `…-x86_64.dmg` para
+  instalar y `….app.zip` para las actualizaciones. En cada PR se arma igual y queda como
+  artefacto del workflow, sin publicarse.
+- **Actualizaciones:** la app revisa el último release al abrirse y cada 6 horas, lo descarga
+  en segundo plano y lo instala la próxima vez que se abre o al salir (o al momento con
+  *Actualizar ahora* en el panel). No actualiza a media corrida de escaneo.
+- **Token de GitHub:** como el repo es privado, cada Mac necesita un token *fine-grained* de
+  solo lectura (Settings ▸ Developer settings ▸ Fine-grained tokens ▸ solo este repositorio ▸
+  Contents: Read-only). Se pega en Configuración ▸ Actualizaciones y se guarda en el `.env`
+  de esa Mac como `UPDATE_GITHUB_TOKEN`. Cuando caduque, la app lo dice en el panel.
+
+### Instalar en otra Mac
+
+1. En GitHub ▸ Releases, baja el `.dmg` de la versión más nueva: `arm64` para Macs con chip
+   Apple (M1, M2…), `x86_64` para Macs con Intel ( ▸ Acerca de esta Mac lo dice).
+2. Pásalo a la otra Mac (AirDrop, USB), ábrelo y arrastra la app a Aplicaciones.
+3. Abre la app. Como no está firmada con una cuenta de desarrollador de Apple (99 USD/año),
+   macOS la bloquea la primera vez: Configuración del Sistema ▸ Privacidad y seguridad ▸
+   *Abrir igualmente*. Solo una vez; las actualizaciones ya no lo piden.
+4. En el panel: Configuración ▸ Buzones (correo + contraseña de aplicación) y
+   Configuración ▸ Actualizaciones (token).
+
+### Armarla a mano en una Mac
+
+```bash
+brew install tesseract dylibbundler
+pip install -r requirements.txt -r packaging/requirements-build.txt
+APP_VERSION=1.0.0 packaging/build_mac.sh       # sin APP_REPO no busca actualizaciones
+open dist/
+```
+
+`python -m mail_contact_scraper.app` corre lo mismo desde el código, sin el ícono de la barra.
+
 ## Contraseña según el proveedor
 
 El servidor se detecta con los registros MX de `dindustrimex.com`. Si la detección

@@ -130,6 +130,14 @@
   .switch input { width: 18px; height: 18px; accent-color: var(--red); }
   .steps { margin: 0 0 12px; padding-left: 18px; color: var(--text); font-size: 12.5px; display: grid; gap: 4px; }
   .actions-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .update-bar {
+    display: flex; align-items: center; gap: 12px 16px; flex-wrap: wrap; margin: 0 0 18px; padding: 12px 14px 12px 18px;
+    border-radius: 16px; background: var(--red-tint); border: 1px solid var(--red-line); color: var(--ink); font-size: 13.5px;
+  }
+  .update-bar[hidden] { display: none; }
+  .update-bar b { color: var(--red); }
+  .update-bar .grow { flex: 1; min-width: 200px; }
+  .update-bar .btn { height: 36px; padding: 0 16px; }
 
   /* ---------- Titular ---------- */
   .head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px 32px; flex-wrap: wrap; margin-bottom: 20px; }
@@ -357,6 +365,11 @@
     </button>
   </header>
 
+  <div class="update-bar" id="update-bar" hidden>
+    <span class="grow" id="update-text"></span>
+    <button class="btn btn-primary" id="update-now" type="button">Actualizar ahora</button>
+  </div>
+
   <section class="head">
     <div>
       <div class="eyebrow">Contactos de clientes y proveedores</div>
@@ -489,6 +502,15 @@
       </div>
       <div class="actions-row"><button class="btn btn-primary" id="sh-push" type="button">Enviar ahora</button></div>
       <div class="msg" id="sh-msg" hidden></div>
+    </section>
+
+    <section class="set" id="up-section" hidden>
+      <h3>Actualizaciones</h3>
+      <p class="hint" id="up-status">La app busca versiones nuevas sola y las instala al volver a abrirla.</p>
+      <div class="field"><label for="up-token">Token de GitHub (solo lectura)</label><input class="input" id="up-token" type="password" placeholder="github_pat_…" autocomplete="off"></div>
+      <p class="hint">El repositorio es privado: crea un <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">token fine-grained</a> solo para mail-contact-scraper con el permiso Contents: Read-only. Se guarda solo en esta Mac.</p>
+      <div class="actions-row"><button class="btn btn-outline" id="up-check" type="button">Guardar y buscar ahora</button></div>
+      <div class="msg" id="up-msg" hidden></div>
     </section>
   </div>
 </aside>
@@ -833,6 +855,7 @@
       const res = await fetch(`/data?since=${encodeURIComponent(version)}`, { cache: "no-store" });
       const data = await res.json();
       renderStatus(data.status || {}, data.control || {});
+      renderUpdate(data.update);
       lastStatus = data.status || {};
       if (!data.contacts && renderBoxFilter(lastStatus)) renderTable();
       if (data.contacts) {
@@ -986,6 +1009,61 @@
       showMsg("sh-msg", r.ok ? `Listo: ${fmt.format(r.result.rows)} contactos en la pestaña ${r.result.tab}.` : r.error, r.ok);
     } catch (e) { showMsg("sh-msg", "No se pudo enviar.", false); }
     btn.disabled = false; btn.textContent = label;
+  });
+
+  /* ---------- Actualizaciones (solo en la app de Mac) ---------- */
+  let appVersion = null, restarting = false;
+  function renderUpdate(u) {
+    if (!u) return;
+    if (appVersion && u.version !== appVersion) { location.reload(); return; }  // came back updated
+    appVersion = u.version;
+    $("up-section").hidden = !u.enabled;
+    if (!u.enabled) return;
+    const bar = $("update-bar");
+    bar.hidden = !(u.available || u.installing);
+    if (u.installing) {
+      $("update-text").innerHTML = "<b>Instalando la versión nueva.</b> La app se va a reiniciar y esta página se recarga sola.";
+      $("update-now").hidden = true;
+    } else if (u.available) {
+      $("update-text").innerHTML = `<b>Hay una versión nueva (${esc(u.latest)}).</b> ` +
+        (u.problem ? esc(u.problem) : u.ready ? "Se instala sola la próxima vez que abras la app, o ahora mismo." : "Se está descargando.");
+      $("update-now").hidden = !!u.problem;
+    }
+    const when = u.checked_at ? `, revisado ${shortDate(u.checked_at)} ${u.checked_at.slice(11, 16)}` : "";
+    $("up-status").textContent = `Versión instalada: ${u.version}${when}. ` +
+      (u.available ? `Disponible: ${u.latest}.` : u.latest ? "Es la más reciente." : "La app busca versiones nuevas sola y las instala al volver a abrirla.");
+    $("up-token").placeholder = u.has_token ? "Guardado (pega uno nuevo para cambiarlo)" : "github_pat_…";
+    if (u.error) showMsg("up-msg", u.error, false);
+  }
+  async function updateCall(body) {
+    const res = await fetch("/update", {
+      method: "POST", headers: { "X-Requested-With": "dashboard", "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({ ok: false, error: `Error ${res.status}` }));
+    if (data.update) renderUpdate(data.update);
+    return data;
+  }
+  $("up-check").addEventListener("click", async () => {
+    const btn = $("up-check"); btn.disabled = true; showMsg("up-msg", "");
+    const token = $("up-token").value.trim();
+    try {
+      const r = await updateCall(token ? { token } : {});
+      if (r.ok && !r.update.error) {
+        $("up-token").value = "";
+        showMsg("up-msg", r.update.available ? `Hay una versión nueva: ${r.update.latest}. Se está descargando.` : "Ya tienes la versión más reciente.", true);
+      } else if (!r.ok) showMsg("up-msg", r.error, false);
+    } catch (e) { showMsg("up-msg", "No se pudo buscar.", false); }
+    btn.disabled = false;
+  });
+  $("update-now").addEventListener("click", async () => {
+    if (restarting) return;
+    $("update-now").disabled = true;
+    try {
+      const r = await updateCall({ apply: true });
+      if (!r.ok) { alert(r.error); $("update-now").disabled = false; return; }
+      restarting = true;
+    } catch (e) { $("update-now").disabled = false; }
   });
 
   poll();
