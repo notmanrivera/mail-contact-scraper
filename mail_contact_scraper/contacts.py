@@ -2,6 +2,10 @@
 import csv
 import re
 from collections import Counter
+from functools import lru_cache
+
+import phonenumbers
+from phonenumbers import geocoder
 
 AUTOMATED_RE = re.compile(
     r"^(no-?reply|do-?not-?reply|mailer-daemon|postmaster|notifications?|bounce[s]?|alerts?|"
@@ -10,7 +14,7 @@ AUTOMATED_RE = re.compile(
 )
 
 FIELDS = [
-    "email", "name", "title", "company", "mobile_phones", "office_phones", "fax",
+    "email", "name", "title", "company", "location", "mobile_phones", "office_phones", "fax",
     "other_emails", "websites", "source", "messages", "first_seen", "last_seen", "sample_signature",
     "mailboxes",
 ]
@@ -98,6 +102,7 @@ class ContactBook:
                 "name": _top(row["names"]),
                 "title": _top(row["titles"]),
                 "company": _top(row["companies"]),
+                "location": _location(row["phones"]),
                 "mobile_phones": by_label("mobile"),
                 "office_phones": by_label("office", ""),
                 "fax": by_label("fax"),
@@ -120,6 +125,25 @@ class ContactBook:
             writer.writeheader()
             writer.writerows(rows)
         return len(rows)
+
+
+@lru_cache(maxsize=None)
+def phone_location(e164):
+    """City/state for a phone from its area code, e.g. +5281... -> "Monterrey, NL"."""
+    try:
+        number = phonenumbers.parse(e164.split(" ")[0])
+    except phonenumbers.NumberParseException:
+        return "", ""
+    place = geocoder.description_for_number(number, "es")
+    country = geocoder.country_name_for_number(number, "es")
+    return ("" if place == country else place), country
+
+
+def _location(phones):
+    # Office lines first: they say where the company is; mobiles say where the person bought it.
+    ordered = sorted(phones, key=lambda p: phones[p] == "mobile")
+    found = [phone_location(p) for p in ordered]
+    return next((place for place, _ in found if place), next((c for _, c in found if c), ""))
 
 
 def _top(counter):

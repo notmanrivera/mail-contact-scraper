@@ -127,7 +127,50 @@ class ScraperControl:
         return info
 
 
-def make_handler(out_dir, control):
+def settings_payload(out_dir, env_path):
+    from . import accounts, schedule, sheets
+
+    cfg = sheets.config(env_path)
+    return {
+        "mailboxes": accounts.list_mailboxes(env_path),
+        "schedule": schedule.status(),
+        "sheets": {"configured": bool(cfg["url"] and cfg["token"]), "tab": cfg["tab"], "auto": cfg["auto"],
+                   "last": sheets.last_sync(out_dir)},
+    }
+
+
+def settings_action(path, body, out_dir, env_path):
+    """POST /settings/<action>. Returns (status code, payload)."""
+    from . import accounts, schedule, sheets
+
+    try:
+        if path == "/settings/mailbox":
+            email, password = (body.get("email") or "").strip(), body.get("password") or ""
+            if not accounts.EMAIL_RE.match(email) or not password:
+                raise accounts.AccountError("Escribe el correo y su contraseña de aplicación.")
+            host = accounts.test_connection(email, password, (body.get("host") or "").strip(), env_path=env_path)
+            accounts.save_mailbox(env_path, email, password, host)
+        elif path == "/settings/mailbox/remove":
+            accounts.remove_mailbox(env_path, body.get("email"))
+        elif path == "/settings/schedule":
+            if body.get("enabled"):
+                hour, _, minute = str(body.get("time") or "08:00").partition(":")
+                schedule.install(int(hour), int(minute or 0), str(Path(out_dir).resolve()))
+            else:
+                schedule.uninstall()
+        elif path == "/settings/sheets/script":
+            return 200, {"ok": True, "script": sheets.script(sheets.ensure_token(env_path))}
+        elif path == "/settings/sheets/push":
+            url = (body.get("url") or "").strip() or None
+            return 200, {"ok": True, "result": sheets.push(out_dir, env_path, url), **settings_payload(out_dir, env_path)}
+        else:
+            return 404, {"ok": False, "error": "not found"}
+    except (accounts.AccountError, schedule.ScheduleError, sheets.SheetsError, ValueError) as exc:
+        return 400, {"ok": False, "error": str(exc), **settings_payload(out_dir, env_path)}
+    return 200, {"ok": True, **settings_payload(out_dir, env_path)}
+
+
+def make_handler(out_dir, control, env_path=".env"):
     out_dir = Path(out_dir)
     package = resources.files(__package__)
     page = package.joinpath("dashboard.html").read_bytes()
@@ -167,6 +210,8 @@ def make_handler(out_dir, control):
                 if since != version:
                     payload["contacts"] = _read_contacts(csv_path)
                 self._json(payload)
+            elif url.path == "/settings":
+                self._json(settings_payload(out_dir, env_path))
             elif url.path == "/contacts.csv" and csv_path.exists():
                 self._send(csv_path.read_bytes(), "text/csv; charset=utf-8")
             elif url.path.startswith("/static/"):
@@ -190,17 +235,27 @@ def make_handler(out_dir, control):
             elif self.path == "/stop":
                 stopped = control.stop()
                 self._json({"ok": stopped}, 200 if stopped else 409)
+            elif self.path.startswith("/settings/"):
+                length = int(self.headers.get("Content-Length") or 0)
+                if length > 65536:
+                    return self._send(b"too large", "text/plain", 413)
+                try:
+                    body = json.loads(self.rfile.read(length) or b"{}")
+                except ValueError:
+                    body = {}
+                code, payload = settings_action(self.path, body if isinstance(body, dict) else {}, out_dir, env_path)
+                self._json(payload, code)
             else:
                 self._send(b"not found", "text/plain", 404)
 
     return Handler
 
 
-def serve(out_dir, port=DEFAULT_PORT, open_browser=True, control=None):
+def serve(out_dir, port=DEFAULT_PORT, open_browser=True, control=None, env_path=".env"):
     control = control or ScraperControl(out_dir)
     for candidate in range(port, port + 20):
         try:
-            server = ThreadingHTTPServer(("127.0.0.1", candidate), make_handler(out_dir, control))
+            server = ThreadingHTTPServer(("127.0.0.1", candidate), make_handler(out_dir, control, env_path))
             break
         except OSError:
             continue
@@ -218,6 +273,7 @@ def main(argv=None):
     p.add_argument("--output", default=None, help="Folder with contacts.csv (default: OUTPUT_DIR or output)")
     p.add_argument("--port", type=int, default=DEFAULT_PORT)
     p.add_argument("--no-browser", action="store_true")
+    p.add_argument("--env", default=".env", help="Settings file the page edits (default: .env)")
     p.add_argument("--autostart", action="store_true", help="Start scraping as soon as the dashboard opens")
     p.add_argument("scrape_args", nargs=argparse.REMAINDER, help="Arguments for the scraper, after --")
     args = p.parse_args(argv)
@@ -225,10 +281,10 @@ def main(argv=None):
 
     if args.output is None:
         from .config import load_settings
-        args.output = load_settings().output_dir
+        args.output = load_settings(args.env).output_dir
     scrape_args = args.scrape_args[1:] if args.scrape_args[:1] == ["--"] else args.scrape_args
     control = ScraperControl(args.output, scrape_args)
-    server, _ = serve(args.output, args.port, not args.no_browser, control)
+    server, _ = serve(args.output, args.port, not args.no_browser, control, args.env)
     if args.autostart:
         control.start(first=True)
     log.info("Ctrl+C para cerrar.")

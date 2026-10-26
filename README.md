@@ -68,7 +68,8 @@ IMAP_USER_3=compras@dindustrimex.com
 IMAP_PASSWORD_3=xxxx xxxx xxxx xxxx
 ```
 
-Cada uno necesita su propia contraseña de aplicación. Si no pones `IMAP_HOST_2`,
+También se pueden agregar desde el dashboard (botón de engrane ▸ Buzones): prueba la
+conexión antes de guardarlo en `.env`. Cada uno necesita su propia contraseña de aplicación. Si no pones `IMAP_HOST_2`,
 `IMAP_PORT_2` o `IMAP_FOLDERS_2`, se usan los del buzón principal.
 
 - Se leen uno tras otro y todo va al mismo `output/contacts.csv`: si un contacto escribió a
@@ -113,6 +114,39 @@ subdominios), porque son compañeros, no prospectos. Para cambiarlo, en `.env`:
 `EXCLUDE_DOMAINS=dindustrimex.com,otrodominio.mx`, o `EXCLUDE_DOMAINS=none` para no omitir
 ninguno. Se aplica al CSV completo cada vez que se reescribe, también a lo ya escaneado.
 
+## Escaneo automático diario (Mac)
+
+Desde el dashboard (engrane ▸ Escaneo automático) o con:
+
+```bash
+python -m mail_contact_scraper.schedule install --at 08:00   # todos los días a las 8:00
+python -m mail_contact_scraper.schedule status
+python -m mail_contact_scraper.schedule uninstall
+```
+
+Crea una tarea de `launchd` en `~/Library/LaunchAgents`. Corre aunque el dashboard esté
+cerrado y, si la Mac estaba dormida, al despertar. El registro queda en `output/scheduled.log`.
+Si el proyecto está en Escritorio, Documentos o Descargas, macOS no deja que la tarea lo lea:
+muévelo (por ejemplo a `~/mail-contact-scraper`) o da Acceso total al disco a Python.
+Nunca corren dos escaneos a la vez sobre la misma carpeta `output/`.
+
+## Google Sheets
+
+Manda `contacts.csv` a una pestaña de una hoja de cálculo al terminar cada escaneo, sin
+proyecto de Google Cloud:
+
+1. Dashboard ▸ engrane ▸ Google Sheets ▸ **Copiar script** (o `python -m mail_contact_scraper.sheets setup`).
+   Esto crea `SHEETS_TOKEN` en `.env`.
+2. En la hoja: Extensiones ▸ Apps Script, pega el script y guarda.
+3. Implementar ▸ Nueva implementación ▸ App web. Ejecutar como: tú. Acceso: cualquier usuario.
+4. Pega la URL (`https://script.google.com/macros/s/.../exec`) en el dashboard y pulsa
+   **Conectar y enviar**, o ponla en `SHEETS_WEBAPP_URL` y corre `python -m mail_contact_scraper.sheets push`.
+
+Cada envío reemplaza la pestaña `Contactos` (cámbiala con `SHEETS_TAB`). Los teléfonos van
+como texto. `SHEETS_AUTO=false` apaga el envío automático. Si tu Workspace no permite
+"cualquier usuario", pídele al admin que lo habilite para apps web; si no, sube el CSV a mano.
+El token evita que alguien más escriba en tu hoja: no lo compartas.
+
 ## Contraseña según el proveedor
 
 El servidor se detecta con los registros MX de `dindustrimex.com`. Si la detección
@@ -126,12 +160,14 @@ falla, pon `IMAP_HOST` en `.env`.
 
 ## Columnas del CSV
 
-`email, name, title, company, mobile_phones, office_phones, fax, other_emails,
+`email, name, title, company, location, mobile_phones, office_phones, fax, other_emails,
 websites, source, messages, first_seen, last_seen, sample_signature, mailboxes`
 
 - `source`: `signature` (salió de una firma), `image` (de una firma en imagen vía OCR)
   o `header` (solo aparece en De/Para/CC).
 - `mailboxes`: los buzones donde apareció el contacto.
+- `location`: ciudad y estado según la lada del teléfono (primero el de oficina), por
+  ejemplo `Monterrey, NL`. Si la lada no dice la ciudad, sale solo el estado o el país.
 - Varios valores van separados por `; `. El archivo usa UTF-8 con BOM para que Excel
   muestre bien los acentos.
 

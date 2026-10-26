@@ -146,6 +146,9 @@ def main(argv=None):
     out_dir = Path(settings.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     jsonl_path = out_dir / "messages.jsonl"
+    if not args.detect and not args.list_folders and not _take_lock(out_dir):
+        log.error("Ya hay un escaneo en curso en %s (el del dashboard o el automático).", out_dir)
+        return 2
     if args.fresh and jsonl_path.exists():
         jsonl_path.unlink()
     done, records = _load_done(jsonl_path, settings.mailboxes[0].email if settings.mailboxes else "")
@@ -251,7 +254,43 @@ def main(argv=None):
     count = write_outputs(records, settings, out_dir, status, running=False)
     log.info("Processed %d new messages (%d total). Wrote %d contacts to %s",
              new, len(records), count, out_dir / "contacts.csv")
+    _auto_sheets(out_dir)
     return 0
+
+
+_LOCKS = {}
+
+
+def _take_lock(out_dir):
+    """One scan per output folder: the dashboard's and the scheduled one must not interleave."""
+    key = str(Path(out_dir).resolve())
+    if key in _LOCKS:
+        return True
+    try:
+        import fcntl
+    except ImportError:  # Windows
+        return True
+    fh = open(out_dir / ".scan.lock", "w")
+    try:
+        fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        fh.close()
+        return False
+    _LOCKS[key] = fh  # held until the process exits
+    return True
+
+
+def _auto_sheets(out_dir):
+    from . import sheets
+
+    cfg = sheets.config()
+    if not (cfg["url"] and cfg["auto"]):
+        return
+    try:
+        state = sheets.push(out_dir)
+        log.info("Google Sheets: %d contactos en la pestaña %s", state["rows"], state["tab"])
+    except sheets.SheetsError as exc:
+        log.warning("Google Sheets: %s", exc)
 
 
 def scan_mailbox(imap_source, box, args, settings, done, on_folder, handle, reached_limit):
