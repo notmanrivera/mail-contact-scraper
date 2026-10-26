@@ -21,7 +21,7 @@ image via OCR) and writes one CSV row per contact.*
      Tesseract y usa ese texto. Ignora íconos pequeños y fotos grandes;
    - valida teléfonos con `libphonenumber` (formato E.164, +52 por defecto) y los
      clasifica en móvil / oficina / fax según la etiqueta (`Cel`, `Tel`, `Fax`...).
-4. Une todo por dirección de correo y escribe `output/contacts.csv`.
+4. Une todo por dirección de correo y escribe `output/contacts.csv` (cada 50 correos y al final).
 
 El progreso se guarda en `output/messages.jsonl`. Si el proceso se corta, al volver a
 correrlo continúa donde se quedó; correrlo después solo procesa correos nuevos.
@@ -56,6 +56,22 @@ python -m mail_contact_scraper --fresh           # empezar de cero
 python -m mail_contact_scraper --local export.mbox carpeta_con_eml/   # sin IMAP
 ```
 
+## Dashboard en vivo
+
+```bash
+python -m mail_contact_scraper --dashboard              # escanea y abre el dashboard
+python -m mail_contact_scraper.dashboard                # solo el dashboard, sobre output/
+```
+
+Se abre en el navegador (`http://127.0.0.1:8765`) y se actualiza cada 3 segundos
+mientras corre el scraper: avance de la carpeta con tiempo estimado, total de contactos,
+cuántos tienen teléfono y empresa, empresas con más contactos y una tabla con búsqueda,
+filtros y la firma completa de cada contacto al hacer clic. El CSV se reescribe cada
+50 correos, así que también puedes abrirlo a medio proceso.
+
+Solo escucha en tu computadora (127.0.0.1); los datos no se publican en ningún lado.
+Ctrl+C lo cierra.
+
 ## Contraseña según el proveedor
 
 El servidor se detecta con los registros MX de `dindustrimex.com`. Si la detección
@@ -63,7 +79,7 @@ falla, pon `IMAP_HOST` en `.env`.
 
 | Proveedor | IMAP_HOST | Credencial |
 |---|---|---|
-| Google Workspace / Gmail | `imap.gmail.com` | Activa verificación en 2 pasos y crea una [contraseña de aplicación](https://myaccount.google.com/apppasswords). IMAP debe estar habilitado en la configuración de Gmail. |
+| Google Workspace / Gmail | `imap.gmail.com` | Activa verificación en 2 pasos y crea una [contraseña de aplicación](https://myaccount.google.com/apppasswords). IMAP ya viene activo (Google quitó el botón). Si la página dice "no disponible", el admin del Workspace debe permitir la verificación en 2 pasos; mientras tanto puedes exportar con Google Takeout y usar `--local archivo.mbox`. |
 | Microsoft 365 / Outlook | `outlook.office365.com` | Microsoft desactivó la contraseña para IMAP. Se necesita un token OAuth2 en `IMAP_OAUTH_TOKEN` (app registrada en Entra ID con permiso `IMAP.AccessAsUser.All`). |
 | Hosting cPanel / Hostinger / GoDaddy / Zoho | `mail.<dominio>`, `imap.hostinger.com`, `imap.secureserver.net`, `imap.zoho.com` | La contraseña normal del buzón. |
 
