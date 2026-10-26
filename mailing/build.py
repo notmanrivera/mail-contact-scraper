@@ -3,8 +3,11 @@
 Nothing here sends mail. It writes files to review and then import into an
 email platform (Brevo, Mailchimp) or open as drafts (.eml).
 """
+import base64
 import csv
 import html
+import mimetypes
+import shutil
 import re
 import tomllib
 from email.message import EmailMessage
@@ -21,6 +24,13 @@ HONORIFICS = {"ing", "lic", "dr", "dra", "mtro", "mtra", "arq", "c.p", "cp", "sr
 
 # Merge tags each platform replaces at send time, and the CSV headers it imports.
 ESP = {
+    # Yet Another Mail Merge (Google Sheets + Gmail): {{Columna}} del Sheet; YAMM agrega su propia liga de baja.
+    "yamm": {
+        "greeting": "{{Saludo}}",
+        "unsubscribe": "",
+        "columns": {"email": "Email", "first_name": "Nombre", "last_name": "Apellido",
+                    "greeting": "Saludo", "company": "Empresa", "title": "Puesto"},
+    },
     "brevo": {
         "greeting": "{{ contact.SALUDO }}",
         "unsubscribe": "{{ unsubscribe }}",
@@ -54,7 +64,30 @@ _env.filters["accent"] = accent
 
 def load_campaign(path):
     with open(path, "rb") as fh:
-        return tomllib.load(fh)
+        campaign = tomllib.load(fh)
+    campaign["_dir"] = Path(path).resolve().parent.parent
+    return campaign
+
+
+def asset_files(campaign):
+    """Image files of the campaign, in the order the template first uses them."""
+    folder = campaign["_dir"] / campaign["assets"]["dir"]
+    return sorted(p for p in folder.iterdir() if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".gif"))
+
+
+def _asset_resolver(campaign, mode):
+    """How images are referenced: hosted URL, cid: (attached inline) or data: (local preview)."""
+    base = campaign["assets"].get("base_url", "")
+    folder = campaign["_dir"] / campaign["assets"]["dir"]
+
+    def resolve(name):
+        if base:
+            return base.rstrip("/") + "/" + name
+        if mode == "data":
+            mime = mimetypes.guess_type(name)[0] or "image/png"
+            return f"data:{mime};base64," + base64.b64encode((folder / name).read_bytes()).decode()
+        return "cid:" + name
+    return resolve
 
 
 def split_name(name):
@@ -111,19 +144,23 @@ def unsubscribe_mailto(campaign, email):
     return f"mailto:{to}?subject={quote('Baja de correos')}&body={quote(email)}"
 
 
-def render_html(campaign, greeting_text, unsubscribe_url):
+def render_html(campaign, greeting_text, unsubscribe_url, images="cid"):
     return _env.get_template("mailing.html").render(
-        c=campaign, greeting=greeting_text, unsubscribe_url=unsubscribe_url)
+        c=campaign, greeting=greeting_text, unsubscribe_url=unsubscribe_url,
+        asset=_asset_resolver(campaign, images))
 
 
 def render_text(campaign, greeting_text, unsubscribe_url):
     c = campaign
-    lines = [greeting_text, "", plain(c["hero"]["headline"]), "", c["hero"]["body"], ""]
+    lines = [greeting_text, "", plain(c["hero"]["headline"]), "", c["hero"]["body"],
+             f"{c['hero']['cta_label']}: {c['hero']['cta_url']}", ""]
     for b in c["blocks"]:
         lines += [f"[{b['brand']}] {plain(b['title'])}", b["body"]]
         lines += [f"  ✓ {check}" for check in b["checks"]]
         lines += [f"{b['cta_label'].rstrip(' →')}: {b['cta_url']}", ""]
-    lines += [plain(c["closing"]["question"]), *c["closing"]["body"], c["closing"]["contact"], ""]
+    lines += [plain(c["closing"]["question"]), c["closing"].get("intro", "")]
+    lines += [f"  {ch['label']}: va {ch['pick']}" for ch in c["closing"].get("choices", [])]
+    lines += [*c["closing"]["body"], c["closing"]["contact"], ""]
     s = c["signature"]
     lines += [s["name"], s["title"], s["address"], c["footer"]["site"], "",
               c["footer"]["reason"], f"Para darte de baja: {unsubscribe_url}"]
@@ -142,6 +179,12 @@ def build_eml(campaign, person, html_body, text_body):
     msg["X-Unsent"] = "1"  # Outlook / Apple Mail open it as a draft
     msg.set_content(text_body)
     msg.add_alternative(html_body, subtype="html")
+    if not campaign["assets"].get("base_url"):
+        html_part = msg.get_payload()[1]
+        for f in asset_files(campaign):
+            maintype, subtype = (mimetypes.guess_type(f.name)[0] or "image/png").split("/")
+            html_part.add_related(f.read_bytes(), maintype, subtype, cid=f"<{f.name}>",
+                                  filename=f.name, disposition="inline")
     return msg
 
 
@@ -177,6 +220,12 @@ def write_excel(path, campaign, people):
         ws.column_dimensions[col].width = width
     ws.freeze_panes = "A2"
     wb.save(path)
+    if not campaign["assets"].get("base_url"):
+        # the Outlook macro attaches these inline from the folder next to the workbook
+        img_dir = Path(path).parent / "imagenes"
+        img_dir.mkdir(exist_ok=True)
+        for f in asset_files(campaign):
+            shutil.copy2(f, img_dir / f.name)
 
 
 def build(campaign_path, contacts_csv, out_dir, esp=None, eml=False, excel=False, **audience_opts):
@@ -188,11 +237,14 @@ def build(campaign_path, contacts_csv, out_dir, esp=None, eml=False, excel=False
     write_csv(out / "audience.csv", people, AUDIENCE_FIELDS)
     sample = people[0] if people else {"email": "prospecto@ejemplo.com", "greeting": greeting("Laura")}
     (out / "preview.html").write_text(
-        render_html(campaign, sample["greeting"], unsubscribe_mailto(campaign, sample["email"])), encoding="utf-8")
+        render_html(campaign, sample["greeting"], unsubscribe_mailto(campaign, sample["email"]), images="data"),
+        encoding="utf-8")
     (out / "preview.txt").write_text(
         render_text(campaign, sample["greeting"], unsubscribe_mailto(campaign, sample["email"])), encoding="utf-8")
 
     if esp:
+        if not campaign["assets"].get("base_url"):
+            raise ValueError(f"Para {esp} las imágenes deben estar en línea: llena [assets] base_url en la campaña")
         tags = ESP[esp]
         (out / f"template-{esp}.html").write_text(
             render_html(campaign, Markup(tags["greeting"]), Markup(tags["unsubscribe"])), encoding="utf-8")

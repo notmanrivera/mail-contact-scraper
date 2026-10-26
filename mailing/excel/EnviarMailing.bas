@@ -6,6 +6,8 @@ Attribute VB_Name = "EnviarMailing"
 '
 ' Por seguridad arranca en MODO = "BORRADOR": deja cada correo en Borradores de Outlook
 ' para revisarlo. Cambia a "ENVIAR" solo cuando hayas revisado varios borradores.
+' Las imágenes van incrustadas: la macro adjunta los archivos de la carpeta "imagenes"
+' (junto a este libro) con su Content-ID, que es como las llama el HTML (cid:logo-rojo.png).
 ' Envía en lotes con pausa para no disparar los límites de Google Workspace / Microsoft 365.
 ' Las filas con fecha en "Enviado" se saltan, así que puedes correrla varias veces.
 
@@ -17,6 +19,7 @@ Private Const PAUSA_SEG As Long = 60          ' pausa entre lotes
 Private Const MAX_POR_CORRIDA As Long = 200   ' tope por corrida (Workspace permite ~2,000/día)
 Private Const CUENTA As String = ""           ' ej. "pedro@dindustrimex.com"; vacío = cuenta por defecto
 Private Const BAJAS As String = "ventas@dindustrimex.com"
+Private Const PR_ATTACH_CONTENT_ID As String = "http://schemas.microsoft.com/mapi/proptag/0x3712001F"
 
 Public Sub EnviarMailing()
     Dim ws As Worksheet, ol As Object, cuentaOl As Object, mail As Object
@@ -40,6 +43,7 @@ Public Sub EnviarMailing()
                 .To = correo
                 .Subject = ws.Cells(fila, "F").Value
                 .HTMLBody = ws.Cells(fila, "G").Value
+                AdjuntarImagenes mail, CStr(ws.Cells(fila, "G").Value)
                 If Not cuentaOl Is Nothing Then Set .SendUsingAccount = cuentaOl
                 On Error Resume Next
                 .PropertyAccessor.SetProperty _
@@ -57,6 +61,19 @@ Public Sub EnviarMailing()
 
     ThisWorkbook.Save
     MsgBox hechos & IIf(MODO = "ENVIAR", " correos enviados.", " borradores en Outlook."), vbInformation
+End Sub
+
+Private Sub AdjuntarImagenes(mail As Object, html As String)
+    Dim carpeta As String, archivo As String, adj As Object
+    carpeta = ThisWorkbook.Path & Application.PathSeparator & "imagenes" & Application.PathSeparator
+    archivo = Dir(carpeta & "*.*")
+    Do While archivo <> ""
+        If InStr(1, html, "cid:" & archivo, vbTextCompare) > 0 Then
+            Set adj = mail.Attachments.Add(carpeta & archivo, 1, 0)
+            adj.PropertyAccessor.SetProperty PR_ATTACH_CONTENT_ID, archivo
+        End If
+        archivo = Dir()
+    Loop
 End Sub
 
 Private Function BuscarCuenta(ol As Object, smtp As String) As Object

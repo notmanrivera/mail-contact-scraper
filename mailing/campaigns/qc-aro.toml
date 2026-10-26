@@ -10,22 +10,31 @@ name = "Pedro Marquina"
 email = "pedro@dindustrimex.com"
 reply_to = "ventas@dindustrimex.com"
 
-# Imágenes: deben estar en una URL pública (https) para que se vean en el correo.
-# Mientras estén vacías se usa el wordmark en texto y se omite la foto.
+# Imágenes en mailing/assets/qc-aro/ (sacadas del banco de recursos).
+# base_url vacío: van incrustadas (cid:) y la macro de Outlook las adjunta.
+# Si las subes a un servidor, pon aquí la carpeta pública, p. ej.
+# "https://www.dindustrimex.com/mailing/qc-aro/", y se enlazan desde ahí.
 [assets]
-logo_url = ""          # logos/d-industrimex/d-industrimex-rojo-horizontal.png, ≥ 200 px de ancho
-site_icon_url = ""     # globo de la barra de sitio, 42 px
+dir = "assets/qc-aro"
+base_url = ""
+logo = "logo-rojo.png"
+logo_footer = "logo-blanco.png"
+site_icon = "globo.png"
 
 [hero]
 eyebrow = "Bombeo sanitario e industrial"
 headline = "Tu proceso no necesita más paros. **Necesita la bomba correcta.**"
 body = "Dos equipos que resuelven el 80% de los dolores de cabeza en planta. Los tenemos, los conocemos y te los dejamos funcionando."
+image = "hero.png"
+image_alt = "Bomba centrífuga Q-Pumps QC y bomba de doble diafragma ARO"
+cta_label = "Quiero mi cotización"
+cta_url = "mailto:ventas@dindustrimex.com?subject=Quiero%20mi%20cotizaci%C3%B3n"
 
 [[blocks]]
-brand = "Q-Pumps"
-title = "QC de Q-Pumps: la centrífuga que mantiene tu proceso **limpio y en marcha**"
+brand = "Q-Pumps · Serie QC"
+title = "La centrífuga que mantiene tu proceso **limpio y en marcha**"
 body = "Para alimentos, bebidas, lácteos y agroquímicos. Diseño de fácil ensamble, hecha aquí en Querétaro."
-image_url = ""
+image = "qc.png"
 image_alt = "Bomba centrífuga sanitaria Q-Pumps Serie QC"
 checks = [
   "Certificación sanitaria 3-A",
@@ -34,14 +43,15 @@ checks = [
   "Motores NEMA o IEC",
   "¿Ya tienes una QC? Conviértela a QC+ con un Kit+, sin cambiar de bomba",
 ]
-cta_label = "Cotizar QC →"
+cta_label = "Cotizar QC"
 cta_url = "mailto:ventas@dindustrimex.com?subject=Cotizaci%C3%B3n%20Q-Pumps%20QC"
 
 [[blocks]]
-brand = "ARO"
-title = "ARO: la bomba que **no le tiene miedo a nada**"
+brand = "ARO · Doble diafragma"
+title = "La bomba que **no le tiene miedo a nada**"
 body = "Abrasivos, sólidos, corrosivos, químicos agresivos. Neumática de doble diafragma, sin sellos que fallen."
-image_url = ""
+image = "aro.png"
+image_width = 240
 image_alt = "Bomba neumática de doble diafragma ARO"
 checks = [
   "Diseño sin sellos mecánicos: menos fugas, menos mantenimiento",
@@ -50,17 +60,21 @@ checks = [
   "Versiones certificadas ATEX para zonas con riesgo de explosión",
   "Respaldo de garantía de fábrica",
 ]
-cta_label = "Cotizar ARO →"
+cta_label = "Cotizar ARO"
 cta_url = "mailto:ventas@dindustrimex.com?subject=Cotizaci%C3%B3n%20ARO%20doble%20diafragma"
 
 [closing]
 question = "¿No sabes cuál **te toca**?"
-body = [
-  "Fácil: si tu fluido es sanitario y fluye, va QC. Si es pesado, abrasivo o químico, va ARO. Si tienes duda, para eso estamos.",
-  "Mándanos tu fluido, caudal y presión. Te respondemos con la bomba exacta, no con un catálogo de 200 páginas.",
+intro = "Fácil:"
+choices = [
+  { label = "Sanitario y fluye", pick = "QC", image = "qc.png" },
+  { label = "Pesado, abrasivo o químico", pick = "ARO", image = "aro.png" },
 ]
-contact = "Correo: ventas@dindustrimex.com · Tel: 442 499 8283"
-cta_label = "Quiero mi cotización →"
+body = [
+  "Si tienes duda, para eso estamos. Mándanos tu fluido, caudal y presión y te respondemos con la bomba exacta, no con un catálogo de 200 páginas.",
+]
+contact = "ventas@dindustrimex.com · 442 499 8283"
+cta_label = "Quiero mi cotización"
 cta_url = "mailto:ventas@dindustrimex.com?subject=Quiero%20mi%20cotizaci%C3%B3n"
 
 [signature]

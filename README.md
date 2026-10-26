@@ -129,10 +129,22 @@ estén en `output/suppression.txt` (uno por línea; ahí van las bajas).
 - **Campaña nueva:** copia `mailing/campaigns/qc-aro.toml` y cambia el copy. Lo que va entre
   `**dobles asteriscos**` sale en rojo. Una sola marca aliada por pieza con logo; si hay dos,
   van como badge rojo con el nombre (así está la de QC + ARO).
-- **Imágenes:** `logo_url`, `site_icon_url` e `image_url` deben ser URLs públicas `https`.
-  Vacías, se usa el wordmark en texto y no se muestra foto.
+- **Imágenes:** viven en `mailing/assets/<campaña>/` (logos y fotos reales del banco de
+  recursos, ya optimizadas). Con `base_url` vacío van **incrustadas** en el correo: la macro
+  las adjunta desde la carpeta `imagenes/` que se genera junto al Excel, y los `.eml` ya las
+  traen. Para Brevo/Mailchimp súbelas a un servidor y pon esa carpeta en `[assets] base_url`.
+- **Envío con YAMM (Google Sheets + Gmail), lo que usa el equipo:**
+  1. Sube las imágenes de `mailing/assets/<campaña>/` a una carpeta pública (p. ej.
+     `https://www.dindustrimex.com/mailing/qc-aro/`) y ponla en `[assets] base_url`.
+  2. `python -m mailing --esp yamm` → `template-yamm.html` y `audience-yamm.csv`.
+  3. Abre `template-yamm.html` en Chrome, Cmd/Ctrl+A, Cmd/Ctrl+C y pégalo en un borrador nuevo
+     de Gmail (en la cuenta que va a enviar) con el asunto de la campaña.
+  4. En el Sheet: Archivo ▸ Importar ▸ `audience-yamm.csv` ▸ Insertar hoja nueva. El saludo
+     usa la columna `Saludo` (`{{Saludo}}` en el borrador).
+  5. Extensiones ▸ YAMM ▸ Iniciar combinación ▸ elige el borrador, activa la liga de baja de
+     YAMM y mándate una prueba antes de enviar. Plan gratis: 50 correos al día.
 - **Envío con Excel:** importa `mailing/excel/EnviarMailing.bas` en el libro generado
-  (Alt+F11 ▸ Archivo ▸ Importar). Requiere Outlook de escritorio en Windows. Arranca en modo
+  (Alt+F11 ▸ Archivo ▸ Importar), con la carpeta `imagenes/` al lado. Requiere Outlook de escritorio en Windows. Arranca en modo
   `BORRADOR` (deja todo en Borradores); cámbialo a `ENVIAR` cuando hayas revisado. Envía en
   lotes con pausa y marca la columna `Enviado`, así que puede correrse varias veces.
 - **Baja:** cada correo trae el enlace "Ya no quiero recibir estos correos" y el encabezado
