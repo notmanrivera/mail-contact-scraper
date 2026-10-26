@@ -11,7 +11,7 @@ email = "pedro@dindustrimex.com"
 reply_to = "ventas@dindustrimex.com"
 
 # Imágenes en mailing/assets/qc-aro/ (sacadas del banco de recursos).
-# Sin URLs: van incrustadas (cid:) para la macro de Outlook y los .eml.
+# La macro de Outlook y los .eml las incrustan (cid:) desde esa carpeta.
 # Para YAMM/Brevo/Mailchimp deben estar en línea: sube cada archivo al Media Manager de
 # Wix y pega su URL abajo en [assets.urls] (o, si están todas en una carpeta, usa base_url).
 [assets]
@@ -22,7 +22,13 @@ logo_footer = "logo-blanco.png"
 site_icon = "globo.png"
 
 [assets.urls]
-# "logo-rojo.png" = "https://static.wixstatic.com/media/....png"
+# Media Manager de Wix, sitio "D-Industrimex | Bombas Industriales y Sanitarias en México"
+"logo-rojo.png" = "https://static.wixstatic.com/media/c01737_2a6b0408092e43d0a96e76ef9532a897~mv2.png"
+"logo-blanco.png" = "https://static.wixstatic.com/media/c01737_3db563510e7448709d35f43521ae9b1e~mv2.png"
+"globo.png" = "https://static.wixstatic.com/media/c01737_083955bca67849a6aefd46eaf6cbe35e~mv2.png"
+"hero.png" = "https://static.wixstatic.com/media/c01737_145602e8a1e84063b74455dc316ec1b0~mv2.png"
+"qc.png" = "https://static.wixstatic.com/media/c01737_1acb5aa293b6405cbf5b3b12a1621b5c~mv2.png"
+"aro.png" = "https://static.wixstatic.com/media/c01737_0d6056cc8f9a4d9b8579e8087ccfa958~mv2.png"
 
 [hero]
 eyebrow = "Bombeo sanitario e industrial"

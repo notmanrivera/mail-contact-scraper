@@ -1,4 +1,5 @@
 import csv
+import re
 from email import message_from_bytes
 from email.policy import default
 
@@ -10,6 +11,16 @@ from mailing.build import build, load_campaign, render_html, split_name
 
 CAMPAIGN = "mailing/campaigns/qc-aro.toml"
 FIELDS = ["email", "name", "title", "company", "source"]
+
+
+@pytest.fixture
+def local_campaign():
+    """qc-aro without its Wix URLs, so images are embedded (cid:/data:)."""
+    path = Path(CAMPAIGN).parent / "_test-local.toml"
+    text = re.sub(r'(?m)^"[^"]+\.png" = "https://[^"]+"\n', "", Path(CAMPAIGN).read_text())
+    path.write_text(text)
+    yield str(path)
+    path.unlink()
 
 
 def write_contacts(path, rows):
@@ -33,7 +44,7 @@ def test_headline_accent_is_escaped_and_red():
     assert '<span style="color:#A81818;">rojo</span>' in out
 
 
-def test_build_filters_and_writes_outputs(tmp_path):
+def test_build_filters_and_writes_outputs(tmp_path, local_campaign):
     contacts = tmp_path / "contacts.csv"
     write_contacts(contacts, [
         {"email": "laura@aceros.mx", "name": "Laura Martínez", "source": "signature"},
@@ -44,7 +55,7 @@ def test_build_filters_and_writes_outputs(tmp_path):
     ])
     supp = tmp_path / "suppression.txt"
     supp.write_text("BAJA@cliente.com\n")
-    people, skipped = build(CAMPAIGN, contacts, tmp_path / "out", excel=True, eml=True,
+    people, skipped = build(local_campaign, contacts, tmp_path / "out", excel=True, eml=True,
                             suppression_path=supp)
     assert [p["email"] for p in people] == ["laura@aceros.mx", "cc@cliente.com"]
     assert skipped == {"invalid": 1, "internal": 1, "suppressed": 1, "no_signature": 0}
@@ -64,14 +75,14 @@ def test_build_filters_and_writes_outputs(tmp_path):
     assert "<logo-rojo.png>" in cids and "<qc.png>" in cids
 
 
-def test_esp_template_needs_hosted_images(tmp_path):
+def test_esp_template_needs_hosted_images(tmp_path, local_campaign):
     contacts = tmp_path / "contacts.csv"
     write_contacts(contacts, [{"email": "a@x.com", "name": "Ana", "source": "signature"}])
     with pytest.raises(ValueError, match="base_url"):
-        build(CAMPAIGN, contacts, tmp_path / "out", esp="brevo")
+        build(local_campaign, contacts, tmp_path / "out", esp="brevo")
 
     hosted = Path(CAMPAIGN).parent / "_test-hosted.toml"
-    hosted.write_text(Path(CAMPAIGN).read_text().replace('base_url = ""', 'base_url = "https://cdn.example.com/qc-aro/"'))
+    hosted.write_text(Path(local_campaign).read_text().replace('base_url = ""', 'base_url = "https://cdn.example.com/qc-aro/"'))
     try:
         build(hosted, contacts, tmp_path / "out", esp="brevo")
     finally:
@@ -107,9 +118,9 @@ def test_yamm_template_uses_sheet_columns_and_no_own_unsubscribe(tmp_path):
                     ["a@x.com", "Ana", "López", "Hola Ana,", "", ""]]
 
 
-def test_per_image_urls_for_wix(tmp_path):
+def test_per_image_urls_for_wix(tmp_path, local_campaign):
     from mailing.build import asset_files, render_html
-    c = load_campaign(CAMPAIGN)
+    c = load_campaign(local_campaign)
     c["assets"]["urls"] = {f.name: f"https://static.wixstatic.com/media/{f.stem}.png" for f in asset_files(c)}
     out = render_html(c, "Hola,", "", images="cid")
     assert 'src="https://static.wixstatic.com/media/logo-rojo.png"' in out and "cid:" not in out
@@ -117,4 +128,13 @@ def test_per_image_urls_for_wix(tmp_path):
     contacts = tmp_path / "contacts.csv"
     write_contacts(contacts, [{"email": "a@x.com", "name": "Ana", "source": "signature"}])
     with pytest.raises(ValueError, match="qc.png"):
-        build(CAMPAIGN, contacts, tmp_path / "out", esp="yamm")
+        build(local_campaign, contacts, tmp_path / "out", esp="yamm")
+
+
+def test_qc_aro_is_ready_for_yamm(tmp_path):
+    contacts = tmp_path / "contacts.csv"
+    write_contacts(contacts, [{"email": "a@x.com", "name": "Ana", "source": "signature"}])
+    build(CAMPAIGN, contacts, tmp_path / "out", esp="yamm")
+    tpl = (tmp_path / "out" / "template-yamm.html").read_text()
+    srcs = re.findall(r'src="([^"]+)"', tpl)
+    assert srcs and all(s.startswith("https://static.wixstatic.com/") for s in srcs)
