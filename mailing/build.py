@@ -258,7 +258,9 @@ def build(campaign_path, contacts_csv, out_dir, esp=None, eml=False, excel=False
 
     if esp:
         if not is_hosted(campaign):
-            raise ValueError(f"Para {esp} las imágenes deben estar en línea: llena [assets] base_url en la campaña")
+            missing = [f.name for f in asset_files(campaign) if not hosted_url(campaign, f.name)]
+            raise ValueError(f"Para {esp} las imágenes deben estar en línea. Falta la URL de: "
+                             + ", ".join(missing) + " (llena [assets.urls] o base_url en la campaña)")
         tags = ESP[esp]
         (out / f"template-{esp}.html").write_text(
             render_html(campaign, Markup(tags["greeting"]), Markup(tags["unsubscribe"])), encoding="utf-8")
