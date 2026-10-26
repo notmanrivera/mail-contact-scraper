@@ -24,6 +24,13 @@ HONORIFICS = {"ing", "lic", "dr", "dra", "mtro", "mtra", "arq", "c.p", "cp", "sr
 
 # Merge tags each platform replaces at send time, and the CSV headers it imports.
 ESP = {
+    # Yet Another Mail Merge (Google Sheets + Gmail): {{Columna}} del Sheet; YAMM agrega su propia liga de baja.
+    "yamm": {
+        "greeting": "{{Saludo}}",
+        "unsubscribe": "",
+        "columns": {"email": "Email", "first_name": "Nombre", "last_name": "Apellido",
+                    "greeting": "Saludo", "company": "Empresa", "title": "Puesto"},
+    },
     "brevo": {
         "greeting": "{{ contact.SALUDO }}",
         "unsubscribe": "{{ unsubscribe }}",

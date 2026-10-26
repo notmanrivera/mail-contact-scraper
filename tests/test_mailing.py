@@ -89,3 +89,19 @@ def test_require_signature_skips_header_only(tmp_path):
     people, skipped = build(CAMPAIGN, contacts, tmp_path / "out", require_signature=True)
     assert [p["email"] for p in people] == ["a@x.com"]
     assert skipped["no_signature"] == 1
+
+
+def test_yamm_template_uses_sheet_columns_and_no_own_unsubscribe(tmp_path):
+    contacts = tmp_path / "contacts.csv"
+    write_contacts(contacts, [{"email": "a@x.com", "name": "Ana López", "source": "signature"}])
+    hosted = Path(CAMPAIGN).parent / "_test-yamm.toml"
+    hosted.write_text(Path(CAMPAIGN).read_text().replace('base_url = ""', 'base_url = "https://cdn.example.com/qc-aro/"'))
+    try:
+        build(hosted, contacts, tmp_path / "out", esp="yamm")
+    finally:
+        hosted.unlink()
+    tpl = (tmp_path / "out" / "template-yamm.html").read_text()
+    assert "{{Saludo}}" in tpl and "Ya no quiero recibir" not in tpl
+    rows = list(csv.reader(open(tmp_path / "out" / "audience-yamm.csv", encoding="utf-8-sig")))
+    assert rows == [["Email", "Nombre", "Apellido", "Saludo", "Empresa", "Puesto"],
+                    ["a@x.com", "Ana", "López", "Hola Ana,", "", ""]]
