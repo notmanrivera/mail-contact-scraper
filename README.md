@@ -54,7 +54,30 @@ python -m mail_contact_scraper                   # todo el INBOX
 python -m mail_contact_scraper --folders ALL     # todas las carpetas
 python -m mail_contact_scraper --fresh           # empezar de cero
 python -m mail_contact_scraper --local export.mbox carpeta_con_eml/   # sin IMAP
+python -m mail_contact_scraper --mailbox ventas@dindustrimex.com       # solo un buzón
 ```
+
+## Varios buzones
+
+Agrega cada buzón extra al `.env` con el número al final:
+
+```
+IMAP_USER_2=ventas@dindustrimex.com
+IMAP_PASSWORD_2=xxxx xxxx xxxx xxxx
+IMAP_USER_3=compras@dindustrimex.com
+IMAP_PASSWORD_3=xxxx xxxx xxxx xxxx
+```
+
+Cada uno necesita su propia contraseña de aplicación. Si no pones `IMAP_HOST_2`,
+`IMAP_PORT_2` o `IMAP_FOLDERS_2`, se usan los del buzón principal.
+
+- Se leen uno tras otro y todo va al mismo `output/contacts.csv`: si un contacto escribió a
+  dos buzones queda una sola fila, y la columna `mailboxes` dice en cuáles apareció.
+- Si un buzón falla (por ejemplo, contraseña incorrecta), se salta y siguen los demás. El
+  error aparece en el dashboard junto a ese buzón.
+- El avance se guarda por buzón, así que agregar uno nuevo solo lee ese.
+- `--mailbox a@x.com,b@x.com` limita la corrida a esos buzones. Con `--local`,
+  `--mailbox ventas@dindustrimex.com` marca de qué buzón salió la exportación de Takeout.
 
 ## Dashboard en vivo
 
@@ -69,9 +92,10 @@ D-Industrimex y se actualiza cada 3 segundos:
 - **Iniciar escaneo / Buscar correos nuevos** arranca el scraper con la configuración de
   `.env`. Si ya hubo una corrida, solo procesa lo nuevo.
 - **Detener** lo para y guarda el avance; al volver a iniciar sigue donde se quedó.
-- Avance de la carpeta con tiempo estimado, total de contactos, cuántos tienen teléfono y
+- Avance de la carpeta con tiempo estimado, el estado de cada buzón, total de contactos, cuántos tienen teléfono y
   empresa, empresas con más contactos y una tabla con búsqueda, filtros y la firma completa
   de cada contacto al hacer clic.
+- Con varios buzones aparece un filtro para ver los contactos de cada uno.
 - Si el escaneo falla (contraseña, `.env` incompleto), el error aparece en la página. El
   detalle queda en `output/scraper.log`.
 
@@ -84,7 +108,7 @@ detiene el escaneo que haya iniciado.
 
 ### Contactos de la propia empresa
 
-Por defecto se omiten los contactos del dominio del buzón (`@dindustrimex.com` y sus
+Por defecto se omiten los contactos de los dominios de los buzones (`@dindustrimex.com` y sus
 subdominios), porque son compañeros, no prospectos. Para cambiarlo, en `.env`:
 `EXCLUDE_DOMAINS=dindustrimex.com,otrodominio.mx`, o `EXCLUDE_DOMAINS=none` para no omitir
 ninguno. Se aplica al CSV completo cada vez que se reescribe, también a lo ya escaneado.
@@ -103,10 +127,11 @@ falla, pon `IMAP_HOST` en `.env`.
 ## Columnas del CSV
 
 `email, name, title, company, mobile_phones, office_phones, fax, other_emails,
-websites, source, messages, first_seen, last_seen, sample_signature`
+websites, source, messages, first_seen, last_seen, sample_signature, mailboxes`
 
 - `source`: `signature` (salió de una firma), `image` (de una firma en imagen vía OCR)
   o `header` (solo aparece en De/Para/CC).
+- `mailboxes`: los buzones donde apareció el contacto.
 - Varios valores van separados por `; `. El archivo usa UTF-8 con BOM para que Excel
   muestre bien los acentos.
 

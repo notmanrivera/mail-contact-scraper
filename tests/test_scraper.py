@@ -282,3 +282,82 @@ def test_dashboard_start_button_runs_scraper(tmp_path, monkeypatch):
         assert len(data["contacts"]) == 4
     finally:
         server.shutdown()
+
+
+def test_extra_mailboxes_from_env(monkeypatch):
+    from mail_contact_scraper.config import load_settings
+
+    monkeypatch.setenv("IMAP_USER", "pedro@dindustrimex.com")
+    monkeypatch.setenv("IMAP_HOST", "imap.gmail.com")
+    monkeypatch.setenv("IMAP_USER_2", "ventas@dindustrimex.com")
+    monkeypatch.setenv("IMAP_PASSWORD_2", "abcd efgh")
+    monkeypatch.setenv("IMAP_USER_3", "PEDRO@dindustrimex.com")  # duplicate, ignored
+    monkeypatch.setenv("IMAP_USER_5", "compras@grupoaliado.mx")
+    monkeypatch.setenv("IMAP_HOST_5", "imap.zoho.com")
+    monkeypatch.setenv("IMAP_FOLDERS_5", "INBOX,Archivo")
+    monkeypatch.delenv("EXCLUDE_DOMAINS", raising=False)
+    s = load_settings(env_file="missing.env")
+    assert [b.email for b in s.mailboxes] == ["pedro@dindustrimex.com", "ventas@dindustrimex.com",
+                                              "compras@grupoaliado.mx"]
+    assert s.mailboxes[1].password == "abcd efgh" and s.mailboxes[1].imap_host == "imap.gmail.com"
+    assert s.mailboxes[2].imap_host == "imap.zoho.com" and s.mailboxes[2].folders == ["INBOX", "Archivo"]
+    assert s.exclude_domains == ["dindustrimex.com", "grupoaliado.mx"]
+
+
+def test_scans_every_mailbox_and_skips_a_failing_one(tmp_path, monkeypatch):
+    import json
+
+    monkeypatch.setenv("IMAP_USER", "pedro@dindustrimex.com")
+    monkeypatch.setenv("IMAP_HOST", "imap.test")
+    monkeypatch.setenv("IMAP_USER_2", "ventas@dindustrimex.com")
+    monkeypatch.setenv("IMAP_USER_3", "malo@dindustrimex.com")
+    boxes = {
+        "pedro@dindustrimex.com": {b"1": (FIXTURES / "01_plain_es.eml").read_bytes(),
+                                   b"2": (FIXTURES / "05_repeat_laura.eml").read_bytes()},
+        "ventas@dindustrimex.com": {b"1": (FIXTURES / "05_repeat_laura.eml").read_bytes()},
+    }
+    connected = []
+
+    def fake_connect(box):
+        connected.append(box.email)
+        if box.email not in boxes:
+            raise imap_source.imaplib.IMAP4.error("AUTHENTICATIONFAILED Invalid credentials")
+        conn = FakeIMAP(boxes[box.email])
+        conn.logout = lambda: None
+        return conn
+
+    monkeypatch.setattr(imap_source, "connect", fake_connect)
+    # A record from before multi-mailbox support belongs to the main mailbox.
+    tmp_path.joinpath("messages.jsonl").write_text(json.dumps(
+        {**cli.analyze(boxes["pedro@dindustrimex.com"][b"1"]), "folder": "INBOX", "uidvalidity": "777", "uid": "1"}) + "\n")
+    assert cli.main(["--output", str(tmp_path), "--no-ocr"]) == 0
+    assert connected == ["pedro@dindustrimex.com", "ventas@dindustrimex.com", "malo@dindustrimex.com"]
+    recs = [json.loads(l) for l in tmp_path.joinpath("messages.jsonl").read_text().splitlines()]
+    assert [(r.get("mailbox"), r["uid"]) for r in recs[1:]] == [
+        ("pedro@dindustrimex.com", "2"), ("ventas@dindustrimex.com", "1")]
+    status = json.loads(tmp_path.joinpath("status.json").read_text())
+    assert [b["state"] for b in status["mailboxes"]] == ["done", "done", "error"]
+    assert "AUTHENTICATIONFAILED" in status["mailboxes"][2]["error"] and "error" not in status
+    rows = {r["email"]: r for r in csv.DictReader(open(tmp_path / "contacts.csv", encoding="utf-8-sig"))}
+    assert rows["lmartinez@aceroslaguna.com.mx"]["mailboxes"] == "pedro@dindustrimex.com; ventas@dindustrimex.com"
+
+    # Only one mailbox, and everything there is already read.
+    connected.clear()
+    assert cli.main(["--output", str(tmp_path), "--no-ocr", "--mailbox", "VENTAS@dindustrimex.com"]) == 0
+    assert connected == ["ventas@dindustrimex.com"]
+    assert len(tmp_path.joinpath("messages.jsonl").read_text().splitlines()) == 3
+
+
+def test_all_mailboxes_failing_is_an_error(tmp_path, monkeypatch):
+    import json
+
+    monkeypatch.setenv("IMAP_USER", "pedro@dindustrimex.com")
+    monkeypatch.setenv("IMAP_HOST", "imap.test")
+
+    def fail(box):
+        raise imap_source.imaplib.IMAP4.error("AUTHENTICATIONFAILED")
+
+    monkeypatch.setattr(imap_source, "connect", fail)
+    with pytest.raises(RuntimeError):
+        cli.main(["--output", str(tmp_path), "--no-ocr"])
+    assert json.loads(tmp_path.joinpath("status.json").read_text())["error"] == "AUTHENTICATIONFAILED"
