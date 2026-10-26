@@ -1,11 +1,7 @@
 """Settings loaded from environment variables (and a local .env file)."""
-import os
 from dataclasses import dataclass, field
 
-try:
-    from dotenv import load_dotenv
-except ImportError:  # python-dotenv is optional
-    load_dotenv = None
+from . import envfile
 
 
 def _bool(value, default=False):
@@ -49,10 +45,10 @@ class Settings:
     mailboxes: list = field(default_factory=list)
 
 
-def load_settings(env_file=".env"):
-    if load_dotenv and os.path.exists(env_file):
-        load_dotenv(env_file)
-    env = os.environ.get
+def load_settings(env_file=".env", base=None):
+    # Read the file every time instead of loading it into os.environ, so a dashboard that
+    # edits .env starts its next scan with the new values.
+    env = envfile.environ(env_file, base).get
     folders = _folders(env("IMAP_FOLDERS")) or ["INBOX"]
     user = env("IMAP_USER", "")
     port = int(env("IMAP_PORT", "993"))

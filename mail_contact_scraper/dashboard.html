@@ -91,6 +91,46 @@
   .icon-btn:hover { color: var(--red); }
   .icon-btn svg { width: 17px; height: 17px; }
 
+
+  /* ---------- Configuración ---------- */
+  .scrim { position: fixed; inset: 0; background: rgba(24,18,18,.28); z-index: 20; }
+  .drawer {
+    position: fixed; top: 12px; right: 12px; bottom: 12px; width: min(460px, calc(100vw - 24px)); z-index: 21;
+    background: #F7F6F5; border-radius: var(--radius); box-shadow: 0 30px 80px -20px rgba(24,18,18,.45);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .drawer-head { display: flex; align-items: center; justify-content: space-between; padding: 20px 22px 12px; }
+  .drawer-head h2 { margin: 0; font-size: 20px; font-weight: 700; color: var(--ink); letter-spacing: -.01em; }
+  .drawer-body { overflow-y: auto; padding: 0 16px 20px; display: grid; gap: 14px; align-content: start; }
+  .set { background: var(--panel-solid); border: 1px solid var(--line); border-radius: 18px; padding: 16px 16px 18px; }
+  .set h3 { margin: 0 0 2px; font-size: 14px; font-weight: 700; color: var(--ink); }
+  .set .hint { color: var(--muted); font-size: 12px; margin: 0 0 12px; }
+  .set .hint a { color: var(--red); font-weight: 600; }
+  .mb-list { display: grid; gap: 6px; margin-bottom: 12px; }
+  .mb { display: flex; align-items: center; gap: 10px; padding: 9px 10px 9px 12px; border-radius: 12px; background: #F4F2F1; }
+  .mb .e { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--ink); }
+  .mb .t { font-size: 11px; font-weight: 700; letter-spacing: .06em; color: var(--muted); text-transform: uppercase; }
+  .mb .t.bad { color: var(--red); }
+  .mb button { border: 0; background: none; color: var(--faint); cursor: pointer; width: 26px; height: 26px; border-radius: 50%; font-size: 16px; line-height: 1; }
+  .mb button:hover { color: var(--red); background: var(--red-tint); }
+  .field { display: grid; gap: 4px; margin-bottom: 10px; }
+  .field label { font-size: 11.5px; font-weight: 600; color: var(--muted); }
+  .input {
+    height: 40px; padding: 0 14px; border: 1px solid var(--line); border-radius: 12px; background: #fff;
+    color: var(--text); font: 500 13px var(--font); width: 100%;
+  }
+  .input:focus, .search:focus, .filter:focus { outline: 2px solid var(--red-line); outline-offset: 1px; }
+  textarea.input { height: 150px; padding: 10px 12px; font: 500 11px/1.45 ui-monospace, Menlo, monospace; resize: vertical; }
+  .row-2 { display: grid; grid-template-columns: minmax(0, 1fr) 120px; gap: 10px; }
+  .set .btn { height: 38px; padding: 0 18px; }
+  .msg { margin-top: 10px; font-size: 12.5px; font-weight: 600; padding: 9px 12px; border-radius: 12px; }
+  .msg.ok { background: rgba(28,138,74,.09); color: var(--good); }
+  .msg.err { background: var(--red-tint); color: var(--red); }
+  .switch { display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--ink); cursor: pointer; margin-bottom: 10px; }
+  .switch input { width: 18px; height: 18px; accent-color: var(--red); }
+  .steps { margin: 0 0 12px; padding-left: 18px; color: var(--text); font-size: 12.5px; display: grid; gap: 4px; }
+  .actions-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
   /* ---------- Titular ---------- */
   .head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px 32px; flex-wrap: wrap; margin-bottom: 20px; }
   .eyebrow { font-weight: 700; font-size: 11px; letter-spacing: .28em; text-transform: uppercase; color: var(--muted); }
@@ -312,6 +352,9 @@
     <a class="icon-btn" href="/contacts.csv" download="contacts.csv" title="Descargar CSV" aria-label="Descargar CSV">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M5 19.5h14"/></svg>
     </a>
+    <button class="icon-btn" id="open-settings" type="button" title="Configuración" aria-label="Configuración">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
   </header>
 
   <section class="head">
@@ -370,7 +413,7 @@
         <button type="button" data-view="contacts" aria-pressed="true">Contactos</button>
         <button type="button" data-view="companies" aria-pressed="false">Empresas</button>
       </div>
-      <input class="search" id="search" type="search" placeholder="Buscar nombre, empresa, teléfono o correo" autocomplete="off">
+      <input class="search" id="search" type="search" placeholder="Buscar nombre, empresa, ciudad, teléfono o correo" autocomplete="off">
       <select class="filter" id="filter" aria-label="Filtro">
         <option value="all">Todos</option>
         <option value="phone">Con teléfono</option>
@@ -397,6 +440,58 @@
   </div>
 </div>
 
+
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title" hidden>
+  <div class="drawer-head">
+    <div><div class="card-kicker">Ajustes</div><h2 id="drawer-title">Configuración</h2></div>
+    <button class="icon-btn" id="close-settings" type="button" aria-label="Cerrar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <div class="drawer-body">
+    <section class="set">
+      <h3>Buzones</h3>
+      <p class="hint">Cada buzón necesita su propia <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">contraseña de aplicación</a> de Google. Se guarda solo en el archivo .env de esta computadora.</p>
+      <div class="mb-list" id="mb-list"></div>
+      <form id="mb-form" autocomplete="off">
+        <div class="field"><label for="mb-email">Correo</label><input class="input" id="mb-email" type="email" placeholder="ventas@dindustrimex.com" required></div>
+        <div class="row-2">
+          <div class="field"><label for="mb-pass">Contraseña de aplicación</label><input class="input" id="mb-pass" type="password" placeholder="xxxx xxxx xxxx xxxx" autocomplete="new-password" required></div>
+          <div class="field"><label for="mb-host">Servidor</label><input class="input" id="mb-host" placeholder="Automático"></div>
+        </div>
+        <button class="btn btn-primary" id="mb-save" type="submit">Probar y guardar</button>
+      </form>
+      <div class="msg" id="mb-msg" hidden></div>
+    </section>
+
+    <section class="set">
+      <h3>Escaneo automático</h3>
+      <p class="hint">Busca correos nuevos todos los días a la misma hora, aunque el dashboard esté cerrado. Si la Mac está dormida, corre al despertar.</p>
+      <label class="switch"><input type="checkbox" id="sch-on"> Escanear todos los días a las</label>
+      <div class="actions-row"><input class="input" id="sch-time" type="time" value="08:00" style="width:130px"><button class="btn btn-outline" id="sch-save" type="button">Guardar</button></div>
+      <div class="msg" id="sch-msg" hidden></div>
+    </section>
+
+    <section class="set">
+      <h3>Google Sheets</h3>
+      <p class="hint" id="sh-status">Manda los contactos a una hoja de cálculo después de cada escaneo.</p>
+      <div id="sh-setup">
+        <ol class="steps">
+          <li>Crea o abre la hoja en Google Sheets y ve a Extensiones ▸ Apps Script.</li>
+          <li>Borra lo que haya, pega el script y guarda.</li>
+          <li>Implementar ▸ Nueva implementación ▸ App web. Ejecutar como: tú. Acceso: cualquier usuario.</li>
+          <li>Copia la URL de la app web (termina en /exec) y pégala aquí.</li>
+        </ol>
+        <div class="actions-row" style="margin-bottom:10px"><button class="btn btn-outline" id="sh-script-btn" type="button">Copiar script</button></div>
+        <textarea class="input" id="sh-script" readonly hidden></textarea>
+        <div class="field" style="margin-top:10px"><label for="sh-url">URL de la app web</label><input class="input" id="sh-url" placeholder="https://script.google.com/macros/s/…/exec"></div>
+      </div>
+      <div class="actions-row"><button class="btn btn-primary" id="sh-push" type="button">Enviar ahora</button></div>
+      <div class="msg" id="sh-msg" hidden></div>
+    </section>
+  </div>
+</aside>
 <script>
 (() => {
   const POLL_MS = 3000, PAGE = 300;
@@ -597,7 +692,7 @@
       return `<button type="button" class="rc${c.email === openEmail ? " active" : ""}" data-email="${esc(c.email)}">
         <span class="k">Último correo · ${esc(shortDate(c.last_seen))}</span>
         <span class="n">${esc(c.name || c.email)}</span>
-        <span class="c">${esc(c.company || c.email)}</span>
+        <span class="c">${esc(c.company || c.email)}${c.location ? " · " + esc(c.location) : ""}</span>
         <span class="p num">${ph ? esc(ph[1]) : '<span class="muted">Sin teléfono</span>'}</span>
         <span class="avatar">${esc(initials(c))}</span>
       </button>`;
@@ -639,7 +734,7 @@
     if (filter === "header" && c.source !== "header") return false;
     const q = query.trim().toLowerCase();
     if (!q) return true;
-    const hay = `${c.name} ${c.company} ${c.title} ${c.email} ${c.other_emails} ${c.websites}`.toLowerCase();
+    const hay = `${c.name} ${c.company} ${c.location || ""} ${c.title} ${c.email} ${c.other_emails} ${c.websites}`.toLowerCase();
     if (hay.includes(q)) return true;
     const digits = q.replace(/\D/g, "");
     return digits.length >= 3 && `${c.mobile_phones}${c.office_phones}${c.fax}`.replace(/\D/g, "").includes(digits);
@@ -685,7 +780,7 @@
         <td><div class="person"><span class="avatar">${esc(initials(c))}</span><div>
           <div class="name">${esc(c.name) || '<span class="muted">Sin nombre</span>'}${c.source.includes("image") ? '<span class="badge">IMAGEN</span>' : ""}</div>
           <div class="sub-email">${esc(c.email)}</div></div></div></td>
-        <td>${esc(c.company) || '<span class="muted">—</span>'}</td>
+        <td>${esc(c.company) || '<span class="muted">—</span>'}${c.location ? `<div class="sub-email">${esc(c.location)}</div>` : ""}</td>
         <td class="col-title">${esc(c.title) || '<span class="muted">—</span>'}</td>
         <td class="phones num">${phoneCell(c)}</td>
         <td class="r num col-msgs">${esc(c.messages)}</td>
@@ -811,6 +906,86 @@
   $("footer-note").addEventListener("click", () => {
     if (activeCompany && contacts.filter(matches).length <= limit) { activeCompany = null; renderCompanies(); renderTable(); return; }
     limit += PAGE; renderTable();
+  });
+
+  /* ---------- Configuración ---------- */
+  const showMsg = (id, text, ok) => { const el = $(id); el.hidden = !text; el.textContent = text || ""; el.className = `msg ${ok ? "ok" : "err"}`; };
+  async function settingsCall(path, body) {
+    const res = await fetch(path, {
+      method: "POST", headers: { "X-Requested-With": "dashboard", "Content-Type": "application/json" },
+      body: JSON.stringify(body || {}),
+    });
+    const data = await res.json().catch(() => ({ ok: false, error: `Error ${res.status}` }));
+    if (data.mailboxes) renderSettings(data);
+    return data;
+  }
+  function renderSettings(cfg) {
+    $("mb-list").innerHTML = (cfg.mailboxes || []).map((m) => `<div class="mb">
+        <span class="e" title="${esc(m.host || "")}">${esc(m.email)}</span>
+        <span class="t${m.has_password ? "" : " bad"}">${m.main ? "Principal" : m.has_password ? "Listo" : "Sin contraseña"}</span>
+        ${m.main ? "" : `<button type="button" data-remove="${esc(m.email)}" title="Quitar ${esc(m.email)}" aria-label="Quitar">×</button>`}
+      </div>`).join("") || '<div class="hint">Todavía no hay buzones.</div>';
+    const sch = cfg.schedule || {};
+    $("sch-on").checked = !!sch.enabled;
+    $("sch-time").value = `${String(sch.hour ?? 8).padStart(2, "0")}:${String(sch.minute ?? 0).padStart(2, "0")}`;
+    ["sch-on", "sch-time", "sch-save"].forEach((id) => { $(id).disabled = !sch.supported; });
+    if (!sch.supported) showMsg("sch-msg", "Disponible en macOS. En esta computadora usa cron (ver README).", false);
+    else if (sch.warning) showMsg("sch-msg", sch.warning, false);
+    const sh = cfg.sheets || {}, last = sh.last || {};
+    $("sh-setup").hidden = !!sh.configured;
+    $("sh-push").textContent = sh.configured ? "Enviar ahora" : "Conectar y enviar";
+    $("sh-status").textContent = sh.configured
+      ? (last.ok ? `Conectada. Último envío: ${fmt.format(last.rows || 0)} contactos a la pestaña ${last.tab || sh.tab}, ${shortDate(last.at)}.`
+                 : `Conectada a la pestaña ${sh.tab}.${sh.auto ? " Se envía sola al terminar cada escaneo." : ""}`)
+      : "Manda los contactos a una hoja de cálculo después de cada escaneo.";
+    if (last.error && !last.ok) showMsg("sh-msg", `Último envío falló: ${last.error}`, false);
+  }
+  async function openSettings() {
+    $("drawer").hidden = $("scrim").hidden = false;
+    try { renderSettings(await (await fetch("/settings", { cache: "no-store" })).json()); } catch (e) {}
+    $("mb-email").focus();
+  }
+  function closeSettings() { $("drawer").hidden = $("scrim").hidden = true; }
+  $("open-settings").addEventListener("click", openSettings);
+  $("close-settings").addEventListener("click", closeSettings);
+  $("scrim").addEventListener("click", closeSettings);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("drawer").hidden) closeSettings(); });
+  $("mb-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = $("mb-save"); btn.disabled = true; btn.textContent = "Probando conexión…"; showMsg("mb-msg", "");
+    const email = $("mb-email").value.trim();
+    try {
+      const r = await settingsCall("/settings/mailbox", { email, password: $("mb-pass").value, host: $("mb-host").value });
+      if (r.ok) { $("mb-form").reset(); showMsg("mb-msg", `Listo: ${email} se conectó y quedó guardado. Se leerá en el próximo escaneo.`, true); poll(); }
+      else showMsg("mb-msg", r.error, false);
+    } catch (err) { showMsg("mb-msg", "No se pudo guardar.", false); }
+    btn.disabled = false; btn.textContent = "Probar y guardar";
+  });
+  $("mb-list").addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-remove]");
+    if (!b || !confirm(`¿Quitar ${b.dataset.remove}? Sus contactos ya leídos se quedan en el CSV.`)) return;
+    const r = await settingsCall("/settings/mailbox/remove", { email: b.dataset.remove });
+    showMsg("mb-msg", r.ok ? `${b.dataset.remove} ya no se leerá.` : r.error, r.ok);
+  });
+  $("sch-save").addEventListener("click", async () => {
+    const r = await settingsCall("/settings/schedule", { enabled: $("sch-on").checked, time: $("sch-time").value });
+    if (r.ok) showMsg("sch-msg", $("sch-on").checked ? `Listo: se escaneará todos los días a las ${$("sch-time").value}.` : "Escaneo automático apagado.", true);
+    else showMsg("sch-msg", r.error, false);
+  });
+  $("sh-script-btn").addEventListener("click", async () => {
+    const r = await settingsCall("/settings/sheets/script");
+    if (!r.ok) return showMsg("sh-msg", r.error, false);
+    const box = $("sh-script"); box.hidden = false; box.value = r.script; box.select();
+    try { await navigator.clipboard.writeText(r.script); showMsg("sh-msg", "Script copiado. Pégalo en Apps Script.", true); }
+    catch (e) { showMsg("sh-msg", "Selecciona el texto y cópialo con Cmd+C.", true); }
+  });
+  $("sh-push").addEventListener("click", async () => {
+    const btn = $("sh-push"), label = btn.textContent; btn.disabled = true; btn.textContent = "Enviando…"; showMsg("sh-msg", "");
+    try {
+      const r = await settingsCall("/settings/sheets/push", { url: $("sh-url").value });
+      showMsg("sh-msg", r.ok ? `Listo: ${fmt.format(r.result.rows)} contactos en la pestaña ${r.result.tab}.` : r.error, r.ok);
+    } catch (e) { showMsg("sh-msg", "No se pudo enviar.", false); }
+    btn.disabled = false; btn.textContent = label;
   });
 
   poll();

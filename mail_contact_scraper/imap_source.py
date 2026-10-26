@@ -7,8 +7,8 @@ import time
 log = logging.getLogger(__name__)
 
 
-def connect(box):
-    conn = imaplib.IMAP4_SSL(box.imap_host, box.imap_port)
+def connect(box, timeout=60):
+    conn = imaplib.IMAP4_SSL(box.imap_host, box.imap_port, timeout=timeout)
     if box.oauth_token:
         # Gmail / Microsoft 365 OAuth2 (XOAUTH2). Basic auth is disabled on M365.
         auth = f"user={box.email}\x01auth=Bearer {box.oauth_token}\x01\x01"
