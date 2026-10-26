@@ -1,0 +1,29 @@
+CONTACTOS D-INDUSTRIMEX
+Lee los correos de tus buzones y arma la lista de contactos a partir de las firmas.
+
+INSTALAR
+1. Arrastra "Contactos D-Industrimex" a la carpeta Aplicaciones (el atajo de al lado).
+2. Abre Aplicaciones y haz doble clic en la app.
+3. La primera vez, macOS dice que no puede comprobar la app (no está firmada con
+   una cuenta de desarrollador de Apple). Haz clic en "Aceptar" o "Listo", luego ve a
+   Configuración del Sistema > Privacidad y seguridad, baja hasta el mensaje sobre
+   "Contactos D-Industrimex" y haz clic en "Abrir igualmente". Escribe tu contraseña
+   de la Mac si la pide. Esto solo se hace una vez.
+
+USAR
+- Al abrirse aparece un sobre en la barra de menú (arriba a la derecha) y el panel se
+  abre en el navegador. Si cierras la pestaña, haz clic en el sobre > Abrir panel.
+- En el panel, el engrane (Configuración) > Buzones: agrega tu correo y su contraseña
+  de aplicación de Google (https://myaccount.google.com/apppasswords).
+- "Iniciar escaneo" lee los correos. El botón de descarga baja la lista en CSV (Excel).
+- Para cerrar la app: sobre de la barra de menú > Salir.
+
+ACTUALIZACIONES
+La app busca versiones nuevas sola, las descarga y las instala la próxima vez que la
+abras (o al momento con "Actualizar ahora"). La primera vez hay que pegar el token de
+GitHub en Configuración > Actualizaciones.
+
+TUS DATOS
+Tus buzones, contraseñas y contactos se guardan solo en esta Mac, en
+~/Library/Application Support/Contactos D-Industrimex. Borrar o actualizar la app no
+los borra.

@@ -6,3 +6,6 @@ __pycache__/
 venv/
 .pytest_cache/
 *.mbox
+mail_contact_scraper/_build_info.py
+build/
+dist/
