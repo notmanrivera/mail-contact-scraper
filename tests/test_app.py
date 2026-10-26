@@ -168,6 +168,7 @@ def test_bundled_tesseract_goes_first_on_path(tmp_path, monkeypatch):
     (res / "tesseract" / "bin").mkdir(parents=True)
     (res / "tesseract" / "bin" / "tesseract").write_text("")
     monkeypatch.setenv("PATH", "/usr/bin")
+    monkeypatch.setenv("TESSDATA_PREFIX", "")  # so monkeypatch restores what the app sets
     assert app.use_bundled_tesseract(res)
     assert os.environ["PATH"].split(os.pathsep)[0] == str(res / "tesseract" / "bin")
     assert os.environ["TESSDATA_PREFIX"] == str(res / "tesseract" / "tessdata")
