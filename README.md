@@ -1,0 +1,93 @@
+# mail-contact-scraper
+
+Lee todos los correos de un buzón por IMAP, aísla la firma de cada remitente
+(incluidas las firmas pegadas como imagen, vía OCR) y genera un CSV con un
+contacto por persona: nombre, puesto, empresa, teléfonos, correos y sitio web.
+
+*Reads every mail in an IMAP mailbox, isolates each sender's signature (text or
+image via OCR) and writes one CSV row per contact.*
+
+## Qué hace
+
+1. Se conecta por IMAP en **solo lectura** (`BODY.PEEK[]`): no marca nada como leído.
+2. Descarga en bloques de 50 con pausa entre bloques para no ser bloqueado.
+3. Por cada correo:
+   - quita la respuesta citada (`El ... escribió:`, `-----Mensaje original-----`,
+     `De: / Enviado:` de Outlook, `>`, bloques de Gmail/Outlook/Apple Mail);
+   - encuentra la firma: delimitador `-- `, despedida (`Saludos`, `Atentamente`,
+     `Best regards`...), el nombre del remitente o el bloque final con datos de contacto;
+   - descarta avisos de confidencialidad y "Enviado desde mi iPhone";
+   - si la firma tiene imágenes (incrustadas `cid:` o `data:`), les aplica OCR con
+     Tesseract y usa ese texto. Ignora íconos pequeños y fotos grandes;
+   - valida teléfonos con `libphonenumber` (formato E.164, +52 por defecto) y los
+     clasifica en móvil / oficina / fax según la etiqueta (`Cel`, `Tel`, `Fax`...).
+4. Une todo por dirección de correo y escribe `output/contacts.csv`.
+
+El progreso se guarda en `output/messages.jsonl`. Si el proceso se corta, al volver a
+correrlo continúa donde se quedó; correrlo después solo procesa correos nuevos.
+
+## Instalación
+
+```bash
+git clone https://github.com/notmanrivera/mail-contact-scraper
+cd mail-contact-scraper
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env   # y llena IMAP_USER / IMAP_PASSWORD
+```
+
+Tesseract (para firmas en imagen):
+
+- macOS: `brew install tesseract tesseract-lang`
+- Ubuntu/Debian: `sudo apt install tesseract-ocr tesseract-ocr-spa`
+- Windows: instalador de https://github.com/UB-Mannheim/tesseract/wiki (marca "Spanish")
+
+Sin Tesseract el programa funciona igual; solo se salta las firmas en imagen.
+
+## Uso
+
+```bash
+python -m mail_contact_scraper --detect          # muestra qué servidor IMAP detectó
+python -m mail_contact_scraper --list-folders    # lista las carpetas del buzón
+python -m mail_contact_scraper --limit 100       # prueba con 100 correos
+python -m mail_contact_scraper                   # todo el INBOX
+python -m mail_contact_scraper --folders ALL     # todas las carpetas
+python -m mail_contact_scraper --fresh           # empezar de cero
+python -m mail_contact_scraper --local export.mbox carpeta_con_eml/   # sin IMAP
+```
+
+## Contraseña según el proveedor
+
+El servidor se detecta con los registros MX de `dindustrimex.com`. Si la detección
+falla, pon `IMAP_HOST` en `.env`.
+
+| Proveedor | IMAP_HOST | Credencial |
+|---|---|---|
+| Google Workspace / Gmail | `imap.gmail.com` | Activa verificación en 2 pasos y crea una [contraseña de aplicación](https://myaccount.google.com/apppasswords). IMAP debe estar habilitado en la configuración de Gmail. |
+| Microsoft 365 / Outlook | `outlook.office365.com` | Microsoft desactivó la contraseña para IMAP. Se necesita un token OAuth2 en `IMAP_OAUTH_TOKEN` (app registrada en Entra ID con permiso `IMAP.AccessAsUser.All`). |
+| Hosting cPanel / Hostinger / GoDaddy / Zoho | `mail.<dominio>`, `imap.hostinger.com`, `imap.secureserver.net`, `imap.zoho.com` | La contraseña normal del buzón. |
+
+## Columnas del CSV
+
+`email, name, title, company, mobile_phones, office_phones, fax, other_emails,
+websites, source, messages, first_seen, last_seen, sample_signature`
+
+- `source`: `signature` (salió de una firma), `image` (de una firma en imagen vía OCR)
+  o `header` (solo aparece en De/Para/CC).
+- Varios valores van separados por `; `. El archivo usa UTF-8 con BOM para que Excel
+  muestre bien los acentos.
+
+## Pruebas
+
+```bash
+pip install pytest
+pytest
+```
+
+## Notas
+
+- `.env` y `output/` están en `.gitignore`: credenciales y datos personales no se suben.
+- Los datos extraídos son datos personales (LFPDPPP en México): úsalos solo para
+  fines legítimos de la empresa.
+- `OCR_REMOTE_IMAGES=true` descarga imágenes de firma alojadas en internet. Viene
+  apagado porque esas descargas le avisan al remitente que abriste su correo.
