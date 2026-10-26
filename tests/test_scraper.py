@@ -217,11 +217,68 @@ def test_dashboard_data_endpoint(tmp_path, monkeypatch):
     server, url = dashboard.serve(tmp_path, port=8790, open_browser=False)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
-        assert b"Contactos del buz" in urllib.request.urlopen(url).read()
+        assert "Contactos de clientes".encode() in urllib.request.urlopen(url).read()
         data = json.loads(urllib.request.urlopen(url + "data").read())
         assert data["status"]["running"] is False
         assert len(data["contacts"]) == 4
         again = json.loads(urllib.request.urlopen(f"{url}data?since={data['version']}").read())
         assert "contacts" not in again  # unchanged CSV is not resent
+    finally:
+        server.shutdown()
+
+
+def test_own_domain_contacts_are_excluded(tmp_path, monkeypatch):
+    from mail_contact_scraper.config import load_settings
+
+    monkeypatch.setenv("IMAP_USER", "pedro@dindustrimex.com")
+    monkeypatch.delenv("EXCLUDE_DOMAINS", raising=False)
+    assert load_settings(env_file="missing.env").exclude_domains == ["dindustrimex.com"]
+    coworker = (FIXTURES / "05_repeat_laura.eml").read_bytes().replace(
+        b"lmartinez@aceroslaguna.com.mx", b"ventas@mx.dindustrimex.com")
+    (tmp_path / "in").mkdir()
+    (tmp_path / "in" / "coworker.eml").write_bytes(coworker)
+    (tmp_path / "in" / "laura.eml").write_bytes((FIXTURES / "01_plain_es.eml").read_bytes())
+    cli.main(["--local", str(tmp_path / "in"), "--output", str(tmp_path / "out"), "--no-ocr"])
+    rows = list(csv.DictReader(open(tmp_path / "out" / "contacts.csv", encoding="utf-8-sig")))
+    emails = {r["email"] for r in rows}
+    assert not any("dindustrimex.com" in e for e in emails)
+    assert "lmartinez@aceroslaguna.com.mx" in emails
+
+    monkeypatch.setenv("EXCLUDE_DOMAINS", "none")
+    assert load_settings(env_file="missing.env").exclude_domains == []
+
+
+def test_dashboard_start_button_runs_scraper(tmp_path, monkeypatch):
+    import json
+    import threading
+    import time
+    import urllib.error
+    import urllib.request
+
+    from mail_contact_scraper import dashboard
+
+    monkeypatch.setenv("IMAP_USER", "pedro@dindustrimex.com")
+    control = dashboard.ScraperControl(tmp_path, ["--local", str(FIXTURES), "--no-ocr", "--fresh"])
+    assert "--fresh" not in control.scrape_args  # the button resumes, never wipes
+    control.scrape_args = control.first_args
+    server, url = dashboard.serve(tmp_path, port=8800, open_browser=False, control=control)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        # Without the custom header (e.g. a form on another website) the button is refused.
+        try:
+            urllib.request.urlopen(urllib.request.Request(url + "start", method="POST"))
+            raise AssertionError("expected 403")
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 403
+        req = urllib.request.Request(url + "start", method="POST", headers={"X-Requested-With": "dashboard"})
+        assert json.loads(urllib.request.urlopen(req).read())["ok"] is True
+        control.proc.wait(timeout=60)
+        for _ in range(20):
+            data = json.loads(urllib.request.urlopen(url + "data").read())
+            if not data["control"]["alive"]:
+                break
+            time.sleep(0.2)
+        assert data["status"]["running"] is False
+        assert len(data["contacts"]) == 4
     finally:
         server.shutdown()

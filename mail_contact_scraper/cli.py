@@ -4,6 +4,7 @@ import json
 import logging
 import mailbox
 import os
+import signal
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -84,6 +85,7 @@ def write_outputs(records, settings, out_dir, status, running=True):
     book = ContactBook(
         exclude=[settings.email] if settings.exclude_self else [],
         skip_automated=settings.skip_automated,
+        exclude_domains=settings.exclude_domains,
     )
     for rec in records:
         book.add_sender(rec)
@@ -119,7 +121,16 @@ def build_parser():
 
 
 def main(argv=None):
+    argv = sys.argv[1:] if argv is None else list(argv)
     args = build_parser().parse_args(argv)
+    if args.dashboard:
+        # The dashboard owns the scraper as a child process, so Start/Stop work from the page
+        # and the page stays up after the run ends.
+        from .dashboard import main as dashboard_main
+        dash_args = ["--autostart", "--"] + _passthrough(argv)
+        if args.output:
+            dash_args = ["--output", args.output] + dash_args
+        return dashboard_main(dash_args)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO, format="%(message)s")
     settings = load_settings()
     if args.output:
@@ -150,11 +161,8 @@ def main(argv=None):
         ocr = SignatureOCR(settings.ocr_lang, settings.ocr_remote_images)
 
     status = {"started_at": datetime.now().isoformat(timespec="seconds"), "mailbox": settings.email,
-              "folder": "", "folder_total": 0, "folder_pending": 0, "new_messages": 0}
+              "pid": os.getpid(), "folder": "", "folder_total": 0, "folder_pending": 0, "new_messages": 0}
     write_outputs(records, settings, out_dir, status)
-    if args.dashboard:
-        from .dashboard import start_in_background
-        start_in_background(out_dir)
 
     def on_folder(folder, total, pending):
         status.update(folder=folder, folder_total=total, folder_pending=pending, folder_done=0)
@@ -222,11 +230,23 @@ def main(argv=None):
     count = write_outputs(records, settings, out_dir, status, running=False)
     log.info("Processed %d new messages (%d total). Wrote %d contacts to %s",
              new, len(records), count, out_dir / "contacts.csv")
-    if args.dashboard:
-        from .dashboard import wait_forever
-        wait_forever()
     return 0
 
 
+def _passthrough(argv):
+    """Arguments to forward from `--dashboard` to the scraper the dashboard launches."""
+    return [a for a in argv if a != "--dashboard"]
+
+
+def run():
+    # A parent started from a background shell may hand us SIGINT ignored; the dashboard's
+    # Stop button relies on it, so always restore Python's Ctrl+C behaviour.
+    signal.signal(signal.SIGINT, signal.default_int_handler)
+    try:
+        return main()
+    except KeyboardInterrupt:
+        return 130
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(run())
