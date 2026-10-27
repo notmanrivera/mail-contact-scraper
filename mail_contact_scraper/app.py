@@ -118,7 +118,8 @@ def run_app(folder):
 
     out_dir = load_settings().output_dir
     control = dashboard.ScraperControl(out_dir)
-    server, url = dashboard.serve(out_dir, open_browser=not os.environ.get("CONTACTOS_NO_BROWSER"), control=control, updater=updater)
+    server, url = dashboard.serve(out_dir, port=int(os.environ.get("CONTACTOS_PORT") or dashboard.DEFAULT_PORT),
+                                  open_browser=not os.environ.get("CONTACTOS_NO_BROWSER"), control=control, updater=updater)
     threading.Thread(target=server.serve_forever, daemon=True, name="dashboard").start()
 
     def shutdown(install_update=False):
