@@ -150,3 +150,104 @@ def test_bounced_contacts_get_no_mailing(tmp_path):
     people, skipped = build(CAMPAIGN, contacts, tmp_path / "out")
     assert [p["email"] for p in people] == ["a@x.com"]
     assert skipped["bounced"] == 1
+
+
+class FakeSMTP:
+    def __init__(self, refuse=(), fail_after=None):
+        self.sent, self.refuse, self.fail_after = [], set(refuse), fail_after
+
+    def send_message(self, msg):
+        import smtplib
+        to = msg["To"].split("<")[-1].rstrip(">")
+        if to in self.refuse:
+            raise smtplib.SMTPRecipientsRefused({to: (550, b"no such user")})
+        if self.fail_after is not None and len(self.sent) >= self.fail_after:
+            raise smtplib.SMTPDataError(550, b"Daily user sending limit exceeded")
+        self.sent.append(msg)
+
+    def quit(self):
+        pass
+
+
+def _send(tmp_path, smtp, **kw):
+    from mailing.send import send_campaign
+    contacts = tmp_path / "contacts.csv"
+    if not contacts.exists():
+        write_contacts(contacts, [{"email": f"p{i}@cliente.mx", "name": f"Persona{i} X", "source": "signature"}
+                                  for i in range(5)])
+    return send_campaign(CAMPAIGN, contacts, tmp_path / "mailing" / "qc-aro", smtp_connect=lambda: smtp,
+                         sleep=lambda s: None, say=lambda *a: None,
+                         suppression_path=tmp_path / "suppression.txt", **kw)
+
+
+def test_send_dry_run_sends_nothing(tmp_path):
+    smtp = FakeSMTP()
+    plan = _send(tmp_path, smtp)
+    assert plan["pending"] == 5 and plan["this_run"] == 5 and smtp.sent == []
+
+
+def test_send_logs_and_never_repeats(tmp_path):
+    from mailing.send import read_log
+    smtp = FakeSMTP()
+    first = _send(tmp_path, smtp, send=True, limit=3)
+    assert first["sent"] == 3
+    msg = smtp.sent[0]
+    assert msg["From"] == "Pedro Marquina <pedro@dindustrimex.com>" and "X-Unsent" not in msg
+    assert msg["List-Unsubscribe"].startswith("<mailto:ventas@dindustrimex.com")
+    assert "Hola Persona0," in msg.get_body(("html",)).get_content()
+    second = _send(tmp_path, smtp, send=True, limit=10)
+    assert second["sent"] == 2 and second["already_sent"] == 3
+    assert len({m["To"] for m in smtp.sent}) == 5
+    assert len(read_log(tmp_path / "mailing" / "qc-aro" / "envios.csv")) == 5
+
+
+def test_send_respects_daily_limit_across_runs(tmp_path):
+    smtp = FakeSMTP()
+    _send(tmp_path, smtp, send=True, daily_limit=2)
+    again = _send(tmp_path, smtp, send=True, daily_limit=2)
+    assert len(smtp.sent) == 2 and again["this_run"] == 0
+
+
+def test_rejected_go_to_suppression_and_limit_stops(tmp_path):
+    from mailing.send import read_suppression
+    smtp = FakeSMTP(refuse={"p1@cliente.mx"}, fail_after=2)
+    result = _send(tmp_path, smtp, send=True)
+    assert result["rejected"] == ["p1@cliente.mx"] and result["sent"] == 2
+    assert "no acepta" in result["stopped"]
+    assert "p1@cliente.mx" in read_suppression(tmp_path / "suppression.txt")
+
+
+def test_test_send_goes_only_to_tester(tmp_path):
+    smtp = FakeSMTP()
+    result = _send(tmp_path, smtp, test_to="ruben@ejemplo.com")
+    assert result["sent"] == 1 and smtp.sent[0]["To"] == "ruben@ejemplo.com"
+    assert smtp.sent[0]["Subject"].startswith("[PRUEBA] ")
+    assert not (tmp_path / "mailing" / "qc-aro" / "envios.csv").exists()
+
+
+def test_sync_suppression_reads_unsubscribes_and_bounces(tmp_path):
+    from mailing.send import read_suppression, sync_suppression
+    unsub = (b"From: Ana <ana@cliente.mx>\r\nSubject: Baja de correos\r\nContent-Type: text/plain\r\n\r\n"
+             b"ana.vieja@cliente.mx\r\n")
+    bounce = (b"From: Mail Delivery Subsystem <mailer-daemon@googlemail.com>\r\nX-Failed-Recipients: nadie@cliente.mx\r\n"
+              b"Subject: Delivery Status Notification (Failure)\r\n\r\nNo existe\r\n")
+
+    class FakeIMAP:
+        def select(self, *a, **k):
+            return "OK", [b"2"]
+
+        def uid(self, cmd, *args):
+            if cmd == "SEARCH":
+                crit = args[-1]
+                return "OK", [b"1" if "Baja" in crit else b"2" if "mailer-daemon" in crit else b""]
+            return "OK", [(b"1 (BODY[] {10}", unsub if args[0] == b"1" else bounce)]
+
+        def logout(self):
+            pass
+
+    supp = tmp_path / "suppression.txt"
+    unsubscribed, bounced = sync_suppression([object()], supp, lambda box: FakeIMAP(),
+                                             own_domains=["dindustrimex.com"])
+    assert set(unsubscribed) == {"ana@cliente.mx", "ana.vieja@cliente.mx"} and bounced == ["nadie@cliente.mx"]
+    assert read_suppression(supp) == {"ana@cliente.mx", "ana.vieja@cliente.mx", "nadie@cliente.mx"}
+    assert sync_suppression([object()], supp, lambda box: FakeIMAP()) == ([], [])

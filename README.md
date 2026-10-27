@@ -295,7 +295,27 @@ estén en `output/suppression.txt` (uno por línea; ahí van las bajas).
   recursos, ya optimizadas). Con `base_url` vacío van **incrustadas** en el correo: la macro
   las adjunta desde la carpeta `imagenes/` que se genera junto al Excel, y los `.eml` ya las
   traen. Para Brevo/Mailchimp súbelas a un servidor y pon esa carpeta en `[assets] base_url`.
-- **Envío con YAMM (Google Sheets + Gmail), lo que usa el equipo:**
+- **Envío propio desde el buzón (gratis, sin YAMM):** usa el mismo buzón y contraseña de
+  aplicación que el scraper (`IMAP_USER` en `.env`, el del `sender` de la campaña) por SMTP,
+  así que cada correo sale de pedro@ y queda en sus Enviados.
+  ```bash
+  python -m mailing.send                        # cuántos faltan, no envía nada
+  python -m mailing.send --test tu@correo.com   # una prueba con asunto [PRUEBA]
+  python -m mailing.send --send                 # envía; pide escribir ENVIAR
+  python -m mailing.send --bajas                # solo revisa bajas y rebotes
+  ```
+  - Cada envío queda en `output/mailing/<campaña>/envios.csv` (fecha, correo, estado). Al
+    volver a correrlo sigue con los pendientes y nunca repite a nadie.
+  - Límites: 200 por corrida (`--limit`) y 500 al día sumando campañas (`--daily-limit`), con
+    ~8 s entre correos (`--pause`). Google Workspace permite 2,000 al día por usuario; empieza
+    con 100–200 diarios unos días para no caer en spam. Si Google frena el envío, se detiene
+    solo y lo deja anotado.
+  - Antes de cada envío lee la bandeja (sin marcar nada como leído): quien respondió con asunto
+    "Baja de correos" (la liga de baja del correo lo arma así) y los rebotes de mailer-daemon
+    pasan a `output/suppression.txt`. Para que vea las bajas que llegan a ventas@, agrega ese
+    buzón como `IMAP_USER_2`. Los rechazados por el servidor también se agregan.
+  - Otro servidor de salida: `SMTP_HOST` y `SMTP_PORT` en `.env` (por defecto se deduce del IMAP).
+- **Envío con YAMM (Google Sheets + Gmail), alternativa de pago:**
   1. Sube las imágenes de `mailing/assets/<campaña>/` al Media Manager de Wix
      (dindustrimex.com), copia la URL de cada una y pégalas en `[assets.urls]` de la campaña.
   2. `python -m mailing --esp yamm` → `template-yamm.html` y `audience-yamm.csv`.

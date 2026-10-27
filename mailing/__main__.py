@@ -10,7 +10,7 @@ HERE = Path(__file__).parent
 def main(argv=None):
     ap = argparse.ArgumentParser(
         prog="python -m mailing",
-        description="Genera el mailing D-Industrimex personalizado para cada prospecto. No envía nada.")
+        description="Genera el mailing D-Industrimex personalizado para cada prospecto. No envía nada (para enviar: python -m mailing.send).")
     ap.add_argument("campaign", nargs="?", default=HERE / "campaigns" / "qc-aro.toml",
                     help="archivo .toml de la campaña (default: qc-aro)")
     ap.add_argument("--contacts", default="output/contacts.csv", help="CSV del scraper")
