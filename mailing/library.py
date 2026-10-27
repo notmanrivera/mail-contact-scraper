@@ -147,9 +147,16 @@ def _add_kept(folder, toml):
     if info.get("origin") != f"{toml.stem}.toml":
         return
     c = load_campaign(toml)
-    missing = {k: c[k] for k in KEEP if k in c and k not in info}
-    if missing:
-        _write_json(info_path, {**info, **missing})
+    changed = dict(info)
+    for k in KEEP:
+        if k not in c:
+            continue
+        if k not in info:
+            changed[k] = c[k]
+        elif isinstance(c[k], dict) and isinstance(info[k], dict):  # a setting added later (the firma)
+            changed[k] = {**{x: v for x, v in c[k].items() if x not in info[k]}, **info[k]}
+    if changed != info:
+        _write_json(info_path, changed)
 
 
 def _seed(folder, c):
@@ -260,6 +267,22 @@ def _new_slug(out_dir, name):
     return slug
 
 
+def _clean_followup(value):
+    """The follow-up from the app: days, the text (paragraphs split by a blank line) and the
+    lines that close it. An empty text turns the follow-up off for this campaign."""
+    value = value if isinstance(value, dict) else {}
+    try:
+        days = int(value.get("days") or 5)
+    except (TypeError, ValueError):
+        raise ValueError("Los días del seguimiento tienen que ser un número.") from None
+    if not 1 <= days <= 60:
+        raise ValueError("El seguimiento sale entre 1 y 60 días después del primer correo.")
+    text = str(value.get("body") or "").replace("\r\n", "\n")[:5000]
+    body = [" ".join(p.split()) for p in re.split(r"\n\s*\n", text) if p.strip()]
+    firma = [l.strip() for l in str(value.get("firma") or "").splitlines() if l.strip()][:6]
+    return {"days": days, "body": body, "firma": firma}
+
+
 def _clean_sender(sender, fallback=None):
     sender = sender if isinstance(sender, dict) else {}
     out = dict(fallback or DEFAULT_SENDER)
@@ -309,6 +332,8 @@ def save(out_dir, slug, body):
         info["subject"] = subject[:250]
     if "sender" in body:
         info["sender"] = _clean_sender(body.get("sender"), {**DEFAULT_SENDER, **(info.get("sender") or {})})
+    if "followup" in body:
+        info["followup"] = _clean_followup(body.get("followup"))
     if "html" in body:
         html = str(body.get("html") or "")
         if not html.strip():

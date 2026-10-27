@@ -100,6 +100,7 @@ reason = "Recibes este correo porque has tenido contacto con D-Industrimex."
 # solo a quien no contestó. {{Saludo}} no hace falta: el saludo va solo al principio.
 [followup]
 days = 5
+firma = ["Pedro Marquina", "Director de Ventas · D-Industrimex"]
 body = [
   "Te escribí hace unos días sobre las bombas sanitarias Q-Pumps Serie QC y las de doble diafragma ARO. Sé que entre tantos correos se pierde fácil, por eso te escribo otra vez.",
   "Si tienes un proyecto o una bomba que te está dando lata, mándame el fluido, el caudal y la presión, y te respondo con la opción exacta. También puedes escribirnos por WhatsApp al 442 499 8283.",

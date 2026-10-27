@@ -317,6 +317,17 @@ def suppression_counts(path):
 
 # --- sending -------------------------------------------------------------------------
 
+def followup_signature(campaign, sender):
+    """Lines that close the follow-up: its own 'firma' when it has one, else the sender's name
+    and the campaign's signature title."""
+    f = campaign.get("followup") or {}
+    if "firma" in f:
+        lines = f["firma"] if isinstance(f["firma"], list) else str(f["firma"]).splitlines()
+        return [l.strip() for l in lines if l.strip()]
+    sig = campaign.get("signature", {})
+    return [x for x in (sender.get("name") or sig.get("name", ""), sig.get("title", "")) if x]
+
+
 def make_followup(campaign, person, original_id, sender):
     """The follow-up: a short note answering the first message, in the same thread."""
     from .build import plain
@@ -326,8 +337,7 @@ def make_followup(campaign, person, original_id, sender):
     if isinstance(paragraphs, str):
         paragraphs = [paragraphs]
     paragraphs = [p.replace("{{Saludo}}", person["greeting"]) for p in paragraphs]
-    sig = campaign.get("signature", {})
-    signature = [sender.get("name") or sig.get("name", ""), sig.get("title", "")]
+    signature = followup_signature(campaign, sender)
     unsub = unsubscribe_mailto(campaign, person["email"])
     text = "\n\n".join([person["greeting"], *paragraphs]) + "\n\n" + "\n".join(filter(None, signature))
     text += f"\n\nPara no recibir más correos: {unsub}\n"
