@@ -219,6 +219,32 @@ open dist/
 
 `python -m mail_contact_scraper.app` corre lo mismo desde el código, sin el ícono de la barra.
 
+## Firmas en imagen
+
+Las firmas pegadas como imagen se leen con Tesseract en la misma computadora. Para
+cada imagen se hacen dos lecturas (texto suelto y por renglones), se descartan las
+palabras de las que Tesseract no está seguro y los pedazos de íconos, y se juntan
+los renglones sin repetir. El texto claro sobre fondo oscuro se invierte antes de leerlo.
+
+Para las difíciles, como texto blanco sobre la foto de un camión, puedes usar Claude
+(Configuración ▸ Firmas en imagen, o en `.env`):
+
+```
+OCR_ENGINE=auto            # Claude solo cuando Tesseract duda; "claude" para todas
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+- Viene apagado porque manda la imagen de la firma a Anthropic.
+- Cada imagen nueva cuesta de 1 a 2 centavos de dólar con `claude-opus-5-5`
+  (`OCR_CLAUDE_MODEL` cambia el modelo). Las respuestas se guardan en
+  `output/ocr_claude.json`, así que la misma imagen no se paga dos veces.
+- Si Claude falla (sin internet, sin saldo), se queda lo que leyó Tesseract.
+
+Los correos que ya se leyeron guardan el texto de la lectura anterior. Para aplicar
+las mejoras a esos, usa **Releer firmas en imagen** en Configuración, o
+`python -m mail_contact_scraper --reocr`: vuelve a bajar solo los correos cuya firma
+era imagen.
+
 ## Contraseña según el proveedor
 
 El servidor se detecta con los registros MX de `dindustrimex.com`. Si la detección

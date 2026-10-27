@@ -74,6 +74,28 @@ def _load_done(jsonl_path, primary=""):
     return done, records
 
 
+def _forget_image_signatures(jsonl_path):
+    """Drop records whose signature came from an image, so the scan fetches them again."""
+    if not jsonl_path.exists():
+        return 0
+    kept, dropped = [], 0
+    with open(jsonl_path, encoding="utf-8") as fh:
+        for line in fh:
+            try:
+                image = json.loads(line).get("signature_from_image")
+            except (json.JSONDecodeError, AttributeError):
+                image = False
+            if image:
+                dropped += 1
+            else:
+                kept.append(line)
+    tmp = jsonl_path.with_suffix(".tmp")
+    tmp.write_text("".join(kept), encoding="utf-8")
+    os.replace(tmp, jsonl_path)
+    log.info("Se volverán a leer %d correos con firma en imagen.", dropped)
+    return dropped
+
+
 def iter_local(paths):
     """Yield (source, raw_bytes) from .eml files, directories of them, or .mbox files."""
     for path in map(Path, paths):
@@ -150,6 +172,8 @@ def build_parser():
     p.add_argument("--output", help="Output directory (default: OUTPUT_DIR or ./output)")
     p.add_argument("--fresh", action="store_true", help="Ignore previous progress and start over")
     p.add_argument("--no-ocr", action="store_true", help="Skip OCR of image signatures")
+    p.add_argument("--reocr", action="store_true",
+                   help="Read again the messages whose signature was an image (after improving OCR)")
     p.add_argument("--dashboard", action="store_true", help="Open the live dashboard while scraping")
     p.add_argument("--limit", type=int, help="Stop after N new messages (handy for a test run)")
     p.add_argument("-v", "--verbose", action="store_true")
@@ -201,10 +225,15 @@ def main(argv=None):
             print("\n".join(b.imap_host if len(boxes) == 1 else f"{b.email}: {b.imap_host}" for b in boxes))
             return 0
 
+    if args.reocr:  # only now that the scan can start, so a bad .env never loses records
+        _forget_image_signatures(jsonl_path)
+        done, records = _load_done(jsonl_path, settings.mailboxes[0].email if settings.mailboxes else "")
+
     ocr = None
     if settings.ocr_images:
         from .ocr import SignatureOCR
-        ocr = SignatureOCR(settings.ocr_lang, settings.ocr_remote_images)
+        from .vision import from_settings
+        ocr = SignatureOCR(settings.ocr_lang, settings.ocr_remote_images, from_settings(settings, out_dir))
 
     local_box = wanted[0] if args.local and len(wanted) == 1 else ""
     status = {"started_at": datetime.now().isoformat(timespec="seconds"),

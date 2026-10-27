@@ -532,6 +532,20 @@
       <div class="msg" id="sh-msg" hidden></div>
     </section>
 
+    <section class="set">
+      <h3>Firmas en imagen</h3>
+      <p class="hint">Tesseract lee las firmas pegadas como imagen aquí mismo, sin mandarlas a ningún lado. Para las difíciles, como texto blanco sobre una foto, puedes pedirle ayuda a Claude: esas imágenes se envían a Anthropic y cada imagen nueva cuesta de 1 a 2 centavos de dólar. Consigue la clave en <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>.</p>
+      <div class="field"><label for="ocr-engine">Cómo leerlas</label>
+        <select class="input" id="ocr-engine">
+          <option value="tesseract">Solo Tesseract, en esta computadora</option>
+          <option value="auto">Tesseract, y Claude cuando no esté seguro</option>
+          <option value="claude">Siempre con Claude</option>
+        </select></div>
+      <div class="field" id="ocr-key-field"><label for="ocr-key">Clave de API de Anthropic</label><input class="input" id="ocr-key" type="password" placeholder="sk-ant-…" autocomplete="off"></div>
+      <div class="actions-row"><button class="btn btn-primary" id="ocr-save" type="button">Guardar</button><button class="btn btn-outline" id="ocr-reread" type="button">Releer firmas en imagen</button></div>
+      <div class="msg" id="ocr-msg" hidden></div>
+    </section>
+
     <section class="set" id="up-section" hidden>
       <h3>Actualizaciones</h3>
       <p class="hint" id="up-status">La app busca versiones nuevas sola y las instala al volver a abrirla.</p>
@@ -1063,6 +1077,11 @@
                  : `Conectada a la pestaña ${sh.tab}.${sh.auto ? " Se envía sola al terminar cada escaneo." : ""}`)
       : "Manda los contactos a una hoja de cálculo después de cada escaneo.";
     if (last.error && !last.ok) showMsg("sh-msg", `Último envío falló: ${last.error}`, false);
+    const oc = cfg.ocr || {};
+    $("ocr-engine").value = oc.engine || "tesseract";
+    $("ocr-key").placeholder = oc.has_key ? "Guardada (escribe otra para cambiarla)" : "sk-ant-…";
+    $("ocr-engine").querySelectorAll("option:not([value=tesseract])").forEach((o) => { o.disabled = oc.available === false; });
+    if (oc.available === false) showMsg("ocr-msg", "Para usar Claude falta instalar el paquete anthropic (pip install anthropic).", false);
   }
   async function openSettings() {
     $("drawer").hidden = $("scrim").hidden = false;
@@ -1124,6 +1143,21 @@
       showMsg("sh-msg", r.ok ? `Listo: ${fmt.format(r.result.rows)} contactos en la pestaña ${r.result.tab}.` : r.error, r.ok);
     } catch (e) { showMsg("sh-msg", "No se pudo enviar.", false); }
     btn.disabled = false; btn.textContent = label;
+  });
+
+  $("ocr-save").addEventListener("click", async () => {
+    const engine = $("ocr-engine").value;
+    const r = await settingsCall("/settings/ocr", { engine, api_key: $("ocr-key").value });
+    if (r.ok) $("ocr-key").value = "";
+    else $("ocr-engine").value = engine;  // keep the choice on screen so they can add the key
+    showMsg("ocr-msg", r.ok ? ({ tesseract: "Listo: solo Tesseract.", auto: "Listo: Claude leerá las firmas que Tesseract no entienda.",
+                                 claude: "Listo: Claude leerá todas las firmas en imagen." })[engine] : r.error, r.ok);
+  });
+  $("ocr-reread").addEventListener("click", async () => {
+    const res = await fetch("/reocr", { method: "POST", headers: { "X-Requested-With": "dashboard" } });
+    showMsg("ocr-msg", res.ok ? "Volviendo a leer los correos con firma en imagen. Verás el avance arriba."
+                              : "Ya hay un escaneo corriendo. Inténtalo cuando termine.", res.ok);
+    if (res.ok) poll();
   });
 
   /* ---------- Actualizaciones (solo en la app de Mac) ---------- */

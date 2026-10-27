@@ -6,6 +6,7 @@
 Serves on 127.0.0.1 only, so the contact data never leaves this computer.
 """
 import argparse
+import importlib.util
 import csv
 import json
 import logging
@@ -80,11 +81,11 @@ class ScraperControl:
             return True
         return bool(status.get("running")) and _pid_alive(status.get("pid"))
 
-    def start(self, first=False):
+    def start(self, first=False, extra=()):
         with self.lock:
             if self.alive(_read_json(self.out_dir / "status.json")):
                 return False
-            args = self.first_args if first else self.scrape_args
+            args = (self.first_args if first else self.scrape_args) + list(extra)
             if "--output" not in args:
                 args = ["--output", str(self.out_dir)] + args
             self.out_dir.mkdir(parents=True, exist_ok=True)
@@ -140,7 +141,36 @@ def settings_payload(out_dir, env_path):
         "schedule": schedule.status(),
         "sheets": {"configured": bool(cfg["url"] and cfg["token"]), "tab": cfg["tab"], "auto": cfg["auto"],
                    "last": sheets.last_sync(out_dir)},
+        "ocr": _ocr_settings(env_path),
     }
+
+
+OCR_ENGINES = ("tesseract", "auto", "claude")
+
+
+def _ocr_settings(env_path):
+    from . import envfile
+
+    values = envfile.read(env_path)
+    engine = (values.get("OCR_ENGINE") or "tesseract").lower()
+    installed = importlib.util.find_spec("anthropic") is not None  # importing it takes ~1 s
+    # Never send the key back to the page; only whether there is one.
+    return {"engine": engine if engine in OCR_ENGINES else "tesseract",
+            "has_key": bool(values.get("ANTHROPIC_API_KEY")), "available": installed}
+
+
+def _save_ocr(env_path, body):
+    from . import envfile
+
+    engine = (body.get("engine") or "").lower()
+    if engine not in OCR_ENGINES:
+        raise ValueError("Elige cómo leer las firmas en imagen.")
+    key = (body.get("api_key") or "").strip()
+    if key and not key.startswith("sk-ant-"):
+        raise ValueError("La clave de Anthropic empieza con sk-ant-.")
+    if engine != "tesseract" and not key and not envfile.read(env_path).get("ANTHROPIC_API_KEY"):
+        raise ValueError("Para usar Claude pega tu clave de API de Anthropic.")
+    envfile.update(env_path, {"OCR_ENGINE": engine, **({"ANTHROPIC_API_KEY": key} if key else {})})
 
 
 def settings_action(path, body, out_dir, env_path, control=None):
@@ -173,6 +203,8 @@ def settings_action(path, body, out_dir, env_path, control=None):
                 schedule.install(int(hour), int(minute or 0), str(Path(out_dir).resolve()))
             else:
                 schedule.uninstall()
+        elif path == "/settings/ocr":
+            _save_ocr(env_path, body)
         elif path == "/settings/sheets/script":
             return 200, {"ok": True, "script": sheets.script(sheets.ensure_token(env_path))}
         elif path == "/settings/sheets/push":
@@ -264,6 +296,9 @@ def make_handler(out_dir, control, env_path=".env", updater=None):
                 return self._send(b"forbidden", "text/plain", 403)
             if self.path == "/start":
                 started = control.start()
+                self._json({"ok": started}, 200 if started else 409)
+            elif self.path == "/reocr":
+                started = control.start(extra=["--reocr"])
                 self._json({"ok": started}, 200 if started else 409)
             elif self.path == "/stop":
                 stopped = control.stop()

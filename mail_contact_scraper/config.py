@@ -43,6 +43,9 @@ class Settings:
     ocr_images: bool = True
     ocr_remote_images: bool = False
     ocr_lang: str = "spa+eng"
+    ocr_engine: str = "tesseract"       # tesseract | auto (Claude when unsure) | claude
+    anthropic_api_key: str = ""
+    ocr_claude_model: str = ""
     output_dir: str = "output"
     mailboxes: list = field(default_factory=list)
 
@@ -102,6 +105,9 @@ def load_settings(env_file=".env", base=None):
         ocr_images=_bool(env("OCR_IMAGES"), True),
         ocr_remote_images=_bool(env("OCR_REMOTE_IMAGES"), False),
         ocr_lang=env("OCR_LANG", "spa+eng"),
+        ocr_engine=(env("OCR_ENGINE", "") or "tesseract").strip().lower(),
+        anthropic_api_key=env("ANTHROPIC_API_KEY", ""),
+        ocr_claude_model=env("OCR_CLAUDE_MODEL", ""),
         output_dir=env("OUTPUT_DIR", "output"),
         mailboxes=mailboxes,
     )

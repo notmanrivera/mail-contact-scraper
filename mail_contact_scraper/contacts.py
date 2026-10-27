@@ -168,7 +168,7 @@ class ContactBook:
         for e164, label, _raw in info["phones"]:
             row["phones"].setdefault(e164, label or "office")
         for other in info["emails"]:
-            if other != addr and not self._skip(other) and other not in row["other_emails"]:
+            if not same_address(other, addr) and not self._skip(other) and other not in row["other_emails"]:
                 row["other_emails"].append(other)
         for url in info["websites"]:
             if url not in row["websites"]:
@@ -230,6 +230,13 @@ class ContactBook:
             writer.writeheader()
             writer.writerows(rows)
         return len(rows)
+
+
+def same_address(a, b):
+    """Same mailbox even if OCR lost a dot, dash or underscore (malberto@ vs m.alberto@).
+    A different letter is a different person (jgarcia@ vs agarcia@), so that one stays."""
+    (la, _, da), (lb, _, db) = a.partition("@"), b.partition("@")
+    return da == db and re.sub(r"[._-]", "", la) == re.sub(r"[._-]", "", lb)
 
 
 @lru_cache(maxsize=None)
