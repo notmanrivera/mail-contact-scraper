@@ -34,6 +34,56 @@ def service_patterns():
     return tuple((entry, _domain_pattern(entry)) for entry in _read_list(text))
 
 
+@lru_cache(maxsize=1)
+def service_catalog():
+    """Built-in services as (category, entry), using the "# Category" comments of services.txt."""
+    text = resources.files(__package__).joinpath("services.txt").read_text(encoding="utf-8")
+    out, category, started = [], "", False
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            started = True  # the header ends at the first blank line
+        elif line.startswith("#"):
+            if started:
+                category = line.lstrip("# ").strip()
+        else:
+            out.append((category, line.split("#", 1)[0].strip().lower()))
+    return out
+
+
+SERVICES_HEADER = ("# Servicios que agregaste a la lista integrada, uno por línea (nombre.com o nombre.*).\n"
+                   "# Una línea \"-nombre.*\" apaga un servicio de la lista integrada (sí es cliente).\n")
+
+
+def read_services_file(path):
+    """(added, disabled) from the user's servicios.txt."""
+    entries = read_ignore_file(path)
+    return [e for e in entries if not e.startswith("-")], [e[1:] for e in entries if e.startswith("-")]
+
+
+def update_services_file(path, add=None, remove=None, disable=None, enable=None):
+    added, disabled = read_services_file(path)
+    builtin = {e for _, e in service_catalog()}
+    for value in split_entries(add) if add else ():
+        if "@" in value:
+            raise ValueError("Un servicio es un dominio (uber.com o uber.*). Los correos sueltos van en Tu lista.")
+        if value in disabled:
+            disabled.remove(value)
+        elif value not in builtin and value not in added:
+            added.append(value)
+    if remove:
+        added = [e for e in added if e != remove.strip().lower()]
+    if disable and disable.strip().lower() in builtin and disable.strip().lower() not in disabled:
+        disabled.append(disable.strip().lower())
+    if enable:
+        disabled = [e for e in disabled if e != enable.strip().lower()]
+    tmp = Path(str(path) + ".tmp")
+    tmp.write_text(SERVICES_HEADER + "".join(f"{e}\n" for e in added) + "".join(f"-{e}\n" for e in disabled),
+                   encoding="utf-8")
+    tmp.replace(path)
+    return added, disabled
+
+
 def _domain_pattern(entry):
     entry = entry.lstrip("@")
     if entry.endswith(".*"):  # amazon.* -> amazon.com, amazon.com.mx, mx.amazon.co ...
@@ -100,11 +150,13 @@ def _find(addr, emails, domains):
 
 class ContactBook:
     def __init__(self, exclude=(), skip_automated=True, exclude_domains=(), skip_services=True, ignore=(),
-                 allow=()):
+                 allow=(), services=((), ())):
         self.exclude = {e.lower() for e in exclude if e}
         self.skip_automated = skip_automated
         self.exclude_domains = tuple(d.lower() for d in exclude_domains if d)
-        self.services = service_patterns() if skip_services else ()
+        added, disabled = services  # the user's own servicios.txt
+        self.services = tuple(p for p in service_patterns() if p[0] not in disabled) if skip_services else ()
+        self.services += tuple((e, _domain_pattern(e)) for e in added)
         self.ignore_emails, self.ignore_domains = _rules(ignore)
         self.allow_emails, self.allow_domains = _rules(allow)
         self.rows = {}

@@ -147,6 +147,7 @@
   .link-btn:hover { background: var(--red-tint); }
   .ig-table td.act .link-btn + .link-btn { margin-left: 4px; }
   .ig-scroll { overflow-x: auto; }
+  .ig-table tr.muted td { color: var(--faint); }
   .ig-more { margin-top: 10px; }
   @media (max-width: 760px) {
     #ignored .drawer-head { flex-wrap: wrap; gap: 10px; }
@@ -648,6 +649,7 @@
     <div><div class="card-kicker">Contactos</div><h2 id="ignored-title">Ignorados</h2></div>
     <div class="tabs" role="tablist" id="ig-tabs">
       <button type="button" role="tab" data-igtab="mine" aria-selected="true">Tu lista</button>
+      <button type="button" role="tab" data-igtab="services" aria-selected="false">Servicios</button>
       <button type="button" role="tab" data-igtab="omitted" aria-selected="false">Omitidos</button>
       <button type="button" role="tab" data-igtab="allowed" aria-selected="false">Permitidos</button>
       <button type="button" role="tab" data-igtab="supp" aria-selected="false">Bajas y rebotes</button>
@@ -668,6 +670,21 @@
       <div class="msg" id="igm-msg" hidden></div>
       <div class="ig-scroll">
         <table class="log-table ig-table"><thead><tr><th>Correo o dominio</th><th>Tipo</th><th class="num">Contactos que oculta</th><th></th></tr></thead><tbody id="igm-rows"></tbody></table>
+      </div>
+    </section>
+    <section class="set" id="ig-pane-services" hidden>
+      <h3>Servicios y apps</h3>
+      <p class="hint">Dominios que nunca son prospectos: apps, bancos, tiendas en línea, gobierno, software. La lista integrada viene con la app; agrega aquí los que falten. Si uno de la lista sí es cliente, usa <b>Desactivar</b>.</p>
+      <div class="msg err" id="igv-off" hidden>La lista de servicios está apagada (SKIP_SERVICES=false en .env): ahora no omite a nadie.</div>
+      <form class="ig-tools" id="igv-form" autocomplete="off">
+        <textarea class="input ig-paste" id="igv-value" rows="2" placeholder="cinepolis.*, ticketmaster.com.mx"></textarea>
+        <button class="btn btn-primary" type="submit">Agregar servicio</button>
+      </form>
+      <div class="msg" id="igv-msg" hidden></div>
+      <div class="ig-chips" id="igv-chips"></div>
+      <div class="ig-tools"><input class="input" id="igv-search" type="search" placeholder="Buscar servicio"></div>
+      <div class="ig-scroll">
+        <table class="log-table ig-table"><thead><tr><th>Dominio</th><th>Categoría</th><th class="num">Contactos que oculta</th><th></th></tr></thead><tbody id="igv-rows"></tbody></table>
       </div>
     </section>
     <section class="set" id="ig-pane-omitted" hidden>
@@ -1555,7 +1572,7 @@
   });
 
   /* ---------- Ignorados: lista completa ---------- */
-  let igData = null, igTab = "mine", igReason = "all", igLimit = 200;
+  let igData = null, igTab = "mine", igReason = "all", igCat = "all", igLimit = 200;
   const REASON = { service: "Servicio o app", bulk: "Correo masivo", automated: "Aviso automático", ignored: "Ignorado por ti" };
   const BULK_WHY = { "list-unsubscribe": "trae botón de baja de un clic", precedence: "viene marcado como masivo",
                      "auto-submitted": "es una respuesta automática", esp: "lo mandó una plataforma de mailing" };
@@ -1575,13 +1592,14 @@
   function setIgTab(tab) {
     igTab = tab;
     document.querySelectorAll("#ig-tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.igtab === tab));
-    ["mine", "omitted", "allowed", "supp"].forEach((t) => { $(`ig-pane-${t}`).hidden = t !== tab; });
+    ["mine", "services", "omitted", "allowed", "supp"].forEach((t) => { $(`ig-pane-${t}`).hidden = t !== tab; });
   }
   const has = (q, ...fields) => !q || fields.some((f) => String(f || "").toLowerCase().includes(q));
   function renderIgnored() {
-    const d = igData || { ignored: [], allowed: [], omitted: [], suppression: [] };
-    const tabs = { mine: d.ignored.length, omitted: d.omitted.length, allowed: d.allowed.length, supp: d.suppression.length };
-    const labels = { mine: "Tu lista", omitted: "Omitidos", allowed: "Permitidos", supp: "Bajas y rebotes" };
+    const d = igData || { ignored: [], allowed: [], omitted: [], suppression: [], services: [] };
+    const tabs = { mine: d.ignored.length, services: d.services.filter((v) => !v.disabled).length, omitted: d.omitted.length,
+                   allowed: d.allowed.length, supp: d.suppression.length };
+    const labels = { mine: "Tu lista", services: "Servicios", omitted: "Omitidos", allowed: "Permitidos", supp: "Bajas y rebotes" };
     document.querySelectorAll("#ig-tabs button").forEach((b) => { b.textContent = `${labels[b.dataset.igtab]} · ${fmt.format(tabs[b.dataset.igtab])}`; });
 
     const qm = $("igm-search").value.trim().toLowerCase();
@@ -1589,6 +1607,20 @@
         <td class="who">${esc(i.value)}</td><td>${kindOf(i.value)}</td><td class="num">${fmt.format(i.hides)}</td>
         <td class="act"><button class="link-btn" data-unignore-full="${esc(i.value)}">Dejar de ignorar</button></td></tr>`).join("")
       || `<tr><td colspan="4" class="muted">${d.ignored.length ? "Nada coincide con la búsqueda." : "Todavía no ignoras nada. Escribe arriba un correo o dominio."}</td></tr>`;
+
+    $("igv-off").hidden = d.services_on !== false;
+    const cats = [...new Set(d.services.map((v) => v.category))];
+    if (igCat !== "all" && !cats.includes(igCat)) igCat = "all";
+    $("igv-chips").innerHTML = [["all", "Todas", d.services.length], ...cats.map((c) => [c, c, d.services.filter((v) => v.category === c).length])]
+      .map(([k, label, n]) => `<button type="button" data-cat="${esc(k)}" aria-pressed="${igCat === k}">${esc(label)} · ${fmt.format(n)}</button>`).join("");
+    const qv = $("igv-search").value.trim().toLowerCase();
+    $("igv-rows").innerHTML = d.services.filter((v) => (igCat === "all" || v.category === igCat) && has(qv, v.entry, v.category)).map((v) => `<tr${v.disabled ? ' class="muted"' : ""}>
+        <td class="who">${esc(v.entry)}${v.disabled ? '<span class="n">Desactivado: sus correos sí entran a contactos</span>' : ""}</td>
+        <td>${esc(v.category)}</td><td class="num">${v.disabled ? "—" : fmt.format(v.hides)}</td>
+        <td class="act">${!v.builtin ? `<button class="link-btn" data-svc-remove="${esc(v.entry)}">Quitar</button>`
+          : v.disabled ? `<button class="link-btn" data-svc-enable="${esc(v.entry)}">Activar</button>`
+          : `<button class="link-btn" data-svc-disable="${esc(v.entry)}" title="Sí es cliente: no omitir sus correos">Desactivar</button>`}</td></tr>`).join("")
+      || '<tr><td colspan="4" class="muted">Nada coincide con la búsqueda.</td></tr>';
 
     const counts = {};
     d.omitted.forEach((o) => { counts[o.reason] = (counts[o.reason] || 0) + 1; });
@@ -1634,7 +1666,19 @@
   $("ig-open").addEventListener("click", () => openIgnored("mine"));
   $("close-ignored").addEventListener("click", closeIgnored);
   document.querySelectorAll("#ig-tabs button").forEach((b) => b.addEventListener("click", () => setIgTab(b.dataset.igtab)));
-  ["igm-search", "igo-search", "igs-search"].forEach((id) => $(id).addEventListener("input", () => { igLimit = 200; renderIgnored(); }));
+  $("igv-chips").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-cat]");
+    if (b) { igCat = b.dataset.cat; renderIgnored(); }
+  });
+  $("igv-value").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("igv-form").requestSubmit(); }
+  });
+  $("igv-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const r = await listCall("/settings/services", { add: $("igv-value").value }, "igv-msg");
+    if (r.ok) { $("igv-value").value = ""; igCat = "all"; renderIgnored(); flash("Listo: agregado a los servicios. Sus correos ya no aparecen en contactos."); }
+  });
+  ["igm-search", "igv-search", "igo-search", "igs-search"].forEach((id) => $(id).addEventListener("input", () => { igLimit = 200; renderIgnored(); }));
   $("igo-chips").addEventListener("click", (e) => {
     const b = e.target.closest("[data-reason]");
     if (b) { igReason = b.dataset.reason; igLimit = 200; renderIgnored(); }
@@ -1654,10 +1698,13 @@
     if (r.ok) { $("iga-value").value = ""; flash("Listo: vuelve a aparecer en los contactos."); }
   });
   $("ignored").addEventListener("click", async (e) => {
-    const b = e.target.closest("[data-unignore-full], [data-allow], [data-unallow]");
+    const b = e.target.closest("[data-unignore-full], [data-allow], [data-unallow], [data-svc-remove], [data-svc-disable], [data-svc-enable]");
     if (!b) return;
     b.disabled = true;
-    const { unignoreFull, allow, unallow } = b.dataset;
+    const { unignoreFull, allow, unallow, svcRemove, svcDisable, svcEnable } = b.dataset;
+    if (svcRemove) { const r = await listCall("/settings/services", { remove: svcRemove }); if (r.ok) flash(`${svcRemove} ya no es servicio.`); }
+    if (svcDisable) { const r = await listCall("/settings/services", { disable: svcDisable }); if (r.ok) flash(`${svcDisable} desactivado: sus correos vuelven a contactos.`); }
+    if (svcEnable) { const r = await listCall("/settings/services", { enable: svcEnable }); if (r.ok) flash(`${svcEnable} se vuelve a omitir.`); }
     if (unignoreFull) { const r = await listCall("/settings/ignore", { remove: unignoreFull }); if (r.ok) flash(`${unignoreFull} vuelve a aparecer.`); }
     else if (allow) { const r = await listCall("/settings/allow", { add: allow }); if (r.ok) flash(`Listo: ${allow} vuelve a los contactos.`); }
     else if (unallow) { const r = await listCall("/settings/allow", { remove: unallow }); if (r.ok) flash(`${unallow} ya no está en permitidos.`); }

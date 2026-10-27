@@ -40,6 +40,7 @@ class Settings:
     skip_services: bool = True
     ignore_file: str = "ignorados.txt"
     allow_file: str = "permitidos.txt"
+    services_file: str = "servicios.txt"
     exclude_domains: list = field(default_factory=list)
     ocr_images: bool = True
     ocr_remote_images: bool = False
@@ -103,6 +104,7 @@ def load_settings(env_file=".env", base=None):
         skip_services=_bool(env("SKIP_SERVICES"), True),
         ignore_file=env("IGNORE_FILE", "") or "ignorados.txt",
         allow_file=env("ALLOW_FILE", "") or "permitidos.txt",
+        services_file=env("SERVICES_FILE", "") or "servicios.txt",
         exclude_domains=exclude_domains,
         ocr_images=_bool(env("OCR_IMAGES"), True),
         ocr_remote_images=_bool(env("OCR_REMOTE_IMAGES"), False),

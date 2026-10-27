@@ -3,7 +3,7 @@
 # aerolíneas...): sus avisos automáticos se omiten por el remitente (no-reply@...) o por ser
 # correos masivos.
 # Un dominio cubre sus subdominios. "nombre.*" cubre nombre.com, nombre.com.mx, nombre.mx...
-# Para agregar los tuyos usa el botón "Ignorar" del dashboard (se guardan en ignorados.txt).
+# Para agregar los tuyos usa Ignorados ▸ Servicios en el dashboard (se guardan en servicios.txt).
 
 # Apps de transporte y comida
 uber.*
