@@ -169,13 +169,19 @@ class FakeSMTP:
         pass
 
 
-def _send(tmp_path, smtp, **kw):
+def _sender(smtp, email="pedro@dindustrimex.com", daily_limit=1500):
+    return {"email": email, "name": "Pedro Marquina", "host": "smtp.test", "daily_limit": daily_limit,
+            "connect": lambda: smtp}
+
+
+def _send(tmp_path, smtp, senders=None, daily_limit=1500, **kw):
     from mailing.send import send_campaign
     contacts = tmp_path / "contacts.csv"
     if not contacts.exists():
         write_contacts(contacts, [{"email": f"p{i}@cliente.mx", "name": f"Persona{i} X", "source": "signature"}
                                   for i in range(5)])
-    return send_campaign(CAMPAIGN, contacts, tmp_path / "mailing" / "qc-aro", smtp_connect=lambda: smtp,
+    return send_campaign(CAMPAIGN, contacts, tmp_path / "mailing" / "qc-aro",
+                         senders=senders or [_sender(smtp, daily_limit=daily_limit)],
                          sleep=lambda s: None, say=lambda *a: None,
                          suppression_path=tmp_path / "suppression.txt", **kw)
 
@@ -213,7 +219,7 @@ def test_rejected_go_to_suppression_and_limit_stops(tmp_path):
     smtp = FakeSMTP(refuse={"p1@cliente.mx"}, fail_after=2)
     result = _send(tmp_path, smtp, send=True)
     assert result["rejected"] == ["p1@cliente.mx"] and result["sent"] == 2
-    assert "no acepta" in result["stopped"]
+    assert "Daily user sending limit" in result["stopped"]
     assert "p1@cliente.mx" in read_suppression(tmp_path / "suppression.txt")
 
 
@@ -251,3 +257,40 @@ def test_sync_suppression_reads_unsubscribes_and_bounces(tmp_path):
     assert set(unsubscribed) == {"ana@cliente.mx", "ana.vieja@cliente.mx"} and bounced == ["nadie@cliente.mx"]
     assert read_suppression(supp) == {"ana@cliente.mx", "ana.vieja@cliente.mx", "nadie@cliente.mx"}
     assert sync_suppression([object()], supp, lambda box: FakeIMAP()) == ([], [])
+
+
+def test_senders_take_turns_and_one_hitting_its_limit_hands_over(tmp_path):
+    from mailing.send import read_log
+    pedro, ventas = FakeSMTP(fail_after=1), FakeSMTP()
+    result = _send(tmp_path, None, send=True, senders=[
+        _sender(pedro), _sender(ventas, "ventas@dindustrimex.com")])
+    assert result["sent"] == 5 and len(pedro.sent) == 1 and len(ventas.sent) == 4
+    assert ventas.sent[0]["From"] == "Pedro Marquina <ventas@dindustrimex.com>"
+    assert {m["To"] for m in pedro.sent + ventas.sent} == {f"Persona{i} X <p{i}@cliente.mx>" for i in range(5)}
+    rows = read_log(tmp_path / "mailing" / "qc-aro" / "envios.csv")
+    assert [r["remitente"] for r in rows if r["estado"] == "enviado"].count("ventas@dindustrimex.com") == 4
+
+
+def test_daily_limit_is_per_mailbox(tmp_path):
+    a, b = FakeSMTP(), FakeSMTP()
+    senders = lambda: [_sender(a, daily_limit=1), _sender(b, "ventas@dindustrimex.com", daily_limit=2)]
+    first = _send(tmp_path, None, send=True, senders=senders())
+    assert first["sent"] == 3 and len(a.sent) == 1 and len(b.sent) == 2
+    again = _send(tmp_path, None, send=True, senders=senders())
+    assert again["this_run"] == 0
+
+
+def test_load_senders_uses_mailboxes_or_a_relay(tmp_path):
+    from mailing.send import load_senders
+    campaign = load_campaign(CAMPAIGN)
+    env = tmp_path / ".env"
+    env.write_text("IMAP_USER=pedro@dindustrimex.com\nIMAP_PASSWORD=abcd\nIMAP_HOST=imap.gmail.com\n")
+    senders, _ = load_senders(["pedro@dindustrimex.com"], campaign, env)
+    assert senders[0]["host"] == "smtp.gmail.com" and senders[0]["daily_limit"] == 1500
+    with pytest.raises(SystemExit, match="ventas@"):
+        load_senders(["ventas@dindustrimex.com"], campaign, env)
+    env.write_text(env.read_text() + "SMTP_HOST=email-smtp.us-east-1.amazonaws.com\nSMTP_USER=AKIA\n"
+                   "SMTP_PASSWORD=secret\nSMTP_DAILY_LIMIT=20000\n")
+    senders, _ = load_senders(["pedro@dindustrimex.com", "ventas@dindustrimex.com"], campaign, env)
+    assert [s["daily_limit"] for s in senders] == [20000, 20000]
+    assert senders[1]["host"] == "email-smtp.us-east-1.amazonaws.com"

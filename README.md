@@ -306,15 +306,24 @@ estén en `output/suppression.txt` (uno por línea; ahí van las bajas).
   ```
   - Cada envío queda en `output/mailing/<campaña>/envios.csv` (fecha, correo, estado). Al
     volver a correrlo sigue con los pendientes y nunca repite a nadie.
-  - Límites: 200 por corrida (`--limit`) y 500 al día sumando campañas (`--daily-limit`), con
-    ~8 s entre correos (`--pause`). Google Workspace permite 2,000 al día por usuario; empieza
-    con 100–200 diarios unos días para no caer en spam. Si Google frena el envío, se detiene
-    solo y lo deja anotado.
+  - Límites: 1,500 al día por buzón (`--daily-limit`), con ~4 s entre correos (`--pause`);
+    `--limit` corta la corrida antes. Google Workspace permite 2,000 al día por usuario. Si
+    Google frena un buzón, ese buzón se detiene y los demás siguen.
+  - **Más volumen con varios buzones:** `--from` se repite y los buzones se turnan; cada uno
+    lleva su propio cupo diario y su contraseña de aplicación en `.env` (`IMAP_USER_2`...):
+    ```bash
+    python -m mailing.send --send --from pedro@dindustrimex.com --from ventas@dindustrimex.com
+    ```
+  - **Miles al día con un servidor de envío** (Amazon SES ~US$0.10 por 1,000 correos, o el
+    SMTP de Brevo): pon `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` y
+    `SMTP_DAILY_LIMIT` en `.env`. Todo sale por ahí con el remitente de la campaña (el dominio
+    debe estar verificado en ese servicio, con SPF y DKIM en el DNS).
+  - Calienta primero: unos 200 diarios por buzón la primera semana y sube poco a poco. Con
+    dindustrimex.com conviene tener SPF, DKIM y DMARC; Gmail los exige a quien manda volumen.
   - Antes de cada envío lee la bandeja (sin marcar nada como leído): quien respondió con asunto
     "Baja de correos" (la liga de baja del correo lo arma así) y los rebotes de mailer-daemon
     pasan a `output/suppression.txt`. Para que vea las bajas que llegan a ventas@, agrega ese
     buzón como `IMAP_USER_2`. Los rechazados por el servidor también se agregan.
-  - Otro servidor de salida: `SMTP_HOST` y `SMTP_PORT` en `.env` (por defecto se deduce del IMAP).
 - **Envío con YAMM (Google Sheets + Gmail), alternativa de pago:**
   1. Sube las imágenes de `mailing/assets/<campaña>/` al Media Manager de Wix
      (dindustrimex.com), copia la URL de cada una y pégalas en `[assets.urls]` de la campaña.
