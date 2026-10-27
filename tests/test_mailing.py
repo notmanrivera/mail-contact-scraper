@@ -579,3 +579,37 @@ def test_mailbox_given_up_after_retries_keeps_prospect_pending(tmp_path):
                     sleep=pauses.append)
     assert summary["sent"] == 0 and "421" in summary["stopped"] and pauses == [10, 30, 60]
     assert read_log(tmp_path / "mailing" / "qc-aro" / "envios.csv") == []  # still pending for next run
+
+
+def test_export_sent_and_pending_csv(tmp_path, monkeypatch):
+    import csv as csvmod
+    import io
+    import json
+    import threading
+    import urllib.request
+    from mail_contact_scraper import dashboard
+
+    smtp = FakeSMTP()
+    mailing_app, env = _app_setup(tmp_path, monkeypatch, smtp)
+    (tmp_path / "suppression.txt").write_text("# baja 2026-10-27\np4@cliente.mx\n")
+    run = mailing_app.SendRun(check=lambda *a: ([], []))
+    run.start(tmp_path, env, {"campaign": "qc-aro", "confirm": "ENVIAR", "limit": "2"}, pause=0)
+    _wait(run)
+    rows = lambda text: list(csvmod.DictReader(io.StringIO(text.lstrip("﻿"))))
+    sent, name = mailing_app.export_csv(tmp_path, "qc-aro", "enviados")
+    pending, _ = mailing_app.export_csv(tmp_path, "qc-aro", "pendientes")
+    assert name == "qc-aro-enviados.csv" and sent.startswith("﻿")
+    assert [r["email"] for r in rows(sent)] == ["p0@cliente.mx", "p1@cliente.mx"]
+    assert rows(sent)[0]["nombre"] == "Persona0 X" and rows(sent)[0]["remitente"] == "pedro@dindustrimex.com"
+    assert [r["email"] for r in rows(pending)] == ["p2@cliente.mx", "p3@cliente.mx"]  # p4 unsubscribed
+    with pytest.raises(ValueError):
+        mailing_app.export_csv(tmp_path, "qc-aro", "todos")
+
+    server, url = dashboard.serve(tmp_path, port=18997, open_browser=False, env_path=env)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        res = urllib.request.urlopen(url + "mailing/export?campaign=qc-aro&which=pendientes")
+        assert "qc-aro-pendientes.csv" in res.headers["Content-Disposition"]
+        assert rows(res.read().decode("utf-8"))[0]["email"] == "p2@cliente.mx"
+    finally:
+        server.shutdown()
