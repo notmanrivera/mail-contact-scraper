@@ -138,7 +138,34 @@
   .preview-head { padding: 10px 14px; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--muted); }
   .preview-head b { color: var(--ink); }
   .preview iframe { flex: 1; width: 100%; border: 0; background: #fff; }
+  .tabs { display: inline-flex; padding: 4px; border-radius: 100px; background: rgba(110,99,96,.09); margin-left: auto; margin-right: 12px; }
+  .tabs button { border: 0; background: none; padding: 7px 16px; border-radius: 100px; font: 600 13px var(--font); color: var(--muted); cursor: pointer; }
+  .tabs button[aria-selected="true"] { background: var(--ink); color: #fff; }
+  .mailer-body.camp { grid-template-columns: minmax(320px, 440px) minmax(0, 1fr); }
+  .mini-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
+  .mini-stats .stat { padding: 10px 12px; }
+  .boxes-list { display: grid; gap: 6px; margin-bottom: 12px; }
+  .boxes-list label { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 12px; background: #F4F2F1; font-weight: 600; color: var(--ink); cursor: pointer; }
+  .boxes-list input { width: 17px; height: 17px; accent-color: var(--red); }
+  .boxes-list .room { margin-left: auto; font-size: 11.5px; color: var(--muted); font-weight: 600; }
+  .row-half { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .send-box { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 14px; }
+  .send-box .plan-line { font-size: 13px; color: var(--text); margin: 0 0 10px; }
+  .send-box .plan-line b { color: var(--ink); }
+  .run-box { margin-top: 12px; padding: 12px; border-radius: 14px; background: #F4F2F1; }
+  .run-box .bar { height: 10px; border-radius: 10px; background: #E6E1E0; overflow: hidden; margin: 8px 0; }
+  .run-box .bar span { display: block; height: 100%; width: 0; background: var(--red); transition: width .6s ease; }
+  .run-box .t { font-size: 12.5px; color: var(--text); }
+  .run-box .t b { color: var(--ink); }
+  .log-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .log-chips span { font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 100px; background: #F4F2F1; color: var(--text); }
+  .log-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .log-table th { text-align: left; color: var(--muted); font-weight: 600; font-size: 11.5px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  .log-table td { padding: 7px 8px; border-bottom: 1px solid var(--line); color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
+  .log-table .st-enviado { color: var(--good); font-weight: 600; }
+  .log-table .st-rechazado, .log-table .st-error { color: var(--red); font-weight: 600; }
   @media (max-width: 820px) {
+    .mailer-body.camp { grid-template-columns: minmax(0, 1fr); }
     .mailer-body { grid-template-columns: minmax(0, 1fr); overflow-y: auto; align-content: start; }
     .mailer-body .set { overflow: visible; }
     .preview { min-height: 520px; }
@@ -383,7 +410,7 @@
     <a class="icon-btn" href="/contacts.csv" download="contacts.csv" title="Descargar CSV" aria-label="Descargar CSV">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M5 19.5h14"/></svg>
     </a>
-    <button class="icon-btn" id="open-mailer" type="button" title="Envío de prueba del mailing" aria-label="Envío de prueba del mailing">
+    <button class="icon-btn" id="open-mailer" type="button" title="Envíos del mailing" aria-label="Envíos del mailing">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5.5" width="17" height="13" rx="2"/><path d="M4 7l8 6 8-6"/></svg>
     </button>
     <button class="icon-btn" id="open-settings" type="button" title="Configuración" aria-label="Configuración">
@@ -576,12 +603,53 @@
 </aside>
 <aside class="drawer wide" id="mailer" role="dialog" aria-modal="true" aria-labelledby="mailer-title" hidden>
   <div class="drawer-head">
-    <div><div class="card-kicker">Mailing</div><h2 id="mailer-title">Envío de prueba</h2></div>
+    <div><div class="card-kicker">Mailing</div><h2 id="mailer-title">Envíos</h2></div>
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" data-tab="camp" aria-selected="true">Campaña</button>
+      <button type="button" role="tab" data-tab="test" aria-selected="false">Prueba</button>
+    </div>
     <button class="icon-btn" id="close-mailer" type="button" aria-label="Cerrar">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
     </button>
   </div>
-  <div class="mailer-body">
+  <div class="mailer-body camp" id="ml-camp-pane">
+    <section class="set">
+      <h3>Enviar la campaña</h3>
+      <p class="hint" id="cp-subject"></p>
+      <div class="mini-stats">
+        <div class="stat"><div class="k">En la lista</div><div class="v num" id="cp-audience">—</div></div>
+        <div class="stat"><div class="k">Ya la recibieron</div><div class="v num" id="cp-done">—</div></div>
+        <div class="stat"><div class="k">Faltan</div><div class="v num" id="cp-pending">—</div></div>
+        <div class="stat"><div class="k">Fuera por baja o rebote</div><div class="v num" id="cp-out">—</div></div>
+      </div>
+      <div class="field"><label>Buzones que envían (se turnan)</label><div class="boxes-list" id="cp-boxes"></div></div>
+      <div class="row-half">
+        <div class="field"><label for="cp-daily">Máximo al día por buzón</label><input class="input" id="cp-daily" type="number" min="1" placeholder="1500"></div>
+        <div class="field"><label for="cp-limit">Máximo en este envío</label><input class="input" id="cp-limit" type="number" min="0" placeholder="Todo el cupo de hoy"></div>
+      </div>
+      <div class="send-box">
+        <p class="plan-line" id="cp-plan"></p>
+        <div class="field"><label for="cp-confirm">Para enviar a los prospectos escribe ENVIAR</label><input class="input" id="cp-confirm" type="text" autocomplete="off" placeholder="ENVIAR"></div>
+        <div class="actions-row">
+          <button class="btn btn-primary" id="cp-start" type="button" disabled>Enviar campaña</button>
+          <button class="btn btn-outline" id="cp-bajas" type="button">Revisar bajas y rebotes</button>
+        </div>
+        <div class="run-box" id="cp-run" hidden>
+          <div class="t" id="cp-run-text"></div>
+          <div class="bar"><span id="cp-run-bar"></span></div>
+          <div class="actions-row"><button class="btn btn-outline" id="cp-stop" type="button">Detener</button></div>
+        </div>
+        <div class="msg" id="cp-msg" hidden></div>
+      </div>
+    </section>
+    <section class="set">
+      <h3>Registro de envíos</h3>
+      <p class="hint">Cada correo enviado queda anotado; al volver a enviar sigue con los que faltan y nunca repite a nadie.</p>
+      <div class="log-chips" id="cp-counts"></div>
+      <table class="log-table"><thead><tr><th>Fecha</th><th>Correo</th><th>Estado</th><th>Desde</th></tr></thead><tbody id="cp-log"></tbody></table>
+    </section>
+  </div>
+  <div class="mailer-body" id="ml-test-pane" hidden>
     <form class="set" id="ml-form" autocomplete="off">
       <h3>Mandar una prueba</h3>
       <p class="hint">Sale un solo correo, con [PRUEBA] en el asunto, a la dirección que escribas. No se envía a ningún contacto.</p>
@@ -1153,19 +1221,114 @@
     showMsg("ml-msg", "");
     if (!mailing) {
       try { mailing = await (await fetch("/mailing", { cache: "no-store" })).json(); } catch (e) { mailing = null; }
-      if (!mailing || !mailing.available) { showMsg("ml-msg", "Esta versión de la app no incluye los mailings.", false); mailing = null; return; }
+      if (!mailing || !mailing.available) { setTab("test"); showMsg("ml-msg", "Esta versión de la app no incluye los mailings.", false); mailing = null; return; }
       $("ml-campaign").innerHTML = mailing.campaigns.map((c) => `<option value="${esc(c.slug)}">${esc(c.subject)}</option>`).join("");
       $("ml-campaign-field").hidden = mailing.campaigns.length < 2;
       loadCampaign();
     }
     $("ml-from").innerHTML = mailing.senders.map((e) => `<option${e.toLowerCase() === (mailing.default_sender || "").toLowerCase() ? " selected" : ""}>${esc(e)}</option>`).join("");
     if (!mailing.senders.length) showMsg("ml-msg", "Primero agrega un buzón con su contraseña de aplicación en Configuración ▸ Buzones.", false);
-    $("ml-to").focus();
+    refreshCampaign();
   }
-  function closeMailer() { $("mailer").hidden = $("scrim").hidden = true; }
+  function closeMailer() { $("mailer").hidden = $("scrim").hidden = true; clearTimeout(campTimer); }
+  function setTab(tab) {
+    document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === tab));
+    $("ml-camp-pane").hidden = tab !== "camp"; $("ml-test-pane").hidden = tab !== "test";
+    if (tab === "test") $("ml-to").focus(); else refreshCampaign();
+  }
+  document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
+
+  /* Campaña: lista, buzones, envío real con confirmación, registro */
+  let camp = null, campTimer = null, chosenBoxes = null;
+  const ESTADO = { enviado: "Enviados", rechazado: "Rechazados", error: "Con error" };
+  const BAJA = { baja: "bajas", rebote: "rebotes", rechazado: "rechazados" };
+  async function refreshCampaign() {
+    clearTimeout(campTimer);
+    if ($("mailer").hidden || !mailing) return;
+    const q = new URLSearchParams({ campaign: $("ml-campaign").value || "" });
+    (chosenBoxes || []).forEach((e) => q.append("from", e));
+    if ($("cp-daily").value) q.set("daily_limit", $("cp-daily").value);
+    try { camp = await (await fetch(`/mailing/campaign?${q}`, { cache: "no-store" })).json(); } catch (e) { camp = null; }
+    if (camp) renderCampaign(camp);
+    const running = camp && camp.run && camp.run.running;
+    campTimer = setTimeout(refreshCampaign, running ? 2000 : 15000);
+  }
+  function renderCampaign(c) {
+    const p = c.plan, run = c.run || {}, sk = (p && p.skipped) || {};
+    const current = currentCampaign();
+    $("cp-subject").textContent = current ? `“${current.subject}”, desde ${c.default_sender}.` : "";
+    $("cp-audience").textContent = p ? fmt.format(p.audience) : "—";
+    $("cp-done").textContent = p ? fmt.format(p.already_sent) : "—";
+    $("cp-pending").textContent = p ? fmt.format(p.pending) : "—";
+    $("cp-out").textContent = p ? fmt.format((sk.suppressed || 0) + (sk.bounced || 0)) : "—";
+    const chosen = (c.senders || []).map((s) => s.email.toLowerCase());
+    const limits = Object.fromEntries((c.senders || []).map((s) => [s.email.toLowerCase(), s.daily_limit]));
+    $("cp-boxes").innerHTML = (c.available || []).map((e) => {
+      const k = e.toLowerCase(), on = chosen.includes(k), room = p && p.room ? p.room[k] : null;
+      return `<label><input type="checkbox" value="${esc(e)}"${on ? " checked" : ""}${run.running ? " disabled" : ""}> ${esc(e)}
+        <span class="room">${on && room != null ? `quedan ${fmt.format(room)} de ${fmt.format(limits[k])} hoy` : ""}</span></label>`;
+    }).join("") || '<div class="hint">Agrega un buzón con su contraseña en Configuración ▸ Buzones.</div>';
+    if (!$("cp-daily").value && c.senders && c.senders[0]) $("cp-daily").placeholder = String(c.senders[0].daily_limit);
+    const n = p ? Math.min(p.this_run, +$("cp-limit").value || p.this_run) : 0;
+    const hours = (n * 4) / 3600;
+    $("cp-plan").innerHTML = c.error ? esc(c.error)
+      : !p ? "" : n ? `Hoy saldrían <b>${fmt.format(n)}</b> correos, uno cada ~4 s (${hours < 1 ? `${Math.max(1, Math.round(hours * 60))} min` : `${hours.toFixed(1)} h`}). Deja la Mac encendida con la app abierta; si se interrumpe, al volver a enviar sigue donde se quedó.`
+      : p.pending ? "Ya se acabó el cupo de hoy de estos buzones. Mañana sigue con los que faltan." : "Ya todos los de la lista la recibieron.";
+    $("cp-start").disabled = !!run.running || !n || $("cp-confirm").value.trim() !== "ENVIAR";
+    $("cp-run").hidden = !run.phase;
+    if (run.phase) {
+      const pctDone = run.total ? Math.round((run.sent / run.total) * 100) : 0;
+      $("cp-run-bar").style.width = `${run.running ? pctDone : 100}%`;
+      const phase = run.phase === "bajas" ? "Revisando bajas y rebotes antes de enviar…"
+        : run.phase === "enviando" ? `Enviando: <b>${fmt.format(run.sent)}</b> de ${fmt.format(run.total)}${run.last ? ` · último: ${esc(run.last)}` : ""}`
+        : run.phase === "deteniendo" ? "Deteniendo…"
+        : `Terminó: <b>${fmt.format(run.sent || 0)}</b> enviados${run.rejected ? `, ${run.rejected} rechazados` : ""}${run.errors ? `, ${run.errors} con error` : ""}.`;
+      $("cp-run-text").innerHTML = [phase, run.note && esc(run.note), run.stopped && esc(run.stopped), run.error && `Error: ${esc(run.error)}`]
+        .filter(Boolean).join("<br>");
+      $("cp-stop").hidden = !run.running;
+    }
+    const counts = (c.log && c.log.counts) || {}, supp = c.suppression || {};
+    $("cp-counts").innerHTML = [
+      ...Object.entries(counts).map(([k, v]) => `<span>${esc(ESTADO[k] || k)}: ${fmt.format(v)}</span>`),
+      ...Object.entries(supp).map(([k, v]) => `<span>Lista de exclusión, ${esc(BAJA[k] || k)}: ${fmt.format(v)}</span>`),
+    ].join("") || '<span>Todavía no se ha enviado nada.</span>';
+    $("cp-log").innerHTML = ((c.log && c.log.recent) || []).map((r) => `<tr><td>${esc(r.fecha)}</td>
+      <td title="${esc(r.detalle)}">${esc(r.email)}</td><td class="st-${esc(r.estado)}">${esc(r.estado)}</td><td>${esc(r.remitente)}</td></tr>`).join("");
+  }
+  $("cp-boxes").addEventListener("change", () => {
+    chosenBoxes = [...$("cp-boxes").querySelectorAll("input:checked")].map((i) => i.value);
+    refreshCampaign();
+  });
+  let campInputTimer = null;
+  ["cp-daily", "cp-limit"].forEach((id) => $(id).addEventListener("input", () => {
+    clearTimeout(campInputTimer); campInputTimer = setTimeout(refreshCampaign, 400);
+  }));
+  $("cp-confirm").addEventListener("input", () => { if (camp) renderCampaign(camp); });
+  $("cp-start").addEventListener("click", async () => {
+    const btn = $("cp-start"); btn.disabled = true; showMsg("cp-msg", "");
+    const r = await settingsCall("/mailing/campaign/start", {
+      campaign: $("ml-campaign").value, from: chosenBoxes || (camp.senders || []).map((s) => s.email),
+      daily_limit: $("cp-daily").value, limit: $("cp-limit").value, confirm: $("cp-confirm").value.trim(),
+    }).catch(() => ({ ok: false, error: "No se pudo iniciar el envío." }));
+    $("cp-confirm").value = "";
+    if (!r.ok) showMsg("cp-msg", r.error, false);
+    refreshCampaign();
+  });
+  $("cp-stop").addEventListener("click", async () => {
+    await settingsCall("/mailing/campaign/stop", {}).catch(() => {});
+    refreshCampaign();
+  });
+  $("cp-bajas").addEventListener("click", async () => {
+    const btn = $("cp-bajas"); btn.disabled = true; btn.textContent = "Revisando buzones…"; showMsg("cp-msg", "");
+    const r = await settingsCall("/mailing/bajas", { campaign: $("ml-campaign").value })
+      .catch(() => ({ ok: false, error: "No se pudo revisar." }));
+    showMsg("cp-msg", r.ok ? `Listo: ${r.unsubscribed} bajas y ${r.bounced} rebotes nuevos quedaron fuera de la lista.` : r.error, r.ok);
+    btn.disabled = false; btn.textContent = "Revisar bajas y rebotes";
+    refreshCampaign();
+  });
   $("open-mailer").addEventListener("click", openMailer);
   $("close-mailer").addEventListener("click", closeMailer);
-  $("ml-campaign").addEventListener("change", loadCampaign);
+  $("ml-campaign").addEventListener("change", () => { loadCampaign(); refreshCampaign(); });
   $("ml-reset").addEventListener("click", loadCampaign);
   ["ml-html", "ml-subject"].forEach((id) => $(id).addEventListener("input", () => {
     clearTimeout(previewTimer); previewTimer = setTimeout(previewMailing, 300);

@@ -304,9 +304,14 @@ estén en `output/suppression.txt` (uno por línea; ahí van las bajas).
   python -m mailing.send --send                 # envía; pide escribir ENVIAR
   python -m mailing.send --bajas                # solo revisa bajas y rebotes
   ```
-  - **Desde la app:** el botón del sobre (arriba, junto a Configuración) abre *Envío de prueba*:
-    trae el HTML y asunto de la campaña (o pega otro HTML), muestra la vista previa y manda un
-    solo correo con [PRUEBA] desde el buzón que elijas. No toca `envios.csv` ni a los contactos.
+  - **Desde la app:** el botón del sobre (arriba, junto a Configuración) abre *Envíos*.
+    - *Campaña*: cuántos hay en la lista, cuántos ya la recibieron, cuántos faltan y cuántos
+      quedan fuera por baja o rebote; qué buzones envían (se turnan) y su cupo de hoy; el
+      registro de envíos y el botón *Revisar bajas y rebotes*. Para enviar hay que escribir
+      ENVIAR; se ve el avance y se puede detener. Antes de enviar revisa bajas y rebotes, y
+      mientras envía la Mac no se duerme. Usa los mismos archivos que `mailing.send`.
+    - *Prueba*: trae el HTML y asunto de la campaña (o pega otro HTML), muestra la vista previa
+      y manda un solo correo con [PRUEBA] desde el buzón que elijas. No toca `envios.csv`.
   - Cada envío queda en `output/mailing/<campaña>/envios.csv` (fecha, correo, estado). Al
     volver a correrlo sigue con los pendientes y nunca repite a nadie.
   - Límites: 1,500 al día por buzón (`--daily-limit`), con ~4 s entre correos (`--pause`);
