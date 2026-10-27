@@ -77,6 +77,17 @@ def test_check_without_token_on_private_repo(tmp_path):
     assert "rechazó el token" in up.check()["error"]
 
 
+def test_release_notes_become_a_list_of_changes(tmp_path):
+    notes = ("## What's Changed\r\n"
+             "* App de Mac: barra de progreso by @notmanrivera in https://github.com/x/y/pull/19\r\n"
+             "* Envío de prueba del mailing by @claude in https://github.com/x/y/pull/18\r\n\r\n"
+             "**Full Changelog**: https://github.com/x/y/compare/v1.0.17...v1.0.19")
+    assert updater.release_changes(notes) == ["App de Mac: barra de progreso", "Envío de prueba del mailing"]
+    up = make_updater(tmp_path, FakeGitHub(dict(RELEASE, body=notes)))
+    assert up.check()["changes"][1] == "Envío de prueba del mailing"
+    assert updater.CHECK_EVERY <= 3600  # new versions show up while the app stays open
+
+
 def test_up_to_date(tmp_path):
     up = make_updater(tmp_path, FakeGitHub(RELEASE), version="1.0.12")
     assert not up.check()["available"]

@@ -180,6 +180,8 @@
   .update-bar b { color: var(--red); }
   .update-bar .grow { flex: 1; min-width: 200px; }
   .update-bar .btn { height: 36px; padding: 0 16px; }
+  .up-changes { margin: 6px 0 0; padding-left: 18px; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+  .up-changes[hidden] { display: none; }
   .up-progress { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
   .up-progress[hidden] { display: none; }
   .up-track { flex: 1; height: 8px; border-radius: 100px; background: var(--rail); overflow: hidden; }
@@ -430,6 +432,7 @@
   <div class="update-bar" id="update-bar" hidden>
     <span class="grow"><span id="update-text"></span>
       <span class="up-progress" id="bar-progress" hidden><span class="up-track"><span class="up-fill" id="bar-fill" style="display:block"></span></span><span class="up-pct" id="bar-pct"></span></span>
+      <ul class="up-changes" id="update-changes" hidden></ul>
     </span>
     <button class="btn btn-primary" id="update-now" type="button">Actualizar ahora</button>
   </div>
@@ -1506,12 +1509,15 @@
       $("update-now").hidden = !!u.problem;
     }
     showProgress("bar", bar.hidden || u.problem ? null : st);
+    const changes = u.available && !u.installing ? (u.changes || []) : [];
+    $("update-changes").hidden = !changes.length;
+    $("update-changes").innerHTML = changes.map((c) => `<li>${esc(c)}</li>`).join("");
     $("up-live").hidden = !st;
     $("up-live").textContent = st ? st.text : "";
     showProgress("up", st);
     const when = u.checked_at ? `, revisado ${shortDate(u.checked_at)} ${u.checked_at.slice(11, 16)}` : "";
     $("up-status").textContent = `Versión instalada: ${u.version}${when}. ` +
-      (u.available ? `Disponible: ${u.latest}.` : u.latest ? "Es la más reciente." : "La app busca versiones nuevas sola y las instala al volver a abrirla.");
+      (u.available ? `Disponible: ${u.latest}.` : u.latest ? "Es la más reciente." : "La app busca versiones nuevas cada media hora y te avisa arriba cuando hay una.");
     $("up-token").placeholder = u.has_token ? "Guardado (pega uno nuevo para cambiarlo)" : "github_pat_…";
     if (u.error) showMsg("up-msg", u.error, false);
   }

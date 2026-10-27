@@ -82,6 +82,9 @@ class ScraperControl:
             return True
         return bool(status.get("running")) and _pid_alive(status.get("pid"))
 
+    def busy(self):
+        return self.alive(_read_json(self.out_dir / "status.json"))
+
     def start(self, first=False, extra=()):
         with self.lock:
             if self.alive(_read_json(self.out_dir / "status.json")):
