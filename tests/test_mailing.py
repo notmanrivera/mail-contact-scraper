@@ -302,7 +302,7 @@ def test_load_senders_uses_mailboxes_or_a_relay(tmp_path):
 def test_campaigns_render_ready_html():
     found = send.campaigns()
     qc = next(c for c in found if c["slug"] == "qc-aro")
-    assert qc["sender"] == "pedro@dindustrimex.com" and "Hola," in qc["html"]
+    assert qc["sender"] == "pedro@dindustrimex.com" and "{{Saludo}}" in qc["html"]
     assert "https://static.wixstatic.com/" in qc["html"] and "cid:" not in qc["html"]
 
 
@@ -479,5 +479,36 @@ def test_dashboard_campaign_endpoints(tmp_path, monkeypatch):
             urllib.request.urlopen(req)
         assert err.value.code == 400 and "ENVIAR" in json.loads(err.value.read())["error"]
         assert smtp.sent == []
+    finally:
+        server.shutdown()
+
+
+def test_send_test_html_greets_by_name(tmp_path, monkeypatch):
+    smtp = FakeSMTP()
+    monkeypatch.setattr(send, "load_senders", lambda addrs, campaign, env: ([_sender(smtp, addrs[0])], None))
+    contacts = tmp_path / "contacts.csv"
+    write_contacts(contacts, [{"email": "peter@zlm.agency", "name": "Ing. PETER Zamora", "source": "signature"}])
+    html = "<p>{{Saludo}}</p>"
+    found = send.send_test_html(html, "A", "Peter@zlm.agency", "pedro@dindustrimex.com", contacts_csv=contacts)
+    typed = send.send_test_html(html, "A", "peter@zlm.agency", "pedro@dindustrimex.com", name="Rubén Rivera",
+                                contacts_csv=contacts)
+    nobody = send.send_test_html(html, "A", "otro@x.com", "pedro@dindustrimex.com", contacts_csv=contacts)
+    assert [found["greeting"], typed["greeting"], nobody["greeting"]] == ["Hola Peter,", "Hola Rubén,", "Hola,"]
+    assert "<p>Hola Peter,</p>" in smtp.sent[0].get_body(("html",)).get_content()
+
+
+def test_dashboard_fills_greeting_name(tmp_path):
+    import json
+    import threading
+    import urllib.request
+    from mail_contact_scraper import dashboard
+
+    write_contacts(tmp_path / "contacts.csv", [{"email": "peter@zlm.agency", "name": "Ing. PETER Zamora", "source": "signature"}])
+    server, url = dashboard.serve(tmp_path, port=18995, open_browser=False, env_path=tmp_path / ".env")
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        get = lambda q: json.loads(urllib.request.urlopen(url + "mailing/name?email=" + q).read())
+        assert get("Peter%40zlm.agency") == {"name": "Ing. PETER Zamora", "first": "Peter"}
+        assert get("otro%40x.com") == {"name": "", "first": ""}
     finally:
         server.shutdown()

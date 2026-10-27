@@ -668,7 +668,11 @@
       <p class="hint">Sale un solo correo, con [PRUEBA] en el asunto, a la dirección que escribas. No se envía a ningún contacto.</p>
       <div class="field" id="ml-campaign-field" hidden><label for="ml-campaign">Campaña</label><select class="input" id="ml-campaign"></select></div>
       <div class="field"><label for="ml-from">Enviar desde</label><select class="input" id="ml-from"></select></div>
-      <div class="field"><label for="ml-to">Para</label><input class="input" id="ml-to" type="email" placeholder="tu@correo.com" required></div>
+      <div class="row-half">
+        <div class="field"><label for="ml-to">Para</label><input class="input" id="ml-to" type="email" placeholder="tu@correo.com" required></div>
+        <div class="field"><label for="ml-name">Nombre para el saludo</label><input class="input" id="ml-name" type="text" placeholder="Ej. Pedro"></div>
+      </div>
+      <p class="hint" style="margin-top:-4px" id="ml-name-hint">Se llena solo con el nombre que tenga ese correo en tus contactos, igual que en el envío real. Puedes cambiarlo; sin nombre queda “Hola,”.</p>
       <div class="field"><label for="ml-subject">Asunto</label><input class="input" id="ml-subject" type="text" required></div>
       <div class="field"><label for="ml-html">HTML del mailing</label><textarea class="input" id="ml-html" spellcheck="false" placeholder="Pega aquí el código HTML"></textarea></div>
       <div class="actions-row">
@@ -1219,8 +1223,10 @@
   /* ---------- Envío de prueba ---------- */
   let mailing = null, previewTimer = null;
   const currentCampaign = () => (mailing && mailing.campaigns.find((c) => c.slug === $("ml-campaign").value)) || null;
+  const GREETING_TAG = /\{\{\s*(?:Saludo|contact\.SALUDO)\s*\}\}|\*\|SALUDO\|\*/g;
   function previewMailing() {
-    $("ml-preview").srcdoc = $("ml-html").value;
+    const first = $("ml-name").value.trim().split(/\s+/)[0];
+    $("ml-preview").srcdoc = $("ml-html").value.replace(GREETING_TAG, first ? `Hola ${esc(first)},` : "Hola,");
     $("ml-preview-subject").textContent = $("ml-subject").value;
   }
   function loadCampaign() {
@@ -1342,8 +1348,28 @@
   $("open-mailer").addEventListener("click", openMailer);
   $("close-mailer").addEventListener("click", closeMailer);
   $("ml-campaign").addEventListener("change", () => { loadCampaign(); refreshCampaign(); });
+  // Fill the greeting name from the contacts as the address is typed; a name typed by hand stays.
+  let nameAuto = true, nameTimer = null;
+  $("ml-name").addEventListener("input", () => { nameAuto = !$("ml-name").value.trim(); });
+  $("ml-to").addEventListener("input", () => {
+    clearTimeout(nameTimer);
+    nameTimer = setTimeout(async () => {
+      if (!nameAuto) return;
+      const email = $("ml-to").value.trim();
+      let found = { first: "", name: "" };
+      if (/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(email)) {
+        try { found = await (await fetch(`/mailing/name?email=${encodeURIComponent(email)}`, { cache: "no-store" })).json(); } catch (e) {}
+      }
+      if (!nameAuto) return;
+      $("ml-name").value = found.first || "";
+      $("ml-name-hint").textContent = found.first ? `Tomado de tus contactos: ${found.name}. Puedes cambiarlo.`
+        : email.includes("@") ? "Ese correo no tiene nombre en tus contactos: escribe uno o quedará “Hola,”."
+        : "Se llena solo con el nombre que tenga ese correo en tus contactos, igual que en el envío real.";
+      previewMailing();
+    }, 350);
+  });
   $("ml-reset").addEventListener("click", loadCampaign);
-  ["ml-html", "ml-subject"].forEach((id) => $(id).addEventListener("input", () => {
+  ["ml-html", "ml-subject", "ml-name"].forEach((id) => $(id).addEventListener("input", () => {
     clearTimeout(previewTimer); previewTimer = setTimeout(previewMailing, 300);
   }));
   $("ml-form").addEventListener("submit", async (e) => {
@@ -1352,10 +1378,10 @@
     btn.disabled = true; btn.textContent = "Enviando…"; showMsg("ml-msg", "");
     try {
       const r = await settingsCall("/mailing/test", {
-        campaign: $("ml-campaign").value, from: $("ml-from").value, to,
+        campaign: $("ml-campaign").value, from: $("ml-from").value, to, name: $("ml-name").value.trim(),
         subject: $("ml-subject").value, html: $("ml-html").value,
       });
-      if (r.ok) showMsg("ml-msg", `Listo: se envió la prueba a ${to} desde ${r.from}. Revisa la bandeja (y spam).`, true);
+      if (r.ok) showMsg("ml-msg", `Listo: se envió la prueba a ${to} desde ${r.from}, con el saludo “${r.greeting}”. Revisa la bandeja (y spam).`, true);
       else showMsg("ml-msg", r.error, false);
     } catch (err) { showMsg("ml-msg", "No se pudo enviar.", false); }
     btn.disabled = false; btn.textContent = "Enviar prueba";

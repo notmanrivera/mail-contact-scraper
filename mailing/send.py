@@ -30,7 +30,7 @@ from email.utils import formataddr, formatdate, make_msgid, parseaddr
 from pathlib import Path
 
 from .build import (EMAIL_RE, build_eml, greeting, load_audience, load_campaign, render_html,
-                    render_text, unsubscribe_mailto)
+                    render_text, split_name, unsubscribe_mailto)
 
 HERE = Path(__file__).parent
 LOG_NAME = "envios.csv"
@@ -358,17 +358,18 @@ def send_campaign(campaign_path, contacts_csv, out_dir, *, senders, send=False, 
 # --- one test message from pasted HTML (the app's "Envío de prueba") -----------------
 
 CAMPAIGNS = HERE / "campaigns"
-# Greeting merge tags of the platforms, filled with a plain "Hola," in a test.
+# Greeting merge tags of the platforms, filled with the recipient's name in a test.
+GREETING_TAG = "{{Saludo}}"
 MERGE_GREETING = re.compile(r"\{\{\s*(?:Saludo|contact\.SALUDO)\s*\}\}|\*\|SALUDO\|\*")
 
 
 def campaigns():
-    """Saved campaigns with their subject and ready-to-send HTML, for the app."""
+    """Saved campaigns with their subject and HTML (greeting left as {{Saludo}}), for the app."""
     out = []
     for path in sorted(CAMPAIGNS.glob("*.toml")):
         c = load_campaign(path)
         out.append({"slug": path.stem, "subject": c["subject"], "sender": c["sender"]["email"],
-                    "html": render_html(c, greeting(""), unsubscribe_mailto(c, ""))})
+                    "html": render_html(c, GREETING_TAG, unsubscribe_mailto(c, ""))})
     return out
 
 
@@ -380,9 +381,22 @@ def html_to_text(body):
     return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip() + "\n"
 
 
-def send_test_html(html_body, subject, to, sender_email, campaign_slug="", env_file=".env"):
-    """Send pasted HTML once to one address, marked [PRUEBA]. Raises ValueError with a
-    message for the person on anything wrong (bad address, login refused...)."""
+def contact_name(contacts_csv, address):
+    """Name the scraper found for an address, or ''."""
+    if not contacts_csv or not Path(contacts_csv).exists():
+        return ""
+    with open(contacts_csv, newline="", encoding="utf-8-sig") as fh:
+        for row in csv.DictReader(fh):
+            if (row.get("email") or "").strip().lower() == address.lower():
+                return row.get("name") or ""
+    return ""
+
+
+def send_test_html(html_body, subject, to, sender_email, campaign_slug="", env_file=".env",
+                   name="", contacts_csv=None):
+    """Send pasted HTML once to one address, marked [PRUEBA]. {{Saludo}} becomes "Hola <name>,"
+    with the name typed, or else the one in contacts.csv, like the real run. Raises ValueError
+    with a message for the person on anything wrong (bad address, login refused...)."""
     to, sender_email, subject = (to or "").strip(), (sender_email or "").strip(), (subject or "").strip()
     if not EMAIL_RE.match(to):
         raise ValueError("Escribe un correo válido para recibir la prueba.")
@@ -396,7 +410,8 @@ def send_test_html(html_body, subject, to, sender_email, campaign_slug="", env_f
         sender = load_senders([sender_email], campaign, env_file)[0][0]
     except SystemExit as exc:
         raise ValueError(str(exc)) from None
-    html_body = MERGE_GREETING.sub(greeting(""), html_body)
+    first = split_name(name or contact_name(contacts_csv, to))[0]
+    html_body = MERGE_GREETING.sub(greeting(first), html_body)
     msg = EmailMessage()
     msg["From"] = formataddr((sender["name"], sender["email"]))
     msg["To"] = to
@@ -423,7 +438,7 @@ def send_test_html(html_body, subject, to, sender_email, campaign_slug="", env_f
             conn.quit()
         except Exception:
             pass
-    return {"to": to, "from": sender["email"], "subject": msg["Subject"]}
+    return {"to": to, "from": sender["email"], "subject": msg["Subject"], "greeting": greeting(first)}
 
 
 def main(argv=None):
