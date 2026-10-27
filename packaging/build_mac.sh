@@ -93,7 +93,10 @@ test -s "$SMOKE/data/output/contacts.csv"
 CONTACTOS_DATA_DIR="$SMOKE/dash" CONTACTOS_NO_GUI=1 CONTACTOS_NO_BROWSER=1 "$EXE" &
 PID=$!
 for _ in $(seq 1 30); do curl -fs http://127.0.0.1:8765/data -H "Host: 127.0.0.1" > "$SMOKE/data.json" && break; sleep 1; done
+curl -fs http://127.0.0.1:8765/mailing -H "Host: 127.0.0.1" > "$SMOKE/mailing.json" || true
 kill "$PID" || true
+# The mailing (campaign, template, images) is bundled for "Envío de prueba".
+python -c "import json,sys; m=json.load(open(sys.argv[1])); assert m['available'] and 'Bombeo' in m['campaigns'][0]['html'], m; print('Mailing OK')" "$SMOKE/mailing.json"
 python -c "import json,sys; u=json.load(open(sys.argv[1]))['update']; assert u['version']=='$VERSION', u; print('Panel OK', u)" "$SMOKE/data.json"
 test -f "$SMOKE/dash/.env"
 

@@ -10,8 +10,10 @@ VERSION = os.environ.get("APP_VERSION", "0.0.0")
 sys.path.insert(0, ROOT)  # so the collect_* helpers below find the package
 
 datas = collect_data_files("mail_contact_scraper")  # dashboard.html, static/, Apps Script
+datas += collect_data_files("mailing")  # campaigns, template and images for "Envío de prueba"
 binaries = []
 hiddenimports = collect_submodules("mail_contact_scraper") + collect_submodules("dns")
+hiddenimports += collect_submodules("mailing") + ["jinja2", "markupsafe"]
 for package in ("phonenumbers",):  # loads its metadata modules lazily
     d, b, h = collect_all(package)
     datas += d
@@ -24,7 +26,7 @@ a = Analysis(
     datas=datas,
     binaries=binaries,
     hiddenimports=hiddenimports,
-    excludes=["tkinter", "pytest", "mailing"],
+    excludes=["tkinter", "pytest"],
 )
 pyz = PYZ(a.pure)
 exe = EXE(
