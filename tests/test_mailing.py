@@ -59,7 +59,7 @@ def test_build_filters_and_writes_outputs(tmp_path, local_campaign):
     people, skipped = build(local_campaign, contacts, tmp_path / "out", excel=True, eml=True,
                             suppression_path=supp)
     assert [p["email"] for p in people] == ["laura@aceros.mx", "cc@cliente.com"]
-    assert skipped == {"invalid": 1, "internal": 1, "suppressed": 1, "bounced": 0, "no_signature": 0}
+    assert skipped == {"invalid": 1, "internal": 1, "suppressed": 1, "bounced": 0, "no_signature": 0, "duplicate": 0}
 
     out = tmp_path / "out"
     preview = (out / "preview.html").read_text()
@@ -390,6 +390,8 @@ def _app_setup(tmp_path, monkeypatch, smtp):
                                                 "source": "signature"} for i in range(5)])
     monkeypatch.setattr(send, "load_senders", lambda addrs, campaign, env, limit=None: (
         [_sender(smtp, a, daily_limit=limit or 1500) for a in addrs], None))
+    monkeypatch.setattr(mailing_app, "check_replies", lambda *a: {})
+    monkeypatch.setattr(send, "PER_COMPANY_DAILY", 0)  # all the test prospects share one domain
     return mailing_app, env
 
 

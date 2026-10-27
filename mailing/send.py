@@ -37,6 +37,11 @@ HERE = Path(__file__).parent
 LOG_NAME = "envios.csv"
 LOG_FIELDS = ["fecha", "email", "estado", "detalle", "remitente"]
 SENT = "enviado"
+FOLLOWUP = "seguimiento"
+FOLLOWUP_DAYS = 5
+# Prospects of one company (same domain) a day, so a whole office doesn't get it at once.
+# Free mail domains (gmail.com, hotmail.com...) don't count as a company.
+PER_COMPANY_DAILY = 3
 UNSUBSCRIBE_SUBJECT = "Baja de correos"
 # Google Workspace allows 2,000 messages a day per user (Microsoft 365: 10,000); stay under it.
 MAILBOX_DAILY_LIMIT = 1500
@@ -149,15 +154,83 @@ def append_log(path, email_addr, status, detail="", now=None, sender=""):
         os.fsync(fh.fileno())  # on disk before the next message, so a crash never resends it
 
 
-def sent_today(mailing_root, day, default_sender=""):
-    """Messages sent today per sending mailbox, across every campaign."""
+def sent_today(mailing_root, day, default_sender="", by="remitente"):
+    """Messages sent today (campaign and follow-ups) per sending mailbox, across every
+    campaign; with by="dominio", per recipient domain instead."""
     prefix, counts = day.isoformat(), {}
     for log in Path(mailing_root).glob(f"*/{LOG_NAME}"):
         for row in read_log(log):
-            if row["estado"] == SENT and row["fecha"].startswith(prefix):
-                sender = (row.get("remitente") or default_sender).lower()
-                counts[sender] = counts.get(sender, 0) + 1
+            if row["estado"] in (SENT, FOLLOWUP) and row["fecha"].startswith(prefix):
+                key = (row["email"].rsplit("@", 1)[-1] if by == "dominio"
+                       else row.get("remitente") or default_sender).lower()
+                counts[key] = counts.get(key, 0) + 1
     return counts
+
+
+def load_people(contacts_csv, out_dir, campaign, suppression_path=None, **audience_opts):
+    """The campaign's audience: the scraper's contacts plus the referrals found in replies
+    ('ya no labora, escribe a ...'), in referidos.csv of the campaign folder."""
+    from .replies import REFERRALS_NAME
+
+    people, skipped = load_audience(contacts_csv, campaign, suppression_path=suppression_path, **audience_opts)
+    referrals = Path(out_dir) / REFERRALS_NAME
+    if referrals.exists():
+        have = {p["email"] for p in people}
+        extra, _ = load_audience(referrals, campaign, suppression_path=suppression_path)
+        people += [p for p in extra if p["email"] not in have]
+    return people, skipped
+
+
+def followup_due(campaign, log, people, replies, today, days=None):
+    """Who gets the follow-up now: got the campaign `days` ago or more, didn't answer, isn't
+    away (out of office until a later date), and hasn't had it yet. Each one with the
+    mailbox and Message-ID of the first message, to answer in the same thread."""
+    from .replies import AWAY, waiting_until
+
+    days = days or int(campaign.get("followup", {}).get("days") or FOLLOWUP_DAYS)
+    by_email = {p["email"]: p for p in people}
+    followed = {r["email"].lower() for r in log if r["estado"] == FOLLOWUP}
+    due, waiting = [], {"recent": 0, "replied": 0, "away": 0}
+    for row in log:
+        addr = row["email"].lower()
+        if row["estado"] != SENT or addr in followed or addr not in by_email:
+            continue
+        answer = replies.get(addr)
+        if answer and answer["tipo"] != AWAY:
+            waiting["replied"] += 1
+            continue
+        back = waiting_until(answer) if answer else None
+        if back and back >= today:
+            waiting["away"] += 1
+            continue
+        if row["fecha"][:10] > (today - timedelta(days=days)).isoformat():
+            waiting["recent"] += 1
+            continue
+        due.append(dict(by_email[addr], sender=(row.get("remitente") or campaign["sender"]["email"]).lower(),
+                        original_id=row.get("detalle", "")))
+    return due, waiting
+
+
+def company_order(people, today_by_domain, per_company):
+    """Up to `per_company` a day from each company domain, mixed so the same company never
+    goes twice in a row. Returns (who can go today, how many wait for another day)."""
+    from .deliverability import KNOWN_DOMAINS
+
+    if not per_company:
+        return list(people), 0
+    count, ranked, held = dict(today_by_domain), [], 0
+    for i, p in enumerate(people):
+        domain = p["email"].rsplit("@", 1)[-1]
+        if domain in KNOWN_DOMAINS:
+            ranked.append((0, i, p))
+            continue
+        n = count.get(domain, 0)
+        if n >= per_company:
+            held += 1
+            continue
+        count[domain] = n + 1
+        ranked.append((n - today_by_domain.get(domain, 0), i, p))
+    return [p for _, _, p in sorted(ranked, key=lambda r: (r[0], r[1]))], held
 
 
 def read_suppression(path):
@@ -244,6 +317,44 @@ def suppression_counts(path):
 
 # --- sending -------------------------------------------------------------------------
 
+def make_followup(campaign, person, original_id, sender):
+    """The follow-up: a short note answering the first message, in the same thread."""
+    from .build import plain
+
+    f = campaign.get("followup") or {}
+    paragraphs = f.get("body") or []
+    if isinstance(paragraphs, str):
+        paragraphs = [paragraphs]
+    paragraphs = [p.replace("{{Saludo}}", person["greeting"]) for p in paragraphs]
+    sig = campaign.get("signature", {})
+    signature = [sender.get("name") or sig.get("name", ""), sig.get("title", "")]
+    unsub = unsubscribe_mailto(campaign, person["email"])
+    text = "\n\n".join([person["greeting"], *paragraphs]) + "\n\n" + "\n".join(filter(None, signature))
+    text += f"\n\nPara no recibir más correos: {unsub}\n"
+    esc = html_lib.escape
+    body = "".join(f'<p style="margin:0 0 14px">{esc(p)}</p>' for p in [person["greeting"], *paragraphs])
+    body += '<p style="margin:0 0 14px">' + "<br>".join(esc(x) for x in signature if x) + "</p>"
+    body += (f'<p style="margin:18px 0 0;font-size:11px;color:#888">Si no quieres recibir más correos, '
+             f'<a href="{esc(unsub)}" style="color:#888">escríbenos aquí</a>.</p>')
+    html_body = f'<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#222">{body}</div>'
+    msg = EmailMessage()
+    msg["From"] = formataddr((sender.get("name") or campaign["sender"]["name"], sender["email"]))
+    msg["To"] = formataddr((person["name"], person["email"])) if person.get("name") else person["email"]
+    subject = f.get("subject") or plain(campaign["subject"])
+    msg["Subject"] = subject if subject.lower().startswith("re:") else "Re: " + subject
+    if campaign["sender"].get("reply_to"):
+        msg["Reply-To"] = campaign["sender"]["reply_to"]
+    if original_id:
+        msg["In-Reply-To"] = original_id
+        msg["References"] = original_id
+    msg["List-Unsubscribe"] = f"<{unsub}>"
+    msg["Date"] = formatdate(localtime=True)
+    msg["Message-ID"] = make_msgid(domain=sender["email"].split("@")[-1])
+    msg.set_content(text)
+    msg.add_alternative(html_body, subtype="html")
+    return msg
+
+
 def make_message(campaign, person, subject_prefix="", sender=None):
     if "html" in campaign:  # a campaign of the app's library (mailing/library.py)
         from .library import build_message
@@ -287,7 +398,7 @@ def _close(conn):
 def send_campaign(campaign_path, contacts_csv, out_dir, *, senders, send=False, test_to=None,
                   limit=0, pause=4.0, suppression_path="output/suppression.txt",
                   now=datetime.now, sleep=time.sleep, say=print, stop=None, progress=None, checkpoint=None,
-                  **audience_opts):
+                  followup=False, per_company=0, **audience_opts):
     """Send pending prospects (or one test), taking turns between the senders.
 
     `senders` are dicts with email, name, daily_limit and connect() (see load_senders).
@@ -295,20 +406,35 @@ def send_campaign(campaign_path, contacts_csv, out_dir, *, senders, send=False, 
     the run between messages; `progress(summary, email, sender)` follows each one sent.
     `checkpoint(sent_emails)` runs every CHECK_EVERY sent and returns why to pause, or "".
     A pause sets summary["paused"]; the ones not reached stay pending for the next run.
+    `followup=True` sends the campaign's follow-up instead (see followup_due), each from the
+    mailbox that sent the first message. `per_company` caps prospects per company a day.
     Returns a summary dict.
     """
     campaign = load_campaign(campaign_path)
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     log_path = out / LOG_NAME
-    people, skipped = load_audience(contacts_csv, campaign, suppression_path=suppression_path, **audience_opts)
-    done = {r["email"].lower() for r in read_log(log_path) if r["estado"] == SENT}
-    pending = [p for p in people if p["email"] not in done]
+    people, skipped = load_people(contacts_csv, out, campaign, suppression_path, **audience_opts)
+    log = read_log(log_path)
+    done = {r["email"].lower() for r in log if r["estado"] == (FOLLOWUP if followup else SENT)}
+    waiting = {}
+    if followup:
+        from .replies import read_replies
+        if not campaign.get("followup", {}).get("body"):
+            raise ValueError("Esta campaña no tiene texto de seguimiento.")
+        pending, waiting = followup_due(campaign, log, people, read_replies(out), now().date())
+        known = {s["email"] for s in senders}
+        waiting["other_mailbox"] = sum(1 for p in pending if p["sender"] not in known)
+        pending = [p for p in pending if p["sender"] in known]
+    else:
+        pending = [p for p in people if p["email"] not in done]
+    pending, held = company_order(pending, sent_today(out.parent, now().date(), by="dominio"), per_company)
     today = sent_today(out.parent, now().date(), campaign["sender"]["email"])
     room = {s["email"]: max(0, s["daily_limit"] - today.get(s["email"], 0)) for s in senders}
     capacity = sum(room.values())
     this_run = min(len(pending), capacity, limit or capacity)
-    summary = {"audience": len(people), "already_sent": len(people) - len(pending), "pending": len(pending),
+    summary = {"audience": len(people), "already_sent": len(done & {p["email"] for p in people}),
+               "pending": len(pending) + held, "held_by_company": held, "followup_waiting": waiting,
                "sent_today": sum(today.get(s["email"], 0) for s in senders), "room": room,
                "this_run": this_run, "sent": 0, "errors": 0, "rejected": [], "stopped": "",
                "paused": "", "skipped": skipped, "by_sender": {}}
@@ -383,10 +509,19 @@ def send_campaign(campaign_path, contacts_csv, out_dir, *, senders, send=False, 
             if not active:
                 summary["stopped"] = summary["stopped"] or "Se acabó el cupo de hoy de todos los buzones."
                 break
-            sender = active[turn % len(active)]
-            turn += 1
-            person = queue[0]
-            msg = make_message(campaign, person, sender=sender)
+            if followup:  # in the same thread, so from the mailbox that sent the first one
+                by_email = {s["email"]: s for s in active}
+                person = next((p for p in queue if p["sender"] in by_email), None)
+                if not person:
+                    summary["stopped"] = summary["stopped"] or "Se acabó el cupo de hoy de los buzones que faltan."
+                    break
+                sender = by_email[person["sender"]]
+                msg = make_followup(campaign, person, person["original_id"], sender)
+            else:
+                sender = active[turn % len(active)]
+                turn += 1
+                person = queue[0]
+                msg = make_message(campaign, person, sender=sender)
             who = sender["email"]
             try:
                 deliver(sender, msg)
@@ -397,7 +532,8 @@ def send_campaign(campaign_path, contacts_csv, out_dir, *, senders, send=False, 
                 detail = "; ".join(f"{c} {m.decode(errors='replace') if isinstance(m, bytes) else m}"
                                    for c, m in err.recipients.values())
                 append_log(log_path, person["email"], "rechazado", detail, now(), who)
-                summary["rejected"].append(queue.pop(0)["email"])
+                queue.remove(person)
+                summary["rejected"].append(person["email"])
                 failed, failed_in_row = failed + 1, failed_in_row + 1
                 if breaker():
                     pause_run(breaker())
@@ -415,7 +551,7 @@ def send_campaign(campaign_path, contacts_csv, out_dir, *, senders, send=False, 
                     summary["stopped"] = "; ".join(filter(None, [summary["stopped"], note]))
                     continue
                 append_log(log_path, person["email"], "error", str(err)[:300], now(), who)
-                queue.pop(0)
+                queue.remove(person)
                 failed, failed_in_row = failed + 1, failed_in_row + 1
                 if breaker():
                     pause_run(breaker())
@@ -424,8 +560,8 @@ def send_campaign(campaign_path, contacts_csv, out_dir, *, senders, send=False, 
             errors_in_row[who] = 0
             failed_in_row = 0
             room[who] -= 1
-            queue.pop(0)
-            append_log(log_path, person["email"], SENT, msg["Message-ID"], now(), who)
+            queue.remove(person)
+            append_log(log_path, person["email"], FOLLOWUP if followup else SENT, msg["Message-ID"], now(), who)
             summary["sent"] += 1
             summary["by_sender"][who] = summary["by_sender"].get(who, 0) + 1
             sent_now.append(person["email"])

@@ -10,6 +10,7 @@ import mimetypes
 import shutil
 import re
 import tomllib
+import unicodedata
 from email.message import EmailMessage
 from email.utils import formataddr
 from pathlib import Path
@@ -123,6 +124,12 @@ def greeting(first_name):
     return f"Hola {first_name}," if first_name else "Hola,"
 
 
+def _plain_key(text):
+    """'José  Pérez' and 'jose perez' give the same key."""
+    text = unicodedata.normalize("NFKD", text.lower())
+    return " ".join("".join(c for c in text if not unicodedata.combining(c)).split())
+
+
 def load_audience(csv_path, campaign, exclude_domains=(), suppression_path=None, require_signature=False):
     """Read the scraper CSV and keep valid, non-internal, non-suppressed prospects."""
     own = campaign["sender"]["email"].split("@")[-1].lower()
@@ -131,7 +138,8 @@ def load_audience(csv_path, campaign, exclude_domains=(), suppression_path=None,
     if suppression_path and Path(suppression_path).exists():
         suppressed = {l.strip().lower() for l in Path(suppression_path).read_text().splitlines()
                       if l.strip() and not l.startswith("#")}
-    out, seen, skipped = [], set(), {"invalid": 0, "internal": 0, "suppressed": 0, "bounced": 0, "no_signature": 0}
+    out, seen, people = [], set(), set()
+    skipped = {"invalid": 0, "internal": 0, "suppressed": 0, "bounced": 0, "no_signature": 0, "duplicate": 0}
     with open(csv_path, newline="", encoding="utf-8-sig") as fh:
         for row in csv.DictReader(fh):
             email = (row.get("email") or "").strip().lower()
@@ -150,8 +158,14 @@ def load_audience(csv_path, campaign, exclude_domains=(), suppression_path=None,
             if require_signature and "signature" not in (row.get("source") or "") and "image" not in (row.get("source") or ""):
                 skipped["no_signature"] += 1
                 continue
-            seen.add(email)
             first, last = split_name(row.get("name"))
+            # same full name at the same domain: one person with two addresses (jperez@, juan.perez@)
+            person = (_plain_key(f"{first} {last}"), email.split("@")[-1])
+            if first and last and person in people:
+                skipped["duplicate"] += 1
+                continue
+            seen.add(email)
+            people.add(person)
             out.append({
                 "email": email, "first_name": first, "last_name": last, "greeting": greeting(first),
                 "name": row.get("name", ""), "title": row.get("title", ""),

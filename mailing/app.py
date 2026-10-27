@@ -12,8 +12,8 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-from . import deliverability, library, send
-from .build import load_audience, load_campaign
+from . import deliverability, library, replies, send
+from .build import load_campaign
 
 CONFIRM_WORD = "ENVIAR"
 RECENT_ROWS = 40
@@ -66,8 +66,13 @@ def _limit(value, name):
     return number
 
 
-def overview(out_dir, env_path, run, slug="", chosen=(), daily_limit=0):
-    """Everything the Campaña tab shows: list, today's room per mailbox, log, run."""
+def _per_company(value):
+    return send.PER_COMPANY_DAILY if value in (None, "") else _limit(value, "El máximo por empresa")
+
+
+def overview(out_dir, env_path, run, slug="", chosen=(), daily_limit=0, per_company=None):
+    """Everything the Campaña tab shows: list, today's room per mailbox, log, run, and the
+    follow-up (who is due, who answered)."""
     path = campaign_path(out_dir, slug)
     campaign = load_campaign(path)
     where = paths(out_dir, campaign)
@@ -84,6 +89,9 @@ def overview(out_dir, env_path, run, slug="", chosen=(), daily_limit=0):
             for row in reversed(log[-RECENT_ROWS:])]},
         "suppression": send.suppression_counts(where["suppression"]),
         "run": run.status(),
+        "replies": _reply_counts(where["out"]),
+        "followup": None,
+        "per_company": send.PER_COMPANY_DAILY,
     }
     try:
         senders, _ = _senders(env_path, campaign, chosen, _limit(daily_limit, "El límite diario"))
@@ -94,16 +102,32 @@ def overview(out_dir, env_path, run, slug="", chosen=(), daily_limit=0):
     if not where["contacts"].exists():
         info["error"] = "Todavía no hay contactos. Corre un escaneo primero."
         return info
-    plan = send.send_campaign(path, where["contacts"], where["out"], senders=senders,
+    per_company = _per_company(per_company)
+    plan = send.send_campaign(path, where["contacts"], where["out"], senders=senders, per_company=per_company,
                               suppression_path=where["suppression"], say=lambda *a: None)
-    info["plan"] = {k: plan[k] for k in ("audience", "already_sent", "pending", "sent_today", "room",
-                                         "this_run", "skipped")}
+    keys = ("audience", "already_sent", "pending", "sent_today", "room", "this_run", "skipped", "held_by_company")
+    info["plan"] = {k: plan[k] for k in keys}
+    if campaign.get("followup", {}).get("body"):
+        due = send.send_campaign(path, where["contacts"], where["out"], senders=senders, followup=True,
+                                 per_company=per_company, suppression_path=where["suppression"],
+                                 say=lambda *a: None)
+        info["followup"] = {"days": int(campaign["followup"].get("days") or send.FOLLOWUP_DAYS),
+                            "due": due["pending"], "this_run": due["this_run"], "waiting": due["followup_waiting"],
+                            "sent": counts.get(send.FOLLOWUP, 0)}
     return info
+
+
+def _reply_counts(out):
+    counts = {}
+    for row in replies.read_replies(out).values():
+        counts[row["tipo"]] = counts.get(row["tipo"], 0) + 1
+    return counts
 
 
 EXPORTS = {
     "enviados": ["fecha", "email", "nombre", "empresa", "puesto", "remitente"],
     "pendientes": ["email", "nombre", "empresa", "puesto", "saludo"],
+    "respuestas": ["fecha", "email", "nombre", "empresa", "puesto", "tipo", "regresa", "nuevo_contacto", "asunto"],
 }
 
 
@@ -111,7 +135,7 @@ def export_csv(out_dir, slug, which):
     """CSV (Excel-ready) of who already got the campaign, or who is still pending.
     Pending uses the same list the next send would use (no unsubscribes or bounces)."""
     if which not in EXPORTS:
-        raise ValueError("Elige enviados o pendientes.")
+        raise ValueError("Elige enviados, pendientes o respuestas.")
     path = campaign_path(out_dir, slug)
     campaign = load_campaign(path)
     where = paths(out_dir, campaign)
@@ -131,8 +155,15 @@ def export_csv(out_dir, slug, which):
             c = contacts.get(email_addr, {})
             w.writerow([row["fecha"], email_addr, c.get("name", ""), c.get("company", ""), c.get("title", ""),
                         row.get("remitente", "")])
+    elif which == "respuestas":  # the leads first
+        order = {replies.REPLIED: 0, replies.GONE: 1, replies.AWAY: 2}
+        for row in sorted(replies.read_replies(where["out"]).values(),
+                          key=lambda r: (order.get(r["tipo"], 3), r["fecha"])):
+            c = contacts.get(row["email"], {})
+            w.writerow([row["fecha"], row["email"], c.get("name", ""), c.get("company", ""), c.get("title", ""),
+                        row["tipo"], row["regresa"], row["nuevo_contacto"], row["asunto"]])
     elif where["contacts"].exists():
-        people, _ = load_audience(where["contacts"], campaign, suppression_path=where["suppression"])
+        people, _ = send.load_people(where["contacts"], where["out"], campaign, where["suppression"])
         for p in people:
             if p["email"] not in sent:
                 w.writerow([p["email"], p["name"], p["company"], p["title"], p["greeting"]])
@@ -155,6 +186,27 @@ def check_unsubscribes(out_dir, env_path, slug=""):
         raise ValueError(f"No pude revisar bajas y rebotes: {exc}") from None
 
 
+def check_replies(out_dir, env_path, slug=""):
+    """Read the inboxes for answers to the campaign and its follow-up. Returns {tipo: [emails]}."""
+    from mail_contact_scraper.config import load_settings
+    from mail_contact_scraper.imap_source import connect as imap_connect
+
+    campaign = load_campaign(campaign_path(out_dir, slug))
+    where = paths(out_dir, campaign)
+    boxes = send.inboxes(load_settings(env_path))
+    if not boxes:
+        raise ValueError("No hay buzones con contraseña para revisar.")
+    sent = [(r["email"], r.get("detalle", "")) for r in send.read_log(where["out"] / send.LOG_NAME)
+            if r["estado"] in (send.SENT, send.FOLLOWUP)]
+    if not sent:
+        return {}
+    own = campaign["sender"]["email"].split("@")[-1]
+    try:
+        return replies.sync_replies(boxes, imap_connect, where["out"], sent, where["suppression"], own_domains=[own])
+    except Exception as exc:  # IMAP errors come in many shapes
+        raise ValueError(f"No pude revisar las respuestas: {exc}") from None
+
+
 def health(out_dir, env_path, slug=""):
     """SPF / DKIM / DMARC light of each sending domain the Campaña tab can pick."""
     campaign = load_campaign(campaign_path(out_dir, slug))
@@ -172,7 +224,7 @@ def clean_list(out_dir, slug="", apply=False):
     where = paths(out_dir, campaign)
     if not where["contacts"].exists():
         raise ValueError("Todavía no hay contactos. Corre un escaneo primero.")
-    people, _ = load_audience(where["contacts"], campaign, suppression_path=where["suppression"])
+    people, _ = send.load_people(where["contacts"], where["out"], campaign, where["suppression"])
     done = {r["email"].lower() for r in send.read_log(where["out"] / send.LOG_NAME) if r["estado"] == send.SENT}
     found = deliverability.clean_list([p["email"] for p in people if p["email"] not in done])
     found["applied"] = 0
@@ -213,11 +265,12 @@ def bounce_checkpoint(check, out_dir, env_path, slug):
 class SendRun:
     """One campaign run at a time, in a background thread of the app."""
 
-    def __init__(self, check=check_unsubscribes):
+    def __init__(self, check=check_unsubscribes, answers=None):
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._thread = None
         self._check = check
+        self._answers = answers or (lambda *a: check_replies(*a))
         self.state = {"running": False}
 
     def status(self):
@@ -245,19 +298,24 @@ class SendRun:
         where = paths(out_dir, campaign)
         if not where["contacts"].exists():
             raise ValueError("Todavía no hay contactos. Corre un escaneo primero.")
+        followup = body.get("mode") == "seguimiento"
+        if followup and not campaign.get("followup", {}).get("body"):
+            raise ValueError("Esta campaña no tiene texto de seguimiento.")
         senders, _ = _senders(env_path, campaign, body.get("from"), _limit(body.get("daily_limit"), "El límite diario"))
         limit = _limit(body.get("limit"), "El máximo de esta corrida")
+        options = {"limit": limit, "pause": pause, "followup": followup,
+                   "per_company": _per_company(body.get("per_company"))}
         self._stop.clear()
         with self._lock:
-            self.state = {"running": True, "phase": "bajas", "campaign": path.stem,
+            self.state = {"running": True, "phase": "bajas", "campaign": path.stem, "mode": body.get("mode") or "",
                           "senders": [s["email"] for s in senders], "started_at": _now(),
                           "sent": 0, "total": 0, "last": "", "note": ""}
         self._thread = threading.Thread(target=self._run, daemon=True,
-                                        args=(out_dir, env_path, path, where, senders, limit, pause))
+                                        args=(out_dir, env_path, path, where, senders, options))
         self._thread.start()
         return self.status()
 
-    def _run(self, out_dir, env_path, path, where, senders, limit, pause):
+    def _run(self, out_dir, env_path, path, where, senders, options):
         note, awake = "", _keep_awake()
         try:
             try:
@@ -265,6 +323,14 @@ class SendRun:
                 note = f"Bajas nuevas: {len(unsub)} · rebotes nuevos: {len(bounced)}."
             except ValueError as exc:
                 note = f"{exc} Sigo con la lista que ya había."
+            try:
+                found = self._answers(out_dir, env_path, path.stem)
+                note += " " + _answers_note(found)
+            except ValueError as exc:
+                if options["followup"]:  # without the replies we could write to someone who answered
+                    self._set(note=note, error=f"{exc} No mandé el seguimiento.")
+                    return
+                note += f" {exc}"
             if self._stop.is_set():
                 self._set(note=note)
                 return
@@ -274,7 +340,7 @@ class SendRun:
                 self._set(sent=summary["sent"], total=summary["this_run"], last=f"{email_addr} ({who})")
 
             result = send.send_campaign(
-                path, where["contacts"], where["out"], senders=senders, send=True, limit=limit, pause=pause,
+                path, where["contacts"], where["out"], senders=senders, send=True, **options,
                 suppression_path=where["suppression"], sleep=self._stop.wait, stop=self._stop.is_set,
                 progress=progress, say=lambda *a: None,
                 checkpoint=bounce_checkpoint(self._check, out_dir, env_path, path.stem))
@@ -291,6 +357,15 @@ class SendRun:
             if awake:
                 awake.terminate()
             self._set(running=False, phase="terminado", finished_at=_now())
+
+
+def _answers_note(found):
+    parts = [f"{len(found.get(replies.REPLIED, []))} respuestas nuevas"]
+    if found.get(replies.AWAY):
+        parts.append(f"{len(found[replies.AWAY])} fuera de oficina")
+    if found.get(replies.GONE):
+        parts.append(f"{len(found[replies.GONE])} ya no laboran ahí")
+    return " · ".join(parts).capitalize() + "."
 
 
 def _keep_awake():
