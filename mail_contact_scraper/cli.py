@@ -117,6 +117,7 @@ def build_contacts(records, settings, out_dir):
         skip_services=settings.skip_services,
         # Read every time: the dashboard's "Ignorar" button edits it while a scan runs.
         ignore=read_ignore_file(settings.ignore_file),
+        allow=read_ignore_file(settings.allow_file),
     )
     for rec in records:
         book.add_sender(rec)
@@ -125,6 +126,9 @@ def build_contacts(records, settings, out_dir):
                 book.add_header_contact(name, addr, rec.get("date"), rec.get("mailbox"))
     count = book.write_csv(out_dir / "contacts.csv.tmp")
     os.replace(out_dir / "contacts.csv.tmp", out_dir / "contacts.csv")
+    tmp = out_dir / "omitted.json.tmp"
+    tmp.write_text(json.dumps(book.omitted_list(), ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp, out_dir / "omitted.json")
     return count, book.omitted_counts()
 
 

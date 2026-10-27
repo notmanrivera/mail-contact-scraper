@@ -129,6 +129,31 @@
   .switch { display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--ink); cursor: pointer; margin-bottom: 10px; }
   .switch input { width: 18px; height: 18px; accent-color: var(--red); }
 
+  /* ---------- Ignorados (lista completa) ---------- */
+  .ig-body { flex: 1; min-height: 0; overflow-y: auto; padding: 0 16px 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-content: start; }
+  .ig-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+  .ig-tools .input { flex: 1 1 260px; min-width: 0; }
+  .ig-tools .btn { height: 40px; }
+  textarea.input.ig-paste { height: 40px; min-height: 40px; padding: 10px 14px; font: 500 13px var(--font); resize: vertical; }
+  .ig-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .ig-chips button { border: 0; font: 600 12px var(--font); padding: 6px 12px; border-radius: 100px; background: #F4F2F1; color: var(--text); cursor: pointer; }
+  .ig-chips button[aria-pressed="true"] { background: var(--ink); color: #fff; }
+  .ig-table td.who { max-width: 320px; }
+  .ig-table td.who .n { display: block; font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+  .ig-table td.why { max-width: 300px; color: var(--muted); }
+  .ig-table td.num, .ig-table th.num { text-align: right; }
+  .ig-table td.act { text-align: right; max-width: none; }
+  .link-btn { border: 0; background: none; color: var(--red); font: 600 12px var(--font); cursor: pointer; padding: 3px 6px; border-radius: 8px; }
+  .link-btn:hover { background: var(--red-tint); }
+  .ig-table td.act .link-btn + .link-btn { margin-left: 4px; }
+  .ig-scroll { overflow-x: auto; }
+  .ig-more { margin-top: 10px; }
+  @media (max-width: 760px) {
+    #ignored .drawer-head { flex-wrap: wrap; gap: 10px; }
+    #ignored .tabs { order: 3; margin: 0; width: 100%; overflow-x: auto; }
+    #ignored .tabs button { white-space: nowrap; flex: none; }
+  }
+
   /* ---------- Envío de prueba ---------- */
   .drawer.wide { width: min(1180px, calc(100vw - 24px)); }
   .mailer-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(300px, 400px) minmax(0, 1fr); gap: 14px; padding: 0 16px 16px; }
@@ -562,6 +587,7 @@
         <input class="input" id="ig-value" placeholder="uber.com o juan@empresa.mx" style="flex:1;min-width:0">
         <button class="btn btn-outline" type="submit">Ignorar</button>
       </form>
+      <div class="actions-row" style="margin-top:10px"><button class="btn btn-primary" id="ig-open" type="button">Ver la lista completa</button></div>
       <div class="msg" id="ig-msg" hidden></div>
     </section>
 
@@ -614,6 +640,68 @@
       <div class="up-live" id="up-live" hidden></div>
       <div class="up-progress" id="up-progress" hidden><div class="up-track"><div class="up-fill" id="up-fill"></div></div><span class="up-pct" id="up-pct"></span></div>
       <div class="msg" id="up-msg" hidden></div>
+    </section>
+  </div>
+</aside>
+<aside class="drawer wide" id="ignored" role="dialog" aria-modal="true" aria-labelledby="ignored-title" hidden>
+  <div class="drawer-head">
+    <div><div class="card-kicker">Contactos</div><h2 id="ignored-title">Ignorados</h2></div>
+    <div class="tabs" role="tablist" id="ig-tabs">
+      <button type="button" role="tab" data-igtab="mine" aria-selected="true">Tu lista</button>
+      <button type="button" role="tab" data-igtab="omitted" aria-selected="false">Omitidos</button>
+      <button type="button" role="tab" data-igtab="allowed" aria-selected="false">Permitidos</button>
+      <button type="button" role="tab" data-igtab="supp" aria-selected="false">Bajas y rebotes</button>
+    </div>
+    <button class="icon-btn" id="close-ignored" type="button" aria-label="Cerrar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <div class="ig-body">
+    <section class="set" id="ig-pane-mine">
+      <h3>Tu lista de ignorados</h3>
+      <p class="hint">Correos o dominios que nunca son prospectos. Un dominio (uber.com) tapa todos sus correos y subdominios; nombre.* tapa todas sus terminaciones (.com, .com.mx…). Puedes pegar varios separados por coma o en renglones.</p>
+      <form class="ig-tools" id="igm-form" autocomplete="off">
+        <textarea class="input ig-paste" id="igm-value" rows="2" placeholder="uber.com, rappi.*, juan@empresa.mx"></textarea>
+        <button class="btn btn-primary" type="submit">Ignorar</button>
+        <input class="input" id="igm-search" type="search" placeholder="Buscar en tu lista" style="flex:0 1 220px">
+      </form>
+      <div class="msg" id="igm-msg" hidden></div>
+      <div class="ig-scroll">
+        <table class="log-table ig-table"><thead><tr><th>Correo o dominio</th><th>Tipo</th><th class="num">Contactos que oculta</th><th></th></tr></thead><tbody id="igm-rows"></tbody></table>
+      </div>
+    </section>
+    <section class="set" id="ig-pane-omitted" hidden>
+      <h3>Todo lo que se dejó fuera</h3>
+      <p class="hint">Cada remitente o destinatario que no llegó a la lista de contactos y por qué. Si alguno sí es prospecto, usa <b>Permitir</b>: aparece de nuevo aunque parezca servicio, aviso automático o correo masivo.</p>
+      <div class="ig-chips" id="igo-chips"></div>
+      <div class="ig-tools">
+        <input class="input" id="igo-search" type="search" placeholder="Buscar correo, nombre o dominio">
+        <button class="btn btn-outline" id="igo-csv" type="button">Descargar lista</button>
+      </div>
+      <div class="ig-scroll">
+        <table class="log-table ig-table"><thead><tr><th>Correo</th><th>Motivo</th><th class="num">Veces</th><th>Último</th><th></th></tr></thead><tbody id="igo-rows"></tbody></table>
+      </div>
+      <div class="ig-more"><button class="btn btn-outline" id="igo-more" type="button" hidden>Mostrar más</button></div>
+    </section>
+    <section class="set" id="ig-pane-allowed" hidden>
+      <h3>Permitidos</h3>
+      <p class="hint">Correos o dominios que siempre son contactos, aunque estén en la lista integrada de servicios o manden correos masivos. Por ejemplo, un banco que también es cliente.</p>
+      <form class="ig-tools" id="iga-form" autocomplete="off">
+        <input class="input" id="iga-value" placeholder="banorte.com o compras@cliente.mx">
+        <button class="btn btn-primary" type="submit">Permitir</button>
+      </form>
+      <div class="msg" id="iga-msg" hidden></div>
+      <div class="ig-scroll">
+        <table class="log-table ig-table"><thead><tr><th>Correo o dominio</th><th>Tipo</th><th></th></tr></thead><tbody id="iga-rows"></tbody></table>
+      </div>
+    </section>
+    <section class="set" id="ig-pane-supp" hidden>
+      <h3>Bajas y rebotes del mailing</h3>
+      <p class="hint">Quienes pidieron no recibir más correos y las direcciones que rebotaron. Siguen como contactos, pero el mailing nunca les vuelve a enviar. La lista se llena sola con "Revisar bajas y rebotes" en Envíos.</p>
+      <div class="ig-tools"><input class="input" id="igs-search" type="search" placeholder="Buscar correo"></div>
+      <div class="ig-scroll">
+        <table class="log-table ig-table"><thead><tr><th>Correo</th><th>Motivo</th><th>Desde</th></tr></thead><tbody id="igs-rows"></tbody></table>
+      </div>
     </section>
   </div>
 </aside>
@@ -1130,7 +1218,7 @@
     const r = await settingsCall("/settings/ignore", { add: value });
     if (!r.ok) return alert(r.error);
     openEmail = null;
-    flash(`Listo: ${value} ya no aparece. Lo puedes deshacer en Configuración ▸ Ignorados.`);
+    flash(`Listo: ${value} ya no aparece. Lo puedes deshacer en Configuración ▸ Ignorados ▸ Ver la lista completa.`);
     poll();
   }
   $("rows").addEventListener("click", (e) => {
@@ -1254,11 +1342,11 @@
   }
   function closeMailer() { $("mailer").hidden = $("scrim").hidden = true; clearTimeout(campTimer); }
   function setTab(tab) {
-    document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === tab));
+    document.querySelectorAll("#mailer .tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === tab));
     $("ml-camp-pane").hidden = tab !== "camp"; $("ml-test-pane").hidden = tab !== "test";
     if (tab === "test") $("ml-to").focus(); else refreshCampaign();
   }
-  document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
+  document.querySelectorAll("#mailer .tabs button").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
 
   /* Campaña: lista, buzones, envío real con confirmación, registro */
   let camp = null, campTimer = null, chosenBoxes = null;
@@ -1392,11 +1480,12 @@
 
   $("open-settings").addEventListener("click", openSettings);
   $("close-settings").addEventListener("click", closeSettings);
-  $("scrim").addEventListener("click", () => { closeSettings(); closeMailer(); });
+  $("scrim").addEventListener("click", () => { closeSettings(); closeMailer(); closeIgnored(); });
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
     if (!$("drawer").hidden) closeSettings();
     if (!$("mailer").hidden) closeMailer();
+    if (!$("ignored").hidden) closeIgnored();
   });
   $("mb-form").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -1463,6 +1552,124 @@
     showMsg("ocr-msg", res.ok ? "Volviendo a leer los correos con firma en imagen. Verás el avance arriba."
                               : "Ya hay un escaneo corriendo. Inténtalo cuando termine.", res.ok);
     if (res.ok) poll();
+  });
+
+  /* ---------- Ignorados: lista completa ---------- */
+  let igData = null, igTab = "mine", igReason = "all", igLimit = 200;
+  const REASON = { service: "Servicio o app", bulk: "Correo masivo", automated: "Aviso automático", ignored: "Ignorado por ti" };
+  const BULK_WHY = { "list-unsubscribe": "trae botón de baja de un clic", precedence: "viene marcado como masivo",
+                     "auto-submitted": "es una respuesta automática", esp: "lo mandó una plataforma de mailing" };
+  const SUPP = { baja: "Pidió su baja", rebote: "Rebotó", rechazado: "Rechazado" };
+  const domainOf = (e) => e.split("@").pop();
+  const kindOf = (v) => v.includes("@") ? "Correo" : v.endsWith(".*") ? "Dominio, cualquier terminación" : "Dominio";
+  function whyText(o) {
+    if (o.reason === "service") return `Lista integrada: ${o.rule || domainOf(o.email)}`;
+    if (o.reason === "bulk") return `Masivo: ${BULK_WHY[o.rule] || "encabezados de mailing"}`;
+    if (o.reason === "automated") return `Empieza con ${o.rule || "un nombre automático"}`;
+    return `Tu lista: ${o.rule || o.email}`;
+  }
+  async function loadIgnored() {
+    try { igData = await (await fetch("/ignored", { cache: "no-store" })).json(); } catch (e) { igData = null; }
+    renderIgnored();
+  }
+  function setIgTab(tab) {
+    igTab = tab;
+    document.querySelectorAll("#ig-tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.igtab === tab));
+    ["mine", "omitted", "allowed", "supp"].forEach((t) => { $(`ig-pane-${t}`).hidden = t !== tab; });
+  }
+  const has = (q, ...fields) => !q || fields.some((f) => String(f || "").toLowerCase().includes(q));
+  function renderIgnored() {
+    const d = igData || { ignored: [], allowed: [], omitted: [], suppression: [] };
+    const tabs = { mine: d.ignored.length, omitted: d.omitted.length, allowed: d.allowed.length, supp: d.suppression.length };
+    const labels = { mine: "Tu lista", omitted: "Omitidos", allowed: "Permitidos", supp: "Bajas y rebotes" };
+    document.querySelectorAll("#ig-tabs button").forEach((b) => { b.textContent = `${labels[b.dataset.igtab]} · ${fmt.format(tabs[b.dataset.igtab])}`; });
+
+    const qm = $("igm-search").value.trim().toLowerCase();
+    $("igm-rows").innerHTML = d.ignored.filter((i) => has(qm, i.value)).map((i) => `<tr>
+        <td class="who">${esc(i.value)}</td><td>${kindOf(i.value)}</td><td class="num">${fmt.format(i.hides)}</td>
+        <td class="act"><button class="link-btn" data-unignore-full="${esc(i.value)}">Dejar de ignorar</button></td></tr>`).join("")
+      || `<tr><td colspan="4" class="muted">${d.ignored.length ? "Nada coincide con la búsqueda." : "Todavía no ignoras nada. Escribe arriba un correo o dominio."}</td></tr>`;
+
+    const counts = {};
+    d.omitted.forEach((o) => { counts[o.reason] = (counts[o.reason] || 0) + 1; });
+    $("igo-chips").innerHTML = [["all", "Todos", d.omitted.length], ...Object.keys(REASON).filter((k) => counts[k]).map((k) => [k, REASON[k], counts[k]])]
+      .map(([k, label, n]) => `<button type="button" data-reason="${k}" aria-pressed="${igReason === k}">${label} · ${fmt.format(n)}</button>`).join("");
+    const qo = $("igo-search").value.trim().toLowerCase();
+    const list = d.omitted.filter((o) => (igReason === "all" || o.reason === igReason) && has(qo, o.email, o.name, o.rule));
+    $("igo-rows").innerHTML = list.slice(0, igLimit).map((o) => {
+      const acts = [];
+      if (o.reason === "ignored" && o.rule) acts.push(`<button class="link-btn" data-unignore-full="${esc(o.rule)}" title="Quitar ${esc(o.rule)} de tu lista">Dejar de ignorar</button>`);
+      acts.push(`<button class="link-btn" data-allow="${esc(o.email)}" title="Siempre tomarlo como contacto">Permitir</button>`);
+      return `<tr><td class="who">${esc(o.email)}${o.name ? `<span class="n">${esc(o.name)}</span>` : ""}</td>
+        <td class="why" title="${esc(whyText(o))}">${esc(REASON[o.reason] || o.reason)} · ${esc(whyText(o))}</td>
+        <td class="num">${fmt.format(o.seen || 0)}</td><td>${o.last_seen ? esc(shortDate(o.last_seen)) : "—"}</td>
+        <td class="act">${acts.join("")}</td></tr>`;
+    }).join("") || `<tr><td colspan="5" class="muted">${d.omitted.length ? "Nada coincide." : "No se ha omitido a nadie todavía."}</td></tr>`;
+    $("igo-more").hidden = list.length <= igLimit;
+    $("igo-more").textContent = `Mostrar más (${fmt.format(list.length - igLimit)} restantes)`;
+
+    $("iga-rows").innerHTML = d.allowed.map((v) => `<tr><td class="who">${esc(v)}</td><td>${kindOf(v)}</td>
+        <td class="act"><button class="link-btn" data-unallow="${esc(v)}">Quitar</button></td></tr>`).join("")
+      || '<tr><td colspan="3" class="muted">No hay permitidos. Agrégalos aquí o con "Permitir" en Omitidos.</td></tr>';
+
+    const qs = $("igs-search").value.trim().toLowerCase();
+    $("igs-rows").innerHTML = d.suppression.filter((x) => has(qs, x.email)).map((x) => `<tr><td class="who">${esc(x.email)}</td>
+        <td>${esc(SUPP[x.reason] || x.reason)}</td><td>${x.date ? esc(shortDate(x.date)) : "—"}</td></tr>`).join("")
+      || `<tr><td colspan="3" class="muted">${d.suppression.length ? "Nada coincide." : "Todavía no hay bajas ni rebotes."}</td></tr>`;
+  }
+  async function listCall(path, body, msgId) {
+    const r = await settingsCall(path, body);
+    if (r.lists) { igData = r.lists; renderIgnored(); }
+    if (msgId) showMsg(msgId, r.ok ? "" : r.error, r.ok);
+    if (r.ok) poll();
+    return r;
+  }
+  async function openIgnored(tab) {
+    closeSettings();
+    $("ignored").hidden = $("scrim").hidden = false;
+    setIgTab(tab || igTab);
+    await loadIgnored();
+  }
+  function closeIgnored() { $("ignored").hidden = true; if ($("drawer").hidden && $("mailer").hidden) $("scrim").hidden = true; }
+  $("ig-open").addEventListener("click", () => openIgnored("mine"));
+  $("close-ignored").addEventListener("click", closeIgnored);
+  document.querySelectorAll("#ig-tabs button").forEach((b) => b.addEventListener("click", () => setIgTab(b.dataset.igtab)));
+  ["igm-search", "igo-search", "igs-search"].forEach((id) => $(id).addEventListener("input", () => { igLimit = 200; renderIgnored(); }));
+  $("igo-chips").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-reason]");
+    if (b) { igReason = b.dataset.reason; igLimit = 200; renderIgnored(); }
+  });
+  $("igo-more").addEventListener("click", () => { igLimit += 200; renderIgnored(); });
+  $("igm-value").addEventListener("keydown", (e) => {  // Enter adds, Shift+Enter makes a new line
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("igm-form").requestSubmit(); }
+  });
+  $("igm-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const r = await listCall("/settings/ignore", { add: $("igm-value").value }, "igm-msg");
+    if (r.ok) { $("igm-value").value = ""; flash(r.added.length === 1 ? `Listo: ${r.added[0]} ya no aparece en los contactos.` : `Listo: ${r.added.length} agregados a tu lista.`); }
+  });
+  $("iga-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const r = await listCall("/settings/allow", { add: $("iga-value").value }, "iga-msg");
+    if (r.ok) { $("iga-value").value = ""; flash("Listo: vuelve a aparecer en los contactos."); }
+  });
+  $("ignored").addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-unignore-full], [data-allow], [data-unallow]");
+    if (!b) return;
+    b.disabled = true;
+    const { unignoreFull, allow, unallow } = b.dataset;
+    if (unignoreFull) { const r = await listCall("/settings/ignore", { remove: unignoreFull }); if (r.ok) flash(`${unignoreFull} vuelve a aparecer.`); }
+    else if (allow) { const r = await listCall("/settings/allow", { add: allow }); if (r.ok) flash(`Listo: ${allow} vuelve a los contactos.`); }
+    else if (unallow) { const r = await listCall("/settings/allow", { remove: unallow }); if (r.ok) flash(`${unallow} ya no está en permitidos.`); }
+    b.disabled = false;
+  });
+  $("igo-csv").addEventListener("click", () => {
+    const rows = [["correo", "nombre", "motivo", "regla", "veces", "ultimo"],
+      ...(igData ? igData.omitted : []).map((o) => [o.email, o.name || "", REASON[o.reason] || o.reason, whyText(o), o.seen || 0, o.last_seen || ""])];
+    const csv = "\ufeff" + rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\r\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    a.download = "omitidos.csv"; a.click(); URL.revokeObjectURL(a.href);
   });
 
   /* ---------- Actualizaciones (solo en la app de Mac) ---------- */

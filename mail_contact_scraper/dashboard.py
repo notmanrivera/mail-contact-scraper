@@ -149,6 +149,50 @@ def settings_payload(out_dir, env_path):
     }
 
 
+def ignored_payload(out_dir, env_path):
+    """GET /ignored: the user's two lists, everyone left out and why, and the mailing's
+    unsubscribes and bounces (read only: those are the mailing's to keep)."""
+    from .config import load_settings
+    from .contacts import read_ignore_file
+
+    settings = load_settings(env_path)
+    omitted = _read_json_list(Path(out_dir) / "omitted.json")
+    hides = {}
+    for o in omitted:
+        if o.get("reason") == "ignored" and o.get("rule"):
+            hides[o["rule"]] = hides.get(o["rule"], 0) + 1
+    return {
+        "ignored": [{"value": v, "hides": hides.get(v, 0)} for v in read_ignore_file(settings.ignore_file)],
+        "allowed": read_ignore_file(settings.allow_file),
+        "omitted": omitted,
+        "suppression": _read_suppression(Path(out_dir) / "suppression.txt"),
+    }
+
+
+def _read_json_list(path):
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    return data if isinstance(data, list) else []
+
+
+def _read_suppression(path):
+    """mailing's suppression.txt: '# baja 2026-10-27' headers, then one address per line."""
+    out, reason, when = [], "otro", ""
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return out
+    for line in lines:
+        if line.startswith("#"):
+            words = line[1:].split()
+            reason, when = (words[0] if words else "otro"), (words[1] if len(words) > 1 else "")
+        elif line.strip():
+            out.append({"email": line.strip().lower(), "reason": reason, "date": when})
+    return out
+
+
 OCR_ENGINES = ("tesseract", "auto", "claude")
 
 
@@ -182,17 +226,25 @@ def settings_action(path, body, out_dir, env_path, control=None):
     from . import accounts, schedule, sheets
 
     try:
-        if path == "/settings/ignore":
+        if path in ("/settings/ignore", "/settings/allow"):
             from . import cli
             from .config import load_settings
-            from .contacts import update_ignore_file
+            from .contacts import ALLOW_HEADER, IGNORE_HEADER, read_ignore_file, split_entries, update_ignore_file
 
             settings = load_settings(env_path)
-            update_ignore_file(settings.ignore_file, add=body.get("add"), remove=body.get("remove"))
+            lists = [(settings.ignore_file, IGNORE_HEADER), (settings.allow_file, ALLOW_HEADER)]
+            (this, header), (other, other_header) = lists if path == "/settings/ignore" else lists[::-1]
+            added = split_entries(body.get("add"))
+            update_ignore_file(this, add=" ".join(added), remove=body.get("remove"), header=header)
+            # One entry lives in one list: ignoring something takes it off "permitidos" and back.
+            if set(added) & set(read_ignore_file(other)):
+                for value in added:
+                    update_ignore_file(other, remove=value, header=other_header)
             # A running scan re-reads the list on its next batch; otherwise apply it now.
             if not (control and control.alive(_read_json(Path(out_dir) / "status.json"))):
                 cli.rebuild(out_dir, settings)
-            return 200, {"ok": True, **settings_payload(out_dir, env_path)}
+            return 200, {"ok": True, "added": added, **settings_payload(out_dir, env_path),
+                         "lists": ignored_payload(out_dir, env_path)}
         if path == "/settings/mailbox":
             email, password = (body.get("email") or "").strip(), body.get("password") or ""
             if not accounts.EMAIL_RE.match(email) or not password:
@@ -348,6 +400,8 @@ def make_handler(out_dir, control, env_path=".env", updater=None):
                 self._json(payload)
             elif url.path == "/settings":
                 self._json(settings_payload(out_dir, env_path))
+            elif url.path == "/ignored":
+                self._json(ignored_payload(out_dir, env_path))
             elif url.path == "/mailing":
                 self._json(mailing_payload(env_path))
             elif url.path == "/mailing/name":

@@ -125,6 +125,21 @@ Si se cuela alguno, ábrelo en la tabla y pulsa **Ignorar este correo** o **Igno
 se deshace en Configuración ▸ Ignorados. `SKIP_SERVICES=false` apaga la lista integrada.
 Lo de correos masivos solo aplica a correos leídos desde esta versión.
 
+Configuración ▸ Ignorados ▸ **Ver la lista completa** abre una ventana con cuatro pestañas:
+
+- **Tu lista**: lo que ignoras, cuántos contactos tapa cada uno y **Dejar de ignorar**. Se
+  pueden pegar varios a la vez separados por coma o en renglones: `uber.com` (el dominio y
+  sus subdominios), `rappi.*` (cualquier terminación: .com, .com.mx...) o un correo.
+- **Omitidos**: cada correo que se quedó fuera, por qué (servicio, masivo, automático o tu
+  lista y qué regla lo tapó), cuántas veces apareció y cuándo. Se filtra, se busca y se
+  descarga en CSV. Se guarda en `output/omitted.json` cada vez que se arma el CSV.
+- **Permitidos**: correos o dominios que siempre son contactos aunque parezcan servicio,
+  aviso o masivo (un banco que también es cliente). Se guardan en `permitidos.txt` y ganan
+  sobre todo lo demás menos los correos de la propia empresa. **Permitir** en Omitidos los
+  agrega aquí; ignorar algo lo quita de permitidos y al revés.
+- **Bajas y rebotes**: la lista del mailing (`output/suppression.txt`), solo para consulta.
+  Siguen como contactos, pero el mailing nunca les vuelve a enviar.
+
 ### Rebotes y clientes dormidos
 
 - Los avisos de "no se pudo entregar" marcan al contacto en la columna `bounced` (insignia
