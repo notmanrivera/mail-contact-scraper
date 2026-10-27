@@ -17,6 +17,10 @@ from .signature import IMG_TOKEN_RE, extract_signature
 
 log = logging.getLogger("mail_contact_scraper")
 
+# Bump when reading a message gets better (OCR, signature parsing, bulk detection), so
+# --refresh knows which records were read by an older version.
+READER_VERSION = 2
+
 
 def resolve_images(signature, msg, ocr):
     """Replace [[IMG:n]] tokens in the signature with the image's OCR text."""
@@ -52,12 +56,26 @@ def analyze(raw_bytes, region="MX", ocr=None):
         "contact": contact,
         "bulk": msg["bulk"],
         "bounced": msg["bounced"],
+        "v": READER_VERSION,
     }
 
 
-def _load_done(jsonl_path, primary=""):
-    """Previous records plus, per mailbox, the (folder, uidvalidity, uid) already read."""
-    done, records = {}, []
+def record_key(rec):
+    """What identifies a message across runs: its IMAP uid, or the local file it came from."""
+    if rec.get("uid"):
+        return ("imap", (rec.get("mailbox") or "").lower(), rec.get("folder"), rec.get("uidvalidity"), rec["uid"])
+    if rec.get("source"):
+        return ("file", rec["source"])
+    return None
+
+
+def _load_done(jsonl_path, primary="", min_version=0):
+    """Previous records plus, per mailbox, the (folder, uidvalidity, uid) already read.
+
+    A message read twice (by --refresh) keeps only its last record. With min_version, a
+    record read by an older version doesn't count as done, so it is fetched again.
+    """
+    done, by_key, loose = {}, {}, []
     if jsonl_path.exists():
         with open(jsonl_path, encoding="utf-8") as fh:
             for line in fh:
@@ -67,11 +85,31 @@ def _load_done(jsonl_path, primary=""):
                     continue
                 if rec.get("uid") and not rec.get("mailbox") and primary:
                     rec["mailbox"] = primary  # written before multi-mailbox support
-                records.append(rec)
-                if rec.get("uid"):
-                    key = (rec.get("mailbox") or "").lower()
-                    done.setdefault(key, set()).add((rec["folder"], rec["uidvalidity"], rec["uid"]))
-    return done, records
+                key = record_key(rec)
+                if key:
+                    by_key.pop(key, None)  # re-insert so the order follows the last read
+                    by_key[key] = rec
+                else:
+                    loose.append(rec)
+    for rec in by_key.values():
+        if rec.get("uid") and rec.get("v", 1) >= min_version:
+            key = (rec.get("mailbox") or "").lower()
+            done.setdefault(key, set()).add((rec["folder"], rec["uidvalidity"], rec["uid"]))
+    return done, loose + list(by_key.values())
+
+
+def refresh_progress(jsonl_path, primary=""):
+    """(read by this version, total) for the dashboard's "Volver a leer todo"."""
+    _, records = _load_done(jsonl_path, primary)
+    return sum(1 for r in records if r.get("v", 1) >= READER_VERSION), len(records)
+
+
+def _compact(jsonl_path, records):
+    """Rewrite messages.jsonl without the older copies --refresh left behind."""
+    tmp = jsonl_path.with_suffix(".tmp")
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.writelines(json.dumps(r, ensure_ascii=False) + "\n" for r in records)
+    os.replace(tmp, jsonl_path)
 
 
 def _forget_image_signatures(jsonl_path):
@@ -177,6 +215,9 @@ def build_parser():
     p.add_argument("--output", help="Output directory (default: OUTPUT_DIR or ./output)")
     p.add_argument("--fresh", action="store_true", help="Ignore previous progress and start over")
     p.add_argument("--no-ocr", action="store_true", help="Skip OCR of image signatures")
+    p.add_argument("--refresh", action="store_true",
+                   help="Read again every message read by an older version (better OCR and filters). "
+                        "Current contacts stay until each message is re-read; resumes if stopped")
     p.add_argument("--reocr", action="store_true",
                    help="Read again the messages whose signature was an image (after improving OCR)")
     p.add_argument("--dashboard", action="store_true", help="Open the live dashboard while scraping")
@@ -230,9 +271,16 @@ def main(argv=None):
             print("\n".join(b.imap_host if len(boxes) == 1 else f"{b.email}: {b.imap_host}" for b in boxes))
             return 0
 
+    primary = settings.mailboxes[0].email if settings.mailboxes else ""
     if args.reocr:  # only now that the scan can start, so a bad .env never loses records
         _forget_image_signatures(jsonl_path)
-        done, records = _load_done(jsonl_path, settings.mailboxes[0].email if settings.mailboxes else "")
+        done, records = _load_done(jsonl_path, primary)
+    if args.refresh:
+        done, records = _load_done(jsonl_path, primary, min_version=READER_VERSION)
+        _compact(jsonl_path, records)
+        pending = sum(1 for r in records if r.get("v", 1) < READER_VERSION)
+        log.info("Volviendo a leer %d correos leídos con una versión anterior.", pending)
+    index = {record_key(r): i for i, r in enumerate(records) if record_key(r)}
 
     ocr = None
     if settings.ocr_images:
@@ -244,7 +292,8 @@ def main(argv=None):
     status = {"started_at": datetime.now().isoformat(timespec="seconds"),
               "mailbox": boxes[0].email if boxes else local_box,
               "mailboxes": [{"email": b.email, "state": "pending", "new": 0} for b in boxes],
-              "pid": os.getpid(), "folder": "", "folder_total": 0, "folder_pending": 0, "new_messages": 0}
+              "pid": os.getpid(), "folder": "", "folder_total": 0, "folder_pending": 0, "new_messages": 0,
+              "refresh": bool(args.refresh)}
     write_outputs(records, settings, out_dir, status)
 
     def on_folder(folder, total, pending):
@@ -262,7 +311,13 @@ def main(argv=None):
                     return
                 rec.update(meta)
                 sink.write(json.dumps(rec, ensure_ascii=False) + "\n")
-                records.append(rec)
+                key = record_key(rec)
+                if key and key in index:  # --refresh: the new reading replaces the old one
+                    records[index[key]] = rec
+                else:
+                    if key:
+                        index[key] = len(records)
+                    records.append(rec)
                 new += 1
                 status["new_messages"] = new
                 status["folder_done"] = status.get("folder_done", 0) + 1
@@ -273,7 +328,7 @@ def main(argv=None):
                     write_outputs(records, settings, out_dir, status)
 
             if args.local:
-                seen = {r.get("source") for r in records}
+                seen = {r.get("source") for r in records if not args.refresh or r.get("v", 1) >= READER_VERSION}
                 status.update(folder="archivos locales", folder_pending=0, folder_done=0)
                 meta = {"mailbox": local_box} if local_box else {}
                 for source, raw in iter_local(args.local):
@@ -315,6 +370,8 @@ def main(argv=None):
         status["error"] = "Detenido" if isinstance(exc, KeyboardInterrupt) else (str(exc) or exc.__class__.__name__)
         write_outputs(records, settings, out_dir, status, running=False)
         raise
+    if args.refresh:
+        _compact(jsonl_path, records)
     count = write_outputs(records, settings, out_dir, status, running=False)
     log.info("Processed %d new messages (%d total). Wrote %d contacts to %s",
              new, len(records), count, out_dir / "contacts.csv")

@@ -282,6 +282,19 @@ las mejoras a esos, usa **Releer firmas en imagen** en Configuración, o
 `python -m mail_contact_scraper --reocr`: vuelve a bajar solo los correos cuya firma
 era imagen.
 
+## Volver a leer todos los correos
+
+Cuando la app aprende a leer mejor (OCR, nombres, correos masivos), los correos ya leídos
+se quedan con la lectura vieja. Configuración ▸ **Volver a leer todo**, o
+`python -m mail_contact_scraper --refresh`, los baja y lee otra vez:
+
+- Los contactos actuales se quedan mientras tanto; cada correo se reemplaza al releerlo.
+- Si lo detienes, al volver a pulsarlo sigue con los que faltan (cada registro guarda con
+  qué versión se leyó, `v` en `messages.jsonl`).
+- No toca el registro de envíos del mailing, las bajas ni los rebotes.
+- Los ignorados, servicios y permitidos no lo necesitan: se aplican al momento a todo lo
+  ya leído cada vez que se arma el CSV.
+
 ## Contraseña según el proveedor
 
 El servidor se detecta con los registros MX de `dindustrimex.com`. Si la detección

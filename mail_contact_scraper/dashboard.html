@@ -593,6 +593,14 @@
     </section>
 
     <section class="set">
+      <h3>Volver a leer todos los correos</h3>
+      <p class="hint">Vuelve a bajar y leer cada correo con las mejoras más recientes: OCR de firmas en imagen, nombres y empresas, y detección de correos masivos. Mientras tanto los contactos actuales se quedan y se van actualizando. El registro de envíos, las bajas y los rebotes no se tocan. Con buzones grandes puede tardar horas; si lo detienes, sigue donde se quedó. Los ignorados y servicios no necesitan esto: se aplican al momento a todo lo ya leído.</p>
+      <p class="hint" id="rf-status"></p>
+      <div class="actions-row"><button class="btn btn-outline" id="rf-start" type="button">Volver a leer todo</button></div>
+      <div class="msg" id="rf-msg" hidden></div>
+    </section>
+
+    <section class="set">
       <h3>Escaneo automático</h3>
       <p class="hint">Busca correos nuevos todos los días a la misma hora, aunque el dashboard esté cerrado. Si la Mac está dormida, corre al despertar.</p>
       <label class="switch"><input type="checkbox" id="sch-on"> Escanear todos los días a las</label>
@@ -903,13 +911,14 @@
       kicker = local ? "Archivos locales" : `${multi ? st.mailbox + " · " : ""}Carpeta ${st.folder}`;
       if (pending) {
         width = pct(done, pending);
-        numbers = `${fmt.format(done)} de ${fmt.format(pending)} correos nuevos`;
+        numbers = `${fmt.format(done)} de ${fmt.format(pending)} correos ${st.refresh ? "por volver a leer" : "nuevos"}`;
       } else {
         width = running ? 0 : 100;
         numbers = done ? `${fmt.format(done)} correos leídos` : "No había correos nuevos";
       }
       pctText = pending || !running ? `${width}%` : "—";
-      label = running ? "Leyendo correos" : st.error === "Detenido" ? "Escaneo detenido" : st.error ? "Escaneo con error" : "Escaneo completo";
+      label = running ? (st.refresh ? "Volviendo a leer todo" : "Leyendo correos") : st.error === "Detenido" ? "Escaneo detenido"
+        : st.error ? "Escaneo con error" : st.refresh ? "Relectura completa" : "Escaneo completo";
       if (running) {
         rateSamples.push([Date.now(), done]);
         rateSamples = rateSamples.filter(([t]) => Date.now() - t < 120000);
@@ -1316,6 +1325,13 @@
                  : `Conectada a la pestaña ${sh.tab}.${sh.auto ? " Se envía sola al terminar cada escaneo." : ""}`)
       : "Manda los contactos a una hoja de cálculo después de cada escaneo.";
     if (last.error && !last.ok) showMsg("sh-msg", `Último envío falló: ${last.error}`, false);
+    const rf = cfg.refresh || { done: 0, total: 0 };
+    const left = rf.total - rf.done;
+    $("rf-status").textContent = !rf.total ? "Todavía no hay correos leídos."
+      : left ? `${fmt.format(left)} de ${fmt.format(rf.total)} correos se leyeron con una versión anterior.`
+      : `Los ${fmt.format(rf.total)} correos ya están leídos con la versión actual.`;
+    $("rf-start").textContent = rf.done && left ? "Seguir leyendo" : "Volver a leer todo";
+    $("rf-start").disabled = !left;
     const oc = cfg.ocr || {};
     $("ocr-engine").value = oc.engine || "tesseract";
     $("ocr-key").placeholder = oc.has_key ? "Guardada (escribe otra para cambiarla)" : "sk-ant-…";
@@ -1563,6 +1579,13 @@
     else $("ocr-engine").value = engine;  // keep the choice on screen so they can add the key
     showMsg("ocr-msg", r.ok ? ({ tesseract: "Listo: solo Tesseract.", auto: "Listo: Claude leerá las firmas que Tesseract no entienda.",
                                  claude: "Listo: Claude leerá todas las firmas en imagen." })[engine] : r.error, r.ok);
+  });
+  $("rf-start").addEventListener("click", async () => {
+    if (!confirm("Se van a volver a bajar todos los correos que faltan por releer. Los contactos actuales se quedan mientras tanto. ¿Empezar?")) return;
+    const res = await fetch("/refresh", { method: "POST", headers: { "X-Requested-With": "dashboard" } });
+    showMsg("rf-msg", res.ok ? "Volviendo a leer todo. Verás el avance arriba; puedes cerrar esta ventana."
+                             : "Ya hay un escaneo corriendo. Inténtalo cuando termine.", res.ok);
+    if (res.ok) poll();
   });
   $("ocr-reread").addEventListener("click", async () => {
     const res = await fetch("/reocr", { method: "POST", headers: { "X-Requested-With": "dashboard" } });

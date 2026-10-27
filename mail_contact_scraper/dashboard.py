@@ -146,7 +146,17 @@ def settings_payload(out_dir, env_path):
         "sheets": {"configured": bool(cfg["url"] and cfg["token"]), "tab": cfg["tab"], "auto": cfg["auto"],
                    "last": sheets.last_sync(out_dir)},
         "ocr": _ocr_settings(env_path),
+        "refresh": _refresh_progress(out_dir, env_path),
     }
+
+
+def _refresh_progress(out_dir, env_path):
+    from .cli import refresh_progress
+    from .config import load_settings
+
+    boxes = load_settings(env_path).mailboxes
+    done, total = refresh_progress(Path(out_dir) / "messages.jsonl", boxes[0].email if boxes else "")
+    return {"done": done, "total": total}
 
 
 def ignored_payload(out_dir, env_path):
@@ -449,6 +459,9 @@ def make_handler(out_dir, control, env_path=".env", updater=None):
                 return self._send(b"forbidden", "text/plain", 403)
             if self.path == "/start":
                 started = control.start()
+                self._json({"ok": started}, 200 if started else 409)
+            elif self.path == "/refresh":
+                started = control.start(extra=["--refresh"])
                 self._json({"ok": started}, 200 if started else 409)
             elif self.path == "/reocr":
                 started = control.start(extra=["--reocr"])
