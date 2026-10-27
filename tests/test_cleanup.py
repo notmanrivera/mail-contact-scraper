@@ -137,3 +137,52 @@ def test_dashboard_ignore_button_rebuilds_csv(tmp_path, monkeypatch):
     rows = read()
     assert "rafa@ruido.mx" not in rows and "ana@ruido.mx" not in rows and "laura@aceroslaguna.com.mx" in rows
     assert json.loads((tmp_path / "out" / "status.json").read_text())["omitted"]["ignored"] == 2
+
+
+def test_omitted_list_says_why_and_allow_wins():
+    book = ContactBook(ignore=["ruido.mx"], allow=["banorte.com"])
+    book.add_sender(_record("recibos@uber.com", date="2025-10-01T10:00:00"))
+    book.add_sender(_record("recibos@uber.com", date="2025-10-03T10:00:00"))
+    book.add_sender(_record("rafa@ruido.mx"))
+    book.add_sender(_record("noreply@aceros.mx"))
+    book.add_sender({**_record("ventas@aceros.mx"), "bulk": "list-unsubscribe"})
+    book.add_sender(_record("compras@banorte.com"))             # a bank in services.txt, but a client
+    book.add_sender({**_record("boletin@banorte.com"), "bulk": "esp"})
+    by = {o["email"]: o for o in book.omitted_list()}
+    assert by["recibos@uber.com"] == {"email": "recibos@uber.com", "reason": "service", "rule": "uber.*",
+                                      "seen": 2, "last_seen": "2025-10-03T10:00:00", "name": ""}
+    assert (by["rafa@ruido.mx"]["reason"], by["rafa@ruido.mx"]["rule"]) == ("ignored", "ruido.mx")
+    assert (by["noreply@aceros.mx"]["reason"], by["noreply@aceros.mx"]["rule"]) == ("automated", "noreply@")
+    assert (by["ventas@aceros.mx"]["reason"], by["ventas@aceros.mx"]["rule"]) == ("bulk", "list-unsubscribe")
+    assert {r["email"] for r in book.to_rows()} == {"compras@banorte.com", "boletin@banorte.com"}
+    assert list(by)[0] == "recibos@uber.com"  # most seen first
+
+
+def test_full_ignored_window(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("IMAP_USER", "pedro@dindustrimex.com")
+    (tmp_path / "in").mkdir()
+    for i, m in enumerate([mail("Laura <laura@aceroslaguna.com.mx>"), mail("Uber <recibos@uber.com>"),
+                           mail("Rafa <rafa@ruido.mx>"), mail("Ana <ana@ruido.mx>")]):
+        (tmp_path / "in" / f"{i}.eml").write_bytes(m.as_bytes())
+    cli.main(["--local", "in", "--output", "out", "--no-ocr"])
+    out, env = tmp_path / "out", tmp_path / ".env"
+    (out / "suppression.txt").write_text("# baja 2026-10-20\nx@cliente.mx\n# rebote 2026-10-21\ny@viejo.mx\n")
+
+    code, data = dashboard.settings_action("/settings/ignore", {"add": "ruido.mx, @Spam.com\njuan@x.mx"}, out, env)
+    assert code == 200 and data["added"] == ["ruido.mx", "spam.com", "juan@x.mx"]
+    lists = data["lists"]
+    assert lists["ignored"][0] == {"value": "ruido.mx", "hides": 2}
+    assert {o["email"]: o["reason"] for o in lists["omitted"]} == {
+        "recibos@uber.com": "service", "rafa@ruido.mx": "ignored", "ana@ruido.mx": "ignored"}
+    assert lists["suppression"] == [{"email": "x@cliente.mx", "reason": "baja", "date": "2026-10-20"},
+                                    {"email": "y@viejo.mx", "reason": "rebote", "date": "2026-10-21"}]
+    assert dashboard.settings_action("/settings/ignore", {"add": "uber.com, no es dominio"}, out, env)[0] == 400
+
+    # "Permitir" from the omitted list brings Uber back, and takes a value out of the other list.
+    code, data = dashboard.settings_action("/settings/allow", {"add": "recibos@uber.com ruido.mx"}, out, env)
+    assert data["lists"]["allowed"] == ["recibos@uber.com", "ruido.mx"]
+    assert [i["value"] for i in data["lists"]["ignored"]] == ["spam.com", "juan@x.mx"]
+    rows = {r["email"] for r in csv.DictReader(open(out / "contacts.csv", encoding="utf-8-sig"))}
+    assert {"recibos@uber.com", "rafa@ruido.mx", "laura@aceroslaguna.com.mx"} <= rows
+    assert dashboard.ignored_payload(out, env)["omitted"] == []

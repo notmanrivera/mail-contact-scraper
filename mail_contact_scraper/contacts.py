@@ -29,9 +29,9 @@ def _read_list(text):
 
 @lru_cache(maxsize=1)
 def service_patterns():
-    """Built-in domains that never are prospects (services.txt), as compiled regexes."""
+    """Built-in domains that never are prospects (services.txt), as (entry, regex) pairs."""
     text = resources.files(__package__).joinpath("services.txt").read_text(encoding="utf-8")
-    return tuple(_domain_pattern(entry) for entry in _read_list(text))
+    return tuple((entry, _domain_pattern(entry)) for entry in _read_list(text))
 
 
 def _domain_pattern(entry):
@@ -44,27 +44,33 @@ def _domain_pattern(entry):
 
 IGNORE_HEADER = ("# Correos o dominios que no son prospectos, uno por línea (uber.com, juan@empresa.mx).\n"
                  "# El dashboard agrega aquí lo que ignoras con el botón \"Ignorar\".\n")
+ALLOW_HEADER = ("# Correos o dominios que siempre son contactos, aunque parezcan servicio, aviso automático\n"
+                "# o correo masivo (por ejemplo un cliente que también es banco). Uno por línea.\n")
 
 
 def normalize_ignore(value):
     value = (value or "").strip().lower()
     if value.startswith("@"):
         value = value[1:]
-    if not re.fullmatch(r"([^@\s]+@)?[a-z0-9-]+(\.[a-z0-9-]+)+", value):
-        raise ValueError("Escribe un correo (juan@empresa.mx) o un dominio (uber.com).")
+    if not re.fullmatch(r"[^@\s]+@[a-z0-9-]+(\.[a-z0-9-]+)+|[a-z0-9-]+((\.[a-z0-9-]+)+|\.\*)", value):
+        raise ValueError(f"\"{value}\" no es un correo (juan@empresa.mx) ni un dominio (uber.com o uber.*).")
     return value
 
 
-def update_ignore_file(path, add=None, remove=None):
+def split_entries(text):
+    """'uber.com, juan@x.mx\nrappi.com' -> each one normalized. Raises on the first bad one."""
+    return [normalize_ignore(v) for v in re.split(r"[\s,;]+", text or "") if v.strip()]
+
+
+def update_ignore_file(path, add=None, remove=None, header=IGNORE_HEADER):
     entries = read_ignore_file(path)
-    if add:
-        add = normalize_ignore(add)
-        if add not in entries:
-            entries.append(add)
+    for value in split_entries(add) if add else ():
+        if value not in entries:
+            entries.append(value)
     if remove:
         entries = [e for e in entries if e != (remove or "").strip().lower()]
     tmp = Path(str(path) + ".tmp")
-    tmp.write_text(IGNORE_HEADER + "".join(f"{e}\n" for e in entries), encoding="utf-8")
+    tmp.write_text(header + "".join(f"{e}\n" for e in entries), encoding="utf-8")
     tmp.replace(path)
     return entries
 
@@ -77,43 +83,85 @@ def read_ignore_file(path):
         return []
 
 
+def _rules(entries):
+    entries = [i.strip().lower().lstrip("@") for i in entries if i and i.strip()]
+    emails = {i for i in entries if "@" in i}
+    domains = tuple((i, _domain_pattern(i)) for i in entries if "@" not in i)
+    return emails, domains
+
+
+def _find(addr, emails, domains):
+    """The list entry that matches addr (the address itself or its domain rule), or ""."""
+    if addr in emails:
+        return addr
+    domain = addr.rsplit("@", 1)[-1]
+    return next((entry for entry, pattern in domains if pattern.search(domain)), "")
+
+
 class ContactBook:
-    def __init__(self, exclude=(), skip_automated=True, exclude_domains=(), skip_services=True, ignore=()):
+    def __init__(self, exclude=(), skip_automated=True, exclude_domains=(), skip_services=True, ignore=(),
+                 allow=()):
         self.exclude = {e.lower() for e in exclude if e}
         self.skip_automated = skip_automated
         self.exclude_domains = tuple(d.lower() for d in exclude_domains if d)
         self.services = service_patterns() if skip_services else ()
-        ignore = [i.strip().lower() for i in ignore if i and i.strip()]
-        self.ignore_emails = {i for i in ignore if "@" in i.lstrip("@")}
-        self.ignore_domains = tuple(_domain_pattern(i) for i in ignore if "@" not in i.lstrip("@"))
+        self.ignore_emails, self.ignore_domains = _rules(ignore)
+        self.allow_emails, self.allow_domains = _rules(allow)
         self.rows = {}
         self.bounces = {}
         self.omitted = {}  # address -> reason, for the dashboard's count
+        self.omitted_info = {}  # address -> rule, times seen, last date, name: the "Ignorados" list
 
     def _excluded_domain(self, addr):
         domain = addr.rsplit("@", 1)[-1]
         return any(domain == d or domain.endswith("." + d) for d in self.exclude_domains)
 
-    def skip_reason(self, addr):
-        if not addr or addr in self.exclude or self._excluded_domain(addr):
-            return "own"
-        domain = addr.rsplit("@", 1)[-1]
-        if addr in self.ignore_emails or any(p.search(domain) for p in self.ignore_domains):
-            return "ignored"
-        if any(p.search(domain) for p in self.services):
-            return "service"
-        if self.skip_automated and AUTOMATED_RE.match(addr):
-            return "automated"
-        return ""
+    def allowed(self, addr):
+        return bool(_find(addr, self.allow_emails, self.allow_domains))
 
-    def _skip(self, addr):
-        reason = self.skip_reason(addr)
+    def skip_reason(self, addr):
+        return self._match(addr)[0]
+
+    def _match(self, addr):
+        """(reason, rule): why addr is left out and which entry or pattern decided it."""
+        if not addr or addr in self.exclude or self._excluded_domain(addr):
+            return "own", ""
+        if self.allowed(addr):
+            return "", ""
+        rule = _find(addr, self.ignore_emails, self.ignore_domains)
+        if rule:
+            return "ignored", rule
+        rule = _find(addr, (), self.services)
+        if rule:
+            return "service", rule
+        if self.skip_automated:
+            match = AUTOMATED_RE.match(addr)
+            if match:
+                return "automated", match.group(1).lower() + "@"
+        return "", ""
+
+    def _skip(self, addr, date=None, name=""):
+        reason, rule = self._match(addr)
         if reason and reason != "own" and addr not in self.rows:
-            self.omitted.setdefault(addr, reason)
+            self._omit(addr, reason, rule, date, name)
         return bool(reason)
+
+    def _omit(self, addr, reason, rule, date=None, name=""):
+        self.omitted.setdefault(addr, reason)
+        info = self.omitted_info.setdefault(addr, {"rule": rule, "seen": 0, "last_seen": "", "name": ""})
+        info["seen"] += 1
+        if date and date > info["last_seen"]:
+            info["last_seen"] = date
+        if name and "@" not in name and not info["name"]:
+            info["name"] = name.strip().strip('"')
 
     def omitted_counts(self):
         return dict(Counter(self.omitted.values()))
+
+    def omitted_list(self):
+        """Everyone left out, most seen first, for the dashboard's "Ignorados" window."""
+        out = [{"email": a, "reason": r, **self.omitted_info.get(a, {})} for a, r in self.omitted.items()]
+        return sorted(out, key=lambda o: (-o.get("seen", 0), o["email"]))
 
     def _row(self, addr):
         return self.rows.setdefault(addr, {
@@ -142,15 +190,18 @@ class ContactBook:
         for addr in record.get("bounced") or []:
             self.add_bounce(addr, record.get("date"))
         addr = record["from_email"]
-        if record.get("bulk"):
+        date, name = record.get("date"), record.get("from_name", "")
+        if record.get("bulk") and not self.allowed(addr):
             # Newsletters and promos: not a person writing to us, even from a real company.
-            if not self._skip(addr) and addr not in self.rows:
-                self.omitted.setdefault(addr, "bulk")
+            if not self._skip(addr, date, name) and addr not in self.rows:
+                rule = record["bulk"] if isinstance(record["bulk"], str) else ""
+                self._omit(addr, "bulk", rule, date, name)
             return
-        if self._skip(addr):
+        if self._skip(addr, date, name):
             return
         info = record["contact"]
         self.omitted.pop(addr, None)
+        self.omitted_info.pop(addr, None)
         row = self._row(addr)
         self._seen(row, record.get("date"), record.get("mailbox"))
         date = record.get("date")
@@ -178,9 +229,10 @@ class ContactBook:
 
     def add_header_contact(self, name, addr, date=None, mailbox=None):
         addr = (addr or "").lower()
-        if "@" not in addr or self._skip(addr):
+        if "@" not in addr or self._skip(addr, date, name):
             return
         self.omitted.pop(addr, None)
+        self.omitted_info.pop(addr, None)
         row = self._row(addr)
         self._seen(row, date, mailbox)
         row["sources"].add("header")
