@@ -11,6 +11,7 @@ app itself.
 
     python -m mail_contact_scraper.app      # try it from the source code (no menu bar icon)
 """
+import json
 import logging
 import os
 import runpy
@@ -143,11 +144,20 @@ def run_app(folder):
         signal.signal(signal.SIGINT, lambda *_: shutdown(install_update=True))
         while True:
             time.sleep(3600)
-    run_menu_bar(url, folder, shutdown)
+    run_menu_bar(url, folder, shutdown, updater, control)
     return 0
 
 
-def run_menu_bar(url, folder, shutdown):
+def notify(title, message):
+    """A macOS notification (Notification Center), so the user hears about updates with the panel closed."""
+    script = f"display notification {json.dumps(message)} with title {json.dumps(title)}"
+    try:
+        subprocess.run(["osascript", "-e", script], capture_output=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        log.debug("Sin notificación", exc_info=True)
+
+
+def run_menu_bar(url, folder, shutdown, updater=None, control=None):
     import rumps
 
     icon = resources_dir() / "menubar.png"
@@ -162,6 +172,32 @@ def run_menu_bar(url, folder, shutdown):
                 None,
                 rumps.MenuItem("Salir", callback=lambda _: shutdown(install_update=True)),
             ]
+            self.update_item, self.announced = None, None
+            if updater and updater.enabled:
+                rumps.Timer(self.watch_updates, 60).start()
+
+        def watch_updates(self, _timer):
+            # Runs on the main thread, so it can change the menu.
+            ready = updater.staged()
+            if not ready or ready[0] == self.announced or updater.installing:
+                return
+            self.announced = ready[0]
+            title = f"Instalar {ready[0]} y reiniciar"
+            if self.update_item:
+                self.update_item.title = title
+            else:
+                self.update_item = rumps.MenuItem(title, callback=self.install_update)
+                self.menu.insert_before("Abrir panel", self.update_item)
+                self.menu.insert_before("Abrir panel", None)
+            changes = updater.status().get("changes") or []
+            notify(f"{APP_NAME}: versión {ready[0]} lista",
+                   (changes[0] + ". " if changes else "") + "Se instala al reabrir la app, o desde el menú o el panel.")
+
+        def install_update(self, _item):
+            try:
+                updater.apply_now(busy=bool(control and control.busy()))
+            except Exception as exc:
+                rumps.alert(APP_NAME, str(exc))
 
     _open_dashboard_on_reopen(url)
     MenuBarApp().run()

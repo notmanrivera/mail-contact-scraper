@@ -1,7 +1,7 @@
 """Self-update for the packaged Mac app from the repository's GitHub Releases.
 
 Every merge to main publishes a release (see .github/workflows/mac-app.yml). The app checks
-for it at launch and every few hours, downloads it in the background and installs it the next
+for it at launch and every half hour while it runs, downloads it in the background and installs it the next
 time the app opens, or right away from the dashboard's "Actualizar ahora" button.
 
 The repository is private, so the download needs a read-only GitHub token. It is pasted in the
@@ -33,7 +33,7 @@ except ImportError:
 
 log = logging.getLogger(__name__)
 API = "https://api.github.com"
-CHECK_EVERY = 6 * 3600
+CHECK_EVERY = 30 * 60
 TOKEN_KEY = "UPDATE_GITHUB_TOKEN"
 
 # Replaces the bundle once this process has exited, then reopens it if asked.
@@ -63,6 +63,16 @@ def is_newer(latest, current):
     if not latest or current == "dev":
         return False
     return parse_version(latest) > parse_version(current)
+
+
+def release_changes(notes, limit=8):
+    """The pull request titles in GitHub's generated release notes ("* Title by @user in https://...")."""
+    changes = []
+    for line in (notes or "").splitlines():
+        m = re.match(r"\s*[*-]\s+(.+?)(?:\s+by\s+@\S+)?(?:\s+in\s+https?://\S+)?\s*$", line)
+        if m and not m.group(1).lower().startswith("full changelog"):
+            changes.append(m.group(1))
+    return changes[:limit]
 
 
 def app_bundle(executable=None):
@@ -346,6 +356,7 @@ class Updater:
             "available": self.available() or bool(ready),
             "ready": bool(ready),
             "notes": self.latest["notes"] if self.latest else "",
+            "changes": release_changes(self.latest["notes"]) if self.latest else [],
             "error": self.error,
             "checked_at": self.checked_at,
             "has_token": bool(self.token()),
