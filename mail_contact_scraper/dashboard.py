@@ -11,6 +11,7 @@ import csv
 import io
 import json
 import logging
+import mimetypes
 import os
 import signal
 import subprocess
@@ -25,7 +26,7 @@ from urllib.parse import parse_qs, urlparse
 
 log = logging.getLogger(__name__)
 DEFAULT_PORT = 8765
-MAX_HTML = 5 * 1024 * 1024  # pasted mailing HTML can carry base64 images
+MAX_UPLOAD = 45 * 1024 * 1024  # pasted mailing HTML with base64 images, or an imported .zip
 STATIC_TYPES = {".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp"}
 
 
@@ -358,20 +359,75 @@ def _mailing_send():
     return send
 
 
-def mailing_payload(env_path):
-    """Campaigns and the mailboxes a test can go out from, for the "Envío de prueba" panel."""
+def mailing_payload(out_dir, env_path):
+    """This person's campaigns, the one the Campaña tab sends, and the mailboxes a test can
+    go out from."""
     from . import accounts, envfile
 
     send = _mailing_send()
     if not send:
         return {"available": False, "campaigns": [], "senders": []}
+    from mailing import library
+
     senders = [m["email"] for m in accounts.list_mailboxes(env_path) if m["has_password"]]
-    found = send.campaigns()
-    default = found[0]["sender"] if found else ""
+    found, active = library.list_campaigns(out_dir)
+    default = next((c["sender"] for c in found if c["slug"] == active), "")
     relay = bool(envfile.environ(env_path).get("SMTP_USER"))
     if default and default.lower() not in (e.lower() for e in senders) and relay:
         senders.insert(0, default)  # a relay can send as any address of the domain
-    return {"available": True, "campaigns": found, "senders": senders, "default_sender": default}
+    return {"available": True, "campaigns": found, "active": active, "senders": senders, "default_sender": default}
+
+
+def _upload(body, key="data"):
+    import base64
+    import binascii
+    try:
+        return base64.b64decode(str(body.get(key) or ""), validate=True)
+    except (binascii.Error, ValueError):
+        raise ValueError("No se pudo leer el archivo.") from None
+
+
+def library_action(path, body, out_dir, run):
+    """POST /mailing/library/<action>: create, save, duplicate, import, delete, images, active."""
+    from mailing import library
+
+    slug = str(body.get("campaign") or "")
+    action = path.rsplit("/", 1)[-1]
+    if action == "new":
+        slug = library.create(out_dir, body.get("name"), body.get("subject") or "",
+                              body.get("html") or "", body.get("sender"))
+    elif action == "duplicate":
+        slug = library.duplicate(out_dir, slug)
+    elif action == "import":
+        slug = library.import_file(out_dir, body.get("filename"), _upload(body))
+    elif action == "save":
+        return {"ok": True, "campaign": library.save(out_dir, slug, body)}
+    elif action == "delete":
+        status = run.status() if run else {}
+        library.delete(out_dir, slug, status.get("campaign") if status.get("running") else "")
+        found, active = library.list_campaigns(out_dir)
+        return {"ok": True, "campaigns": found, "active": active}
+    elif action == "active":
+        return {"ok": True, "active": library.set_active(out_dir, slug)}
+    elif action == "image":
+        added = [library.add_image(out_dir, slug, f.get("name"), _upload(f))
+                 for f in (body.get("files") or []) if isinstance(f, dict)]
+        return {"ok": True, "added": added, "campaign": library.details(out_dir, slug)}
+    elif action == "image-delete":
+        library.remove_image(out_dir, slug, body.get("name"))
+        return {"ok": True, "campaign": library.details(out_dir, slug)}
+    elif action == "preview":
+        c = library.load(library.folder(out_dir, slug))
+        c.update(subject=str(body.get("subject") or ""))
+        html = str(body.get("html") or "")
+        first = str(body.get("name") or "").strip().split(" ")[0]
+        person = {"email": "prospecto@ejemplo.com", "first_name": first, "company": "Empresa Ejemplo",
+                  "greeting": f"Hola {first}," if first else "Hola,"}
+        return {"ok": True, "html": library.preview(html, c["slug"], person, c), "checks": library.checks(c, html)}
+    else:
+        raise LookupError(action)
+    found, active = library.list_campaigns(out_dir)
+    return {"ok": True, "slug": slug, "campaigns": found, "active": active, "campaign": library.details(out_dir, slug)}
 
 
 def mailing_action(path, body, out_dir, env_path, run):
@@ -385,10 +441,15 @@ def mailing_action(path, body, out_dir, env_path, run):
 
     slug = str(body.get("campaign") or "")
     try:
+        if path.startswith("/mailing/library/"):
+            try:
+                return 200, library_action(path, body, out_dir, run)
+            except LookupError:
+                return 404, {"ok": False, "error": "not found"}
         if path == "/mailing/test":
             return 200, {"ok": True, **send.send_test_html(
                 body.get("html"), body.get("subject"), body.get("to"), body.get("from"), slug, env_path,
-                name=str(body.get("name") or ""), contacts_csv=Path(out_dir) / "contacts.csv")}
+                name=str(body.get("name") or ""), contacts_csv=Path(out_dir) / "contacts.csv", out_dir=out_dir)}
         if path == "/mailing/campaign/start":
             return 200, {"ok": True, "run": run.start(out_dir, env_path, body)}
         if path == "/mailing/campaign/stop":
@@ -399,9 +460,11 @@ def mailing_action(path, body, out_dir, env_path, run):
         if path == "/mailing/clean":
             return 200, {"ok": True, **mailing_app.clean_list(out_dir, slug, apply=body.get("apply") is True)}
         if path == "/mailing/health":
-            return 200, {"ok": True, "domains": mailing_app.health(env_path, slug)}
+            return 200, {"ok": True, "domains": mailing_app.health(out_dir, env_path, slug)}
     except ValueError as exc:
         return 400, {"ok": False, "error": str(exc)}
+    except OSError as exc:  # disk full, permissions... in the library folder
+        return 500, {"ok": False, "error": f"No se pudo guardar: {exc}"}
     return 404, {"ok": False, "error": "not found"}
 
 
@@ -485,7 +548,7 @@ def make_handler(out_dir, control, env_path=".env", updater=None):
             elif url.path == "/ignored":
                 self._json(ignored_payload(out_dir, env_path))
             elif url.path == "/mailing":
-                self._json(mailing_payload(env_path))
+                self._json(mailing_payload(out_dir, env_path))
             elif url.path == "/mailing/name":
                 send = _mailing_send()
                 address = parse_qs(url.query).get("email", [""])[0].strip()
@@ -507,6 +570,8 @@ def make_handler(out_dir, control, env_path=".env", updater=None):
                 self.send_header("Cache-Control", "no-store")
                 self.end_headers()
                 self.wfile.write(body)
+            elif url.path.startswith("/mailing/library") and _mailing_send():
+                self._library_get(url)
             elif url.path == "/mailing/campaign":
                 code, payload = mailing_overview(parse_qs(url.query), out_dir, env_path, send_run)
                 self._json(payload, code)
@@ -533,6 +598,30 @@ def make_handler(out_dir, control, env_path=".env", updater=None):
             else:
                 self._send(b"not found", "text/plain", 404)
 
+        def _library_get(self, url):
+            from mailing import library
+            q = parse_qs(url.query)
+            slug = q.get("campaign", [""])[0]
+            try:
+                if url.path == "/mailing/library":
+                    return self._json(library.details(out_dir, slug))
+                if url.path == "/mailing/library/img":
+                    path = library.image_file(out_dir, slug, q.get("name", [""])[0])
+                    ctype = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+                    return self._send(path.read_bytes(), ctype)
+                if url.path == "/mailing/library/export":
+                    data, name = library.export_zip(out_dir, slug)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/zip")
+                    self.send_header("Content-Disposition", f'attachment; filename="{name}"')
+                    self.send_header("Content-Length", str(len(data)))
+                    self.send_header("Cache-Control", "no-store")
+                    self.end_headers()
+                    return self.wfile.write(data)
+            except ValueError as exc:
+                return self._json({"error": str(exc)}, 404)
+            self._send(b"not found", "text/plain", 404)
+
         def do_POST(self):
             # A custom header can't be sent cross-site without a CORS preflight, which this
             # server never grants, so other websites can't press these buttons.
@@ -552,7 +641,8 @@ def make_handler(out_dir, control, env_path=".env", updater=None):
                 self._json({"ok": stopped}, 200 if stopped else 409)
             elif self.path.startswith(("/settings/", "/mailing/")) or (self.path == "/update" and updater):
                 length = int(self.headers.get("Content-Length") or 0)
-                if length > (MAX_HTML if self.path == "/mailing/test" else 65536):
+                big = self.path == "/mailing/test" or self.path.startswith("/mailing/library/")
+                if length > (MAX_UPLOAD if big else 65536):
                     return self._send(b"too large", "text/plain", 413)
                 try:
                     body = json.loads(self.rfile.read(length) or b"{}")

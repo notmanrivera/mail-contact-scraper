@@ -389,8 +389,18 @@ estén en `output/suppression.txt` (uno por línea; ahí van las bajas).
       registro de envíos y el botón *Revisar bajas y rebotes*. Para enviar hay que escribir
       ENVIAR; se ve el avance y se puede detener. Antes de enviar revisa bajas y rebotes, y
       mientras envía la Mac no se duerme. Usa los mismos archivos que `mailing.send`.
-    - *Prueba*: trae el HTML y asunto de la campaña (o pega otro HTML), muestra la vista previa
-      y manda un solo correo con [PRUEBA] desde el buzón que elijas. No toca `envios.csv`.
+    - *Editar y probar*: tus campañas. Cada quien tiene las suyas en su Mac (carpeta de datos
+      de la app, `campanas/<campaña>/`: `campana.json`, `mailing.html` e `imagenes/`), así que tú y
+      tu compañero las editan sin pisarse y sin tocar GitHub. Nueva, Duplicar, Importar (un .zip
+      con el HTML y sus imágenes, o un .html), Exportar (.zip para pasársela al otro) y Borrar (va
+      a `campanas/.papelera`). Editas asunto, remitente, respuestas y HTML con vista previa en
+      escritorio, celular y modo oscuro aproximado, más avisos (imágenes que faltan, sin liga de
+      baja, HTML que Gmail recorta). Etiquetas: `{{Saludo}}`, `{{Nombre}}`, `{{Empresa}}`, `{{Baja}}`.
+      Las imágenes se ponen por nombre (`src="hero.png"`) y viajan adjuntas dentro del correo, así
+      se ven en Gmail sin subirlas a Wix; también sirven ligas https://. "Usar en Campaña" la
+      vuelve la que se envía. La prueba sale con lo que ves, aunque no lo hayas guardado.
+      La campaña QC + ARO de `mailing/campaigns/` se copia sola la primera vez.
+
   - Cada envío queda en `output/mailing/<campaña>/envios.csv` (fecha, correo, estado). Al
     volver a correrlo sigue con los pendientes y nunca repite a nadie.
   - Límites: 1,500 al día por buzón (`--daily-limit`), con 3 a 6 s entre correos (`--pause`)
