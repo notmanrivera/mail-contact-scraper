@@ -182,6 +182,15 @@
   .run-box .bar { height: 10px; border-radius: 10px; background: #E6E1E0; overflow: hidden; margin: 8px 0; }
   .run-box .bar span { display: block; height: 100%; width: 0; background: var(--red); transition: width .6s ease; }
   .run-box .t { font-size: 12.5px; color: var(--text); }
+  .run-box .paused { display: block; margin: 4px 0; padding: 8px 10px; border-radius: 10px; background: var(--red-tint); color: var(--red-deep); }
+  .health { display: grid; gap: 8px; margin-bottom: 12px; }
+  .health .dom { padding: 10px 12px; border-radius: 12px; background: #F4F2F1; }
+  .health .head { display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--ink); }
+  .health .head .sum { margin-left: auto; font-size: 11.5px; font-weight: 600; color: var(--muted); }
+  .health ul { margin: 6px 0 0; padding: 0; list-style: none; font-size: 12.5px; color: var(--text); display: grid; gap: 3px; }
+  .light { width: 11px; height: 11px; border-radius: 50%; flex: none; display: inline-block; background: #B9B3B1; }
+  .light.ok { background: #2E9E5B; } .light.warn { background: #E0A100; } .light.bad { background: #D23B2E; }
+  .health li { display: flex; gap: 8px; align-items: baseline; } .health li .light { width: 8px; height: 8px; }
   .run-box .t b { color: var(--ink); }
   .log-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
   .log-chips span { font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 100px; background: #F4F2F1; color: var(--text); }
@@ -748,6 +757,17 @@
     </button>
   </div>
   <div class="mailer-body camp" id="ml-camp-pane">
+    <section class="set">
+      <h3>Antes de enviar</h3>
+      <p class="hint">Que el dominio esté bien firmado (SPF, DKIM, DMARC) y que la lista no tenga correos que rebotarán seguro. Muchos rebotes queman el buzón.</p>
+      <div class="health" id="cp-health"><div class="hint">Revisando el dominio…</div></div>
+      <div class="actions-row">
+        <button class="btn btn-outline" id="cp-clean" type="button">Limpiar lista</button>
+        <button class="btn btn-primary" id="cp-clean-apply" type="button" hidden>Sacarlos de la lista</button>
+        <a class="btn btn-outline" id="cp-clean-csv" href="#" download="correos-a-revisar.csv" hidden>Ver cuáles (CSV)</a>
+      </div>
+      <div class="msg" id="cp-clean-msg" hidden></div>
+    </section>
     <section class="set">
       <h3>Enviar la campaña</h3>
       <p class="hint" id="cp-subject"></p>
@@ -1388,13 +1408,13 @@
     }
     $("ml-from").innerHTML = mailing.senders.map((e) => `<option${e.toLowerCase() === (mailing.default_sender || "").toLowerCase() ? " selected" : ""}>${esc(e)}</option>`).join("");
     if (!mailing.senders.length) showMsg("ml-msg", "Primero agrega un buzón con su contraseña de aplicación en Configuración ▸ Buzones.", false);
-    refreshCampaign();
+    refreshCampaign(); refreshHealth();
   }
   function closeMailer() { $("mailer").hidden = $("scrim").hidden = true; clearTimeout(campTimer); }
   function setTab(tab) {
     document.querySelectorAll("#mailer .tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === tab));
     $("ml-camp-pane").hidden = tab !== "camp"; $("ml-test-pane").hidden = tab !== "test";
-    if (tab === "test") $("ml-to").focus(); else refreshCampaign();
+    if (tab === "test") $("ml-to").focus(); else { refreshCampaign(); refreshHealth(); }
   }
   document.querySelectorAll("#mailer .tabs button").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
 
@@ -1443,7 +1463,9 @@
         : run.phase === "enviando" ? `Enviando: <b>${fmt.format(run.sent)}</b> de ${fmt.format(run.total)}${run.last ? ` · último: ${esc(run.last)}` : ""}`
         : run.phase === "deteniendo" ? "Deteniendo…"
         : `Terminó: <b>${fmt.format(run.sent || 0)}</b> enviados${run.rejected ? `, ${run.rejected} rechazados` : ""}${run.errors ? `, ${run.errors} con error` : ""}.`;
-      $("cp-run-text").innerHTML = [phase, run.note && esc(run.note), run.stopped && esc(run.stopped), run.error && `Error: ${esc(run.error)}`]
+      const stopped = (run.stopped || "").split("; ").filter((x) => x && x !== `Pausado: ${run.paused}`).join("; ");
+      const paused = run.paused && `<span class="paused"><b>En pausa por seguridad.</b> ${esc(run.paused)} Los que faltan siguen pendientes; cuando lo revises vuelve a enviar.</span>`;
+      $("cp-run-text").innerHTML = [phase, paused, run.note && esc(run.note), stopped && esc(stopped), run.error && `Error: ${esc(run.error)}`]
         .filter(Boolean).join("<br>");
       $("cp-stop").hidden = !run.running;
     }
@@ -1489,9 +1511,44 @@
     btn.disabled = false; btn.textContent = "Revisar bajas y rebotes";
     refreshCampaign();
   });
+  /* Antes de enviar: semáforo SPF/DKIM/DMARC y limpieza de la lista */
+  const LIGHT = { ok: "verde", warn: "amarillo", bad: "rojo", unknown: "sin dato" };
+  let healthFor = null;
+  async function refreshHealth(force) {
+    const slug = $("ml-campaign").value || "";
+    if (!force && healthFor === slug) return;
+    healthFor = slug;
+    const r = await settingsCall("/mailing/health", { campaign: slug }).catch(() => ({ ok: false, error: "No se pudo revisar el dominio." }));
+    $("cp-health").innerHTML = !r.ok ? `<div class="hint">${esc(r.error)}</div>` : (r.domains || []).map((d) => `
+      <div class="dom"><div class="head"><span class="light ${esc(d.light)}" title="${LIGHT[d.light] || ""}"></span>${esc(d.domain)}
+        <span class="sum">${esc(d.summary)}</span></div>
+        <ul>${Object.entries(d.checks || {}).map(([k, v]) => `<li><span class="light ${esc(v.light)}"></span><span><b>${k.toUpperCase()}</b>: ${esc(v.text)}</span></li>`).join("")}</ul></div>`).join("")
+      || '<div class="hint">Agrega un buzón para revisar su dominio.</div>';
+  }
+  let cleanFound = null;
+  async function cleanList(apply) {
+    const btn = $(apply ? "cp-clean-apply" : "cp-clean"), label = btn.textContent;
+    btn.disabled = true; btn.textContent = apply ? "Sacándolos…" : "Revisando dominios…"; showMsg("cp-clean-msg", "");
+    const r = await settingsCall("/mailing/clean", { campaign: $("ml-campaign").value, apply })
+      .catch(() => ({ ok: false, error: "No se pudo revisar la lista." }));
+    btn.disabled = false; btn.textContent = label;
+    if (!r.ok) { showMsg("cp-clean-msg", r.error, false); return; }
+    cleanFound = r;
+    const n = r.bad.length, typos = r.bad.filter((b) => b.sugerencia).length;
+    const unknown = r.unknown_domains ? ` ${r.unknown_domains} dominios no respondieron y se quedan.` : "";
+    $("cp-clean-csv").href = URL.createObjectURL(new Blob([r.csv], { type: "text/csv" }));
+    $("cp-clean-csv").hidden = !n;
+    $("cp-clean-apply").hidden = apply || !n;
+    showMsg("cp-clean-msg", apply ? `Listo: ${fmt.format(r.applied)} correos quedaron fuera de la lista.`
+      : n ? `Revisé ${fmt.format(r.checked_domains)} dominios. ${fmt.format(n)} correos rebotarían seguro${typos ? ` (${fmt.format(typos)} parecen error de dedo; el CSV trae la corrección sugerida)` : ""}.${unknown}`
+      : `Revisé ${fmt.format(r.checked_domains)} dominios y no encontré correos malos.${unknown}`, true);
+    if (apply) refreshCampaign();
+  }
+  $("cp-clean").addEventListener("click", () => cleanList(false));
+  $("cp-clean-apply").addEventListener("click", () => cleanList(true));
   $("open-mailer").addEventListener("click", openMailer);
   $("close-mailer").addEventListener("click", closeMailer);
-  $("ml-campaign").addEventListener("change", () => { loadCampaign(); refreshCampaign(); });
+  $("ml-campaign").addEventListener("change", () => { loadCampaign(); refreshCampaign(); refreshHealth(); });
   // Fill the greeting name from the contacts as the address is typed; a name typed by hand stays.
   let nameAuto = true, nameTimer = null;
   $("ml-name").addEventListener("input", () => { nameAuto = !$("ml-name").value.trim(); });

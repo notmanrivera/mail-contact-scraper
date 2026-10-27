@@ -49,6 +49,13 @@ RETRY_PAUSES = (10, 30, 60)
 # Every so often a longer break, so the pace doesn't look machine-made.
 BREAK_EVERY = (40, 60)
 BREAK_SECONDS = (30, 90)
+# Circuit breaker: the whole run pauses when this share of the attempts fail (after at least
+# BREAKER_MIN_ATTEMPTS), or after this many failures in a row. Every CHECK_EVERY sent, the
+# `checkpoint` hook (the app reads the bounces in the inboxes) may pause it too.
+BREAKER_RATE = 0.05
+BREAKER_MIN_ATTEMPTS = 20
+BREAKER_IN_ROW = 8
+CHECK_EVERY = 50
 
 # IMAP host the scraper uses -> (SMTP host, port)
 SMTP_FOR_IMAP = {
@@ -275,12 +282,15 @@ def _close(conn):
 
 def send_campaign(campaign_path, contacts_csv, out_dir, *, senders, send=False, test_to=None,
                   limit=0, pause=4.0, suppression_path="output/suppression.txt",
-                  now=datetime.now, sleep=time.sleep, say=print, stop=None, progress=None, **audience_opts):
+                  now=datetime.now, sleep=time.sleep, say=print, stop=None, progress=None, checkpoint=None,
+                  **audience_opts):
     """Send pending prospects (or one test), taking turns between the senders.
 
     `senders` are dicts with email, name, daily_limit and connect() (see load_senders).
     `limit` caps this run (0 = whatever today's limits allow). `stop()` returning True ends
     the run between messages; `progress(summary, email, sender)` follows each one sent.
+    `checkpoint(sent_emails)` runs every CHECK_EVERY sent and returns why to pause, or "".
+    A pause sets summary["paused"]; the ones not reached stay pending for the next run.
     Returns a summary dict.
     """
     campaign = load_campaign(campaign_path)
@@ -297,7 +307,7 @@ def send_campaign(campaign_path, contacts_csv, out_dir, *, senders, send=False, 
     summary = {"audience": len(people), "already_sent": len(people) - len(pending), "pending": len(pending),
                "sent_today": sum(today.get(s["email"], 0) for s in senders), "room": room,
                "this_run": this_run, "sent": 0, "errors": 0, "rejected": [], "stopped": "",
-               "skipped": skipped, "by_sender": {}}
+               "paused": "", "skipped": skipped, "by_sender": {}}
 
     if test_to:
         sample = dict(pending[0] if pending else people[0] if people else
@@ -319,6 +329,22 @@ def send_campaign(campaign_path, contacts_csv, out_dir, *, senders, send=False, 
     queue = list(pending)
     turn = 0
     next_break = random.randint(*BREAK_EVERY)
+    failed, failed_in_row, sent_now = 0, 0, []
+
+    def breaker():
+        """Why the run should pause, or ''."""
+        attempts = summary["sent"] + failed
+        if failed_in_row >= BREAKER_IN_ROW:
+            return f"{failed_in_row} envíos seguidos fallaron."
+        if attempts >= BREAKER_MIN_ATTEMPTS and failed / attempts > BREAKER_RATE:
+            return (f"{failed} de {attempts} envíos fallaron ({failed / attempts:.0%}); "
+                    f"el máximo sano es {BREAKER_RATE:.0%}.")
+        return ""
+
+    def pause_run(reason):
+        summary["paused"] = reason
+        summary["stopped"] = "; ".join(filter(None, [summary["stopped"], "Pausado: " + reason]))
+        say(f"  Pausado: {reason}")
 
     def deliver(sender, msg):
         """Send on this mailbox's connection, opening a fresh one every RECONNECT_EVERY
@@ -368,6 +394,10 @@ def send_campaign(campaign_path, contacts_csv, out_dir, *, senders, send=False, 
                                    for c, m in err.recipients.values())
                 append_log(log_path, person["email"], "rechazado", detail, now(), who)
                 summary["rejected"].append(queue.pop(0)["email"])
+                failed, failed_in_row = failed + 1, failed_in_row + 1
+                if breaker():
+                    pause_run(breaker())
+                    break
                 continue
             except (smtplib.SMTPResponseException, OSError, smtplib.SMTPException) as err:
                 summary["errors"] += 1
@@ -382,16 +412,27 @@ def send_campaign(campaign_path, contacts_csv, out_dir, *, senders, send=False, 
                     continue
                 append_log(log_path, person["email"], "error", str(err)[:300], now(), who)
                 queue.pop(0)
+                failed, failed_in_row = failed + 1, failed_in_row + 1
+                if breaker():
+                    pause_run(breaker())
+                    break
                 continue
             errors_in_row[who] = 0
+            failed_in_row = 0
             room[who] -= 1
             queue.pop(0)
             append_log(log_path, person["email"], SENT, msg["Message-ID"], now(), who)
             summary["sent"] += 1
             summary["by_sender"][who] = summary["by_sender"].get(who, 0) + 1
+            sent_now.append(person["email"])
             say(f"  {summary['sent']}/{this_run}  {person['email']}  ({who})")
             if progress:
                 progress(summary, person["email"], who)
+            if checkpoint and summary["sent"] % CHECK_EVERY == 0 and queue and summary["sent"] < this_run:
+                reason = checkpoint(list(sent_now))
+                if reason:
+                    pause_run(reason)
+                    break
             if queue and summary["sent"] < this_run:
                 if summary["sent"] >= next_break:  # now and then a longer break
                     next_break = summary["sent"] + random.randint(*BREAK_EVERY)
