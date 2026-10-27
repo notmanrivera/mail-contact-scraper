@@ -335,3 +335,15 @@ class Updater:
             "installing": self.installing,
             "problem": self.install_problem() if self.enabled else "",
         }
+
+
+def main(argv=None):
+    """`<app> -m mail_contact_scraper.updater`: check GitHub once and print the result (diagnostics)."""
+    from .app import data_dir
+
+    print(json.dumps(Updater(data_dir()).check(), ensure_ascii=False, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

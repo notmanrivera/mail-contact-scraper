@@ -1,5 +1,7 @@
 phonenumbers>=8.13
 dnspython>=2.4
+# Certificados HTTPS/IMAP para la app de Mac (su Python no trae los del sistema)
+certifi>=2024.2.2
 # OCR de firmas en imagen (también requiere el programa Tesseract, ver README)
 pytesseract>=0.3.10
 Pillow>=10.0
