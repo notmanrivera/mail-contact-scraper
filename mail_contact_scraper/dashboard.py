@@ -375,7 +375,8 @@ def mailing_payload(env_path):
 
 
 def mailing_action(path, body, out_dir, env_path, run):
-    """POST /mailing/<action>: a test, the campaign run, or the unsubscribe check.
+    """POST /mailing/<action>: a test, the campaign run, the unsubscribe check, the list
+    cleaning (MX and typos) or the SPF/DKIM/DMARC light of the sending domains.
     Returns (status code, payload)."""
     send = _mailing_send()
     if not send:
@@ -395,6 +396,10 @@ def mailing_action(path, body, out_dir, env_path, run):
         if path == "/mailing/bajas":
             unsub, bounced = mailing_app.check_unsubscribes(out_dir, env_path, slug)
             return 200, {"ok": True, "unsubscribed": len(unsub), "bounced": len(bounced)}
+        if path == "/mailing/clean":
+            return 200, {"ok": True, **mailing_app.clean_list(out_dir, slug, apply=body.get("apply") is True)}
+        if path == "/mailing/health":
+            return 200, {"ok": True, "domains": mailing_app.health(env_path, slug)}
     except ValueError as exc:
         return 400, {"ok": False, "error": str(exc)}
     return 404, {"ok": False, "error": "not found"}

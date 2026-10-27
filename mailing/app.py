@@ -12,7 +12,7 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-from . import send
+from . import deliverability, send
 from .build import load_audience, load_campaign
 
 CONFIRM_WORD = "ENVIAR"
@@ -156,6 +156,61 @@ def check_unsubscribes(out_dir, env_path, slug=""):
         raise ValueError(f"No pude revisar bajas y rebotes: {exc}") from None
 
 
+def health(env_path, slug=""):
+    """SPF / DKIM / DMARC light of each sending domain the Campaña tab can pick."""
+    campaign = load_campaign(campaign_path(slug))
+    by_domain = {}
+    for address in available_senders(env_path, campaign):
+        by_domain.setdefault(address.rsplit("@", 1)[-1].lower(), []).append(address)
+    return [dict(deliverability.domain_health(d), senders=sorted(a)) for d, a in sorted(by_domain.items())]
+
+
+def clean_list(out_dir, slug="", apply=False):
+    """Pending addresses that would bounce for sure (domain with no mail server, typo in the
+    domain). With apply=True they go to suppression.txt so no run sends to them."""
+    path = campaign_path(slug)
+    campaign = load_campaign(path)
+    where = paths(out_dir, campaign)
+    if not where["contacts"].exists():
+        raise ValueError("Todavía no hay contactos. Corre un escaneo primero.")
+    people, _ = load_audience(where["contacts"], campaign, suppression_path=where["suppression"])
+    done = {r["email"].lower() for r in send.read_log(where["out"] / send.LOG_NAME) if r["estado"] == send.SENT}
+    found = deliverability.clean_list([p["email"] for p in people if p["email"] not in done])
+    found["applied"] = 0
+    if apply and found["bad"]:
+        for reason, label in (("error de dedo", "error-de-dedo"), ("no recibe", "dominio-sin-correo")):
+            group = [b["email"] for b in found["bad"] if reason in b["motivo"]]
+            if group:
+                send.add_suppression(where["suppression"], group, label)
+                found["applied"] += len(group)
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow(["email", "motivo", "sugerencia"])
+    for b in found["bad"]:
+        w.writerow([b["email"], b["motivo"], b["sugerencia"]])
+    found["csv"] = "\ufeff" + out.getvalue()
+    return found
+
+
+def bounce_checkpoint(check, out_dir, env_path, slug):
+    """Hook for send_campaign: reads the inboxes and pauses when too many of this run bounce."""
+    bounced_here = set()
+
+    def checkpoint(sent_emails):
+        try:
+            _, bounced = check(out_dir, env_path, slug)
+        except ValueError:
+            return ""  # can't read the inbox now; the in-run breaker still watches
+        sent = {e.lower() for e in sent_emails}
+        bounced_here.update(b.lower() for b in bounced if b.lower() in sent)
+        rate = len(bounced_here) / max(1, len(sent))
+        if rate > send.BREAKER_RATE:
+            return (f"{len(bounced_here)} de {len(sent)} correos de esta corrida rebotaron ({rate:.0%}); "
+                    f"el máximo sano es {send.BREAKER_RATE:.0%}. Usa Limpiar lista antes de seguir.")
+        return ""
+    return checkpoint
+
+
 class SendRun:
     """One campaign run at a time, in a background thread of the app."""
 
@@ -222,11 +277,17 @@ class SendRun:
             result = send.send_campaign(
                 path, where["contacts"], where["out"], senders=senders, send=True, limit=limit, pause=pause,
                 suppression_path=where["suppression"], sleep=self._stop.wait, stop=self._stop.is_set,
-                progress=progress, say=lambda *a: None)
+                progress=progress, say=lambda *a: None,
+                checkpoint=bounce_checkpoint(self._check, out_dir, env_path, path.stem))
             self._set(sent=result["sent"], total=result["this_run"], rejected=len(result["rejected"]),
-                      errors=result["errors"], stopped=result["stopped"])
+                      errors=result["errors"], stopped=result["stopped"], paused=result["paused"])
+            if result["paused"]:
+                notify("Envío en pausa", result["paused"])
+            else:
+                notify("Envío terminado", f"{result['sent']} enviados.")
         except Exception as exc:  # keep the app alive and show what happened
             self._set(error=str(exc) or exc.__class__.__name__)
+            notify("El envío se detuvo", str(exc) or exc.__class__.__name__)
         finally:
             if awake:
                 awake.terminate()
@@ -241,6 +302,18 @@ def _keep_awake():
         return subprocess.Popen(["/usr/bin/caffeinate", "-i"])
     except OSError:
         return None
+
+
+def notify(title, text):
+    """A macOS notification, so a pause is seen even with the app in the background."""
+    if sys.platform != "darwin":
+        return
+    quote = lambda v: '"' + str(v).replace("\\", "\\\\").replace('"', '\\"')[:240] + '"'
+    try:
+        subprocess.Popen(["/usr/bin/osascript", "-e",
+                          f"display notification {quote(text)} with title {quote(title)} sound name \"Basso\""])
+    except OSError:
+        pass
 
 
 def _now():
