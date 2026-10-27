@@ -67,6 +67,14 @@ echo "== Pruebas"
 EXE="$BUNDLE/Contents/MacOS/$APP"
 SMOKE="$(mktemp -d)"
 "$EXE" -m mail_contact_scraper --help >/dev/null
+# HTTPS from inside the app with no certificate settings from this machine: an SSL error here
+# means installed apps can't reach GitHub, Google or the mailboxes.
+env -u SSL_CERT_FILE -u SSL_CERT_DIR -u REQUESTS_CA_BUNDLE CONTACTOS_DATA_DIR="$SMOKE/upd" \
+  "$EXE" -m mail_contact_scraper.updater | tee "$SMOKE/update.json"
+if grep -qi "certificate\|SSL" "$SMOKE/update.json"; then
+  echo "La app no puede verificar certificados HTTPS" >&2
+  exit 1
+fi
 "$EXE" -m mail_contact_scraper.vision  # Claude SDK for hard image signatures
 # OCR with the bundled Tesseract only.
 python - "$SMOKE/firma.png" <<'EOF'

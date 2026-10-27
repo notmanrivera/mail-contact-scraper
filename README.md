@@ -192,6 +192,9 @@ barra de menú y abre el panel en el navegador. Los buzones se agregan desde el 
 - **Actualizaciones:** la app revisa el último release al abrirse y cada 6 horas, lo descarga
   en segundo plano y lo instala la próxima vez que se abre o al salir (o al momento con
   *Actualizar ahora* en el panel). No actualiza a media corrida de escaneo.
+  La v1.0.6 no podía conectarse por HTTPS (le faltaban los certificados); quien la tenga
+  debe instalar a mano una versión nueva desde el `.dmg` una vez, y de ahí en adelante se
+  actualiza sola.
 - **Token de GitHub:** como el repo es privado, cada Mac necesita un token *fine-grained* de
   solo lectura (Settings ▸ Developer settings ▸ Fine-grained tokens ▸ solo este repositorio ▸
   Contents: Read-only). Se pega en Configuración ▸ Actualizaciones y se guarda en el `.env`

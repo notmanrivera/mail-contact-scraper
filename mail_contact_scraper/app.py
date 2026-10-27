@@ -56,6 +56,25 @@ def use_bundled_tesseract(resources=None):
     return True
 
 
+def use_bundled_certificates():
+    """Trust the CA list that ships with certifi.
+
+    The Python inside the app can't see macOS's keychain, so without this every HTTPS and IMAP
+    connection (GitHub updates, Google Sheets, mailbox login) fails with CERTIFICATE_VERIFY_FAILED.
+    SSL_CERT_FILE is read by ssl.create_default_context() and inherited by the scraper process.
+    """
+    if os.environ.get("SSL_CERT_FILE"):
+        return False
+    try:
+        import certifi
+    except ImportError:
+        return False
+    if not Path(certifi.where()).is_file():
+        return False
+    os.environ["SSL_CERT_FILE"] = certifi.where()
+    return True
+
+
 def prepare(folder=None):
     folder = Path(folder or data_dir())
     folder.mkdir(parents=True, exist_ok=True)
@@ -65,6 +84,7 @@ def prepare(folder=None):
         env.write_text(ENV_TEMPLATE, encoding="utf-8")
         os.chmod(env, 0o600)
     use_bundled_tesseract()
+    use_bundled_certificates()
     return folder
 
 

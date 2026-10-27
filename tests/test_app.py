@@ -224,3 +224,17 @@ def test_dashboard_without_updater(tmp_path):
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_bundled_certificates_are_used_for_https(monkeypatch):
+    import certifi
+    import ssl
+
+    monkeypatch.delenv("SSL_CERT_FILE", raising=False)
+    monkeypatch.setenv("SSL_CERT_FILE", "")  # so monkeypatch restores it
+    monkeypatch.delenv("SSL_CERT_FILE")
+    assert app.use_bundled_certificates()
+    assert os.environ["SSL_CERT_FILE"] == certifi.where()
+    assert ssl.create_default_context().cert_store_stats()["x509_ca"] > 100
+    monkeypatch.setenv("SSL_CERT_FILE", "/elegido/por/el/usuario.pem")
+    assert not app.use_bundled_certificates()  # never overrides an explicit choice
