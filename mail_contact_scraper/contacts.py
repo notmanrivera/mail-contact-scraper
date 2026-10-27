@@ -15,6 +15,55 @@ AUTOMATED_RE = re.compile(
     r"auto-?confirm|marketing|promo(ciones)?|ofertas|mailing|accounts?-?update)[@+._-]",
     re.I,
 )
+# Anywhere in the local part: catalog-noreply@, avisos.donotreply@.
+NOREPLY_RE = re.compile(r"no[-_.]?reply|do[-_.]?not[-_.]?reply", re.I)
+# reply@, reply-n45hjmcz5keetl4@: the reply-to address a mailing platform hands out.
+REPLY_RE = re.compile(r"^(reply|replies|respuesta)([-+._]|$)", re.I)
+# Subdomains that only mailing platforms send from: reply@mail.pmmimediagroup.com,
+# c.1d48d1@reply.e.sonymusicfans.com.
+SENDING_SUBDOMAINS = {
+    "reply", "replies", "bounce", "bounces", "e", "em", "email", "mail", "mailer", "mailing", "news",
+    "newsletter", "mkt", "marketing", "campaign", "campaigns", "notify", "notifications", "send",
+}
+NOT_A_NAME = {"com", "net", "org", "gob", "gov", "edu", "co"}
+HEX_RE = re.compile(r"^[0-9a-f]{16,}$", re.I)
+
+
+def sending_subdomain(domain):
+    """'reply.' when domain is reply.<something>.<tld>; '' for mail.ru or mail.com.mx."""
+    labels = domain.lower().split(".")
+    if len(labels) >= 3 and labels[0] in SENDING_SUBDOMAINS and labels[1] not in NOT_A_NAME:
+        return labels[0] + "."
+    return ""
+
+
+def _random_code(local):
+    # c.1d48d1c7758e42e482e69c18eb87c3ce: a tracking code, not a person.
+    for part in re.split(r"[-+._]", local):
+        digits = sum(ch.isdigit() for ch in part)
+        if HEX_RE.match(part) and digits >= 3:
+            return True
+        if len(part) >= 20 and digits >= 4 and digits < len(part):
+            return True
+    return False
+
+
+def automated_rule(addr):
+    """The rule shown in Omitidos when addr belongs to a robot, or ''."""
+    local, _, domain = addr.lower().rpartition("@")
+    match = AUTOMATED_RE.match(addr)
+    if match:
+        return match.group(1).lower() + "@"
+    if REPLY_RE.match(local):
+        return REPLY_RE.match(local).group(1) + "@"
+    if NOREPLY_RE.search(local):
+        return "*" + NOREPLY_RE.search(local).group(0) + "*@"
+    sub = sending_subdomain(domain)
+    if sub:
+        return "@" + sub
+    if _random_code(local):
+        return "código"
+    return ""
 
 FIELDS = [
     "email", "name", "title", "company", "location", "mobile_phones", "office_phones", "fax",
@@ -187,9 +236,9 @@ class ContactBook:
         if rule:
             return "service", rule
         if self.skip_automated:
-            match = AUTOMATED_RE.match(addr)
-            if match:
-                return "automated", match.group(1).lower() + "@"
+            rule = automated_rule(addr)
+            if rule:
+                return "automated", rule
         return "", ""
 
     def _skip(self, addr, date=None, name=""):

@@ -269,3 +269,28 @@ def test_load_done_keeps_the_last_reading_and_skips_old_versions_on_refresh(tmp_
     done, records = cli._load_done(path, min_version=cli.READER_VERSION)
     assert done == {"a@x.mx": {("INBOX", "7", "1"), ("INBOX", "7", "2")}}
     assert [r.get("subject") for r in records] == [None, "nuevo"]
+
+
+def test_reply_and_tracking_addresses_are_robots():
+    book = ContactBook(allow=["reply@mundoexpopack.com"])
+    robots = {
+        "reply@mail.pmmimediagroup.com": "reply@",
+        "reply-n45hjmcz5keetl4vk4gap4bss4.110063@reply.grupoflechaamarilla.com.mx": "reply@",
+        "catalog-noreply@made-in-china.com": "*noreply*@",
+        "c.1d48d1c7758e42e482e69c18eb87c3ce.515ba56c17d5c1da@reply.e.sonymusicfans.com": "@reply.",
+        "hola@e.marca.mx": "@e.",
+        "a1b2c3d4e5f6a7b8c9d0@marca.mx": "código",
+    }
+    people = ["reply@mundoexpopack.com", "juan.perez1985@gmail.com", "ventas@mail.com.mx", "replica@arte.mx",
+              "contacto2024@empresa.mx", "jgarcia2024ventas@aceros.mx"]
+    for addr in [*robots, *people]:
+        book.add_sender(_record(addr))
+    by = {o["email"]: o for o in book.omitted_list()}
+    assert {a: (by[a]["reason"], by[a]["rule"]) for a in robots} == {a: ("automated", r) for a, r in robots.items()}
+    assert {r["email"] for r in book.to_rows()} == set(people)  # reply@mundoexpopack.com is allowed
+
+
+def test_company_skips_mailing_subdomain():
+    from mail_contact_scraper.extract import company_from_domain
+    assert company_from_domain("x@mail.pmmimediagroup.com") == "Pmmimediagroup"
+    assert company_from_domain("x@mail.ru") == "Mail"
