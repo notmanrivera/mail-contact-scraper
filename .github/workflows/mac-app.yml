@@ -1,42 +1,21 @@
-# Pull requests run the tests on Linux. Every merge to main builds the Mac app and publishes it
-# as a GitHub release that the installed apps update themselves to. macOS minutes count 10x
-# against the free plan, so the app is only built on merges (or by hand from the Actions tab).
-# Without minutes left, packaging/release_local.sh does the same from a Mac.
+# Builds the Mac app and publishes it as a GitHub release that the installed apps update
+# themselves to. Versions are normally published from a Mac with packaging/release_local.sh,
+# which costs no Actions minutes (macOS minutes count 10x on the free plan); this workflow
+# only runs by hand, from the Actions tab ("Run workflow").
 name: App de Mac
 
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: mac-app-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: mac-app
 
 jobs:
-  tests:
-    name: Pruebas
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Tesseract
-        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-spa
-      - name: Dependencias
-        run: pip install -r requirements.txt pytest
-      - name: Pruebas
-        run: python -m pytest -q
-
   version:
     name: Versión
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     outputs:
       number: ${{ steps.next.outputs.number }}
@@ -44,7 +23,7 @@ jobs:
       - id: next
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        # The newest release plus one, so versions made with release_local.sh keep counting up.
+        # The newest release plus one, the same rule as release_local.sh.
         run: |
           latest=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName 2>/dev/null || echo v1.0.0)
           echo "number=1.0.$(( ${latest##*.} + 1 ))" >> "$GITHUB_OUTPUT"
@@ -58,8 +37,6 @@ jobs:
         include:
           - name: Apple Silicon
             runner: macos-14
-          - name: Intel
-            runner: macos-15-intel
     runs-on: ${{ matrix.runner }}
     env:
       APP_VERSION: ${{ needs.version.outputs.number }}
@@ -89,7 +66,7 @@ jobs:
   release:
     name: Publicar versión
     needs: [version, build]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     env:
       APP_VERSION: ${{ needs.version.outputs.number }}
