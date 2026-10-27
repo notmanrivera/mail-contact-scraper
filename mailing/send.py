@@ -19,6 +19,7 @@ import csv
 import email
 import html as html_lib
 import imaplib
+import os
 import random
 import re
 import smtplib
@@ -40,6 +41,14 @@ UNSUBSCRIBE_SUBJECT = "Baja de correos"
 # Google Workspace allows 2,000 messages a day per user (Microsoft 365: 10,000); stay under it.
 MAILBOX_DAILY_LIMIT = 1500
 RELAY_DAILY_LIMIT = 10000
+# Gmail drops a long SMTP session ("421 4.7.0 Connection expired"); open a fresh one this often.
+RECONNECT_EVERY = 50
+# A dropped or expired connection is retried this many times (after these pauses, in seconds)
+# before that mailbox is given up for the run; the prospect is never marked as failed for it.
+RETRY_PAUSES = (10, 30, 60)
+# Every so often a longer break, so the pace doesn't look machine-made.
+BREAK_EVERY = (40, 60)
+BREAK_SECONDS = (30, 90)
 
 # IMAP host the scraper uses -> (SMTP host, port)
 SMTP_FOR_IMAP = {
@@ -129,6 +138,8 @@ def append_log(path, email_addr, status, detail="", now=None, sender=""):
         if new:
             w.writerow(LOG_FIELDS)
         w.writerow([(now or datetime.now()).strftime("%Y-%m-%d %H:%M:%S"), email_addr, status, detail, sender])
+        fh.flush()
+        os.fsync(fh.fileno())  # on disk before the next message, so a crash never resends it
 
 
 def sent_today(mailing_root, day, default_sender=""):
@@ -241,9 +252,25 @@ def make_message(campaign, person, subject_prefix="", sender=None):
 
 
 def _is_limit(err):
+    """The provider refuses more mail from this mailbox for now (daily quota, rate, block)."""
     text = str(err).lower()
-    return getattr(err, "smtp_code", 0) == 421 or any(
-        k in text for k in ("limit", "quota", "rate", "too many", "blocked", "suspended"))
+    return any(k in text for k in ("limit", "quota", "rate", "too many", "blocked", "suspended", "5.4.5"))
+
+
+def _is_transient(err):
+    """A dropped, expired or timed-out connection, or a 4xx reply: reconnect and try again."""
+    if isinstance(err, smtplib.SMTPServerDisconnected):
+        return True
+    if isinstance(err, smtplib.SMTPResponseException):
+        return 400 <= err.smtp_code < 500
+    return isinstance(err, OSError) and not isinstance(err, smtplib.SMTPException)  # socket errors
+
+
+def _close(conn):
+    try:
+        conn.quit()
+    except Exception:
+        pass
 
 
 def send_campaign(campaign_path, contacts_csv, out_dir, *, senders, send=False, test_to=None,
@@ -288,8 +315,35 @@ def send_campaign(campaign_path, contacts_csv, out_dir, *, senders, send=False, 
         return summary
 
     conns, errors_in_row = {}, {s["email"]: 0 for s in senders}
+    used = {}  # messages sent on each open connection
     queue = list(pending)
     turn = 0
+    next_break = random.randint(*BREAK_EVERY)
+
+    def deliver(sender, msg):
+        """Send on this mailbox's connection, opening a fresh one every RECONNECT_EVERY
+        messages; a dropped or expired connection is reopened and the same message retried."""
+        who = sender["email"]
+        for attempt in range(len(RETRY_PAUSES) + 1):
+            if stop and stop():
+                raise StopSending("Detenido a mano.")
+            try:
+                if who in conns and used[who] >= RECONNECT_EVERY:
+                    _close(conns.pop(who))
+                if who not in conns:
+                    conns[who], used[who] = sender["connect"](), 0
+                conns[who].send_message(msg)
+                used[who] += 1
+                return
+            except smtplib.SMTPRecipientsRefused:
+                raise
+            except (smtplib.SMTPException, OSError) as err:
+                if who in conns:
+                    _close(conns.pop(who))
+                if _is_limit(err) or not _is_transient(err) or attempt == len(RETRY_PAUSES):
+                    raise
+                say(f"  {who}: {err}; reconecto y reintento en {RETRY_PAUSES[attempt]} s")
+                sleep(RETRY_PAUSES[attempt])
     try:
         while queue and summary["sent"] < this_run:
             if stop and stop():
@@ -305,13 +359,10 @@ def send_campaign(campaign_path, contacts_csv, out_dir, *, senders, send=False, 
             msg = make_message(campaign, person, sender=sender)
             who = sender["email"]
             try:
-                try:
-                    if who not in conns:
-                        conns[who] = sender["connect"]()
-                    conns[who].send_message(msg)
-                except smtplib.SMTPServerDisconnected:
-                    conns[who] = sender["connect"]()
-                    conns[who].send_message(msg)
+                deliver(sender, msg)
+            except StopSending:
+                summary["stopped"] = "Detenido a mano. Al volver a enviar sigue con los que faltan."
+                break
             except smtplib.SMTPRecipientsRefused as err:
                 detail = "; ".join(f"{c} {m.decode(errors='replace') if isinstance(m, bytes) else m}"
                                    for c, m in err.recipients.values())
@@ -321,10 +372,10 @@ def send_campaign(campaign_path, contacts_csv, out_dir, *, senders, send=False, 
             except (smtplib.SMTPResponseException, OSError, smtplib.SMTPException) as err:
                 summary["errors"] += 1
                 errors_in_row[who] += 1
-                if _is_limit(err) or errors_in_row[who] >= 5 or not isinstance(err, smtplib.SMTPResponseException):
-                    # this mailbox is done for today; the prospect stays in the queue for the next one
+                if (_is_limit(err) or _is_transient(err) or errors_in_row[who] >= 5
+                        or isinstance(err, smtplib.SMTPAuthenticationError)):
+                    # this mailbox is done for now (retries spent); the prospect stays in the queue
                     room[who] = 0
-                    conns.pop(who, None)
                     note = f"{who}: {err}"
                     say(f"  {who} dejó de enviar: {err}")
                     summary["stopped"] = "; ".join(filter(None, [summary["stopped"], note]))
@@ -342,15 +393,16 @@ def send_campaign(campaign_path, contacts_csv, out_dir, *, senders, send=False, 
             if progress:
                 progress(summary, person["email"], who)
             if queue and summary["sent"] < this_run:
-                sleep(pause * random.uniform(0.7, 1.3))  # steady, human pace
+                if summary["sent"] >= next_break:  # now and then a longer break
+                    next_break = summary["sent"] + random.randint(*BREAK_EVERY)
+                    sleep(random.uniform(*BREAK_SECONDS))
+                else:
+                    sleep(pause * random.uniform(0.7, 1.6))  # uneven, human pace
     except KeyboardInterrupt:
         summary["stopped"] = "Detenido a mano. Al volver a correrlo sigue con los que faltan."
     finally:
         for conn in conns.values():
-            try:
-                conn.quit()
-            except Exception:
-                pass
+            _close(conn)
     if summary["rejected"]:
         add_suppression(suppression_path, summary["rejected"], "rechazado")
     return summary

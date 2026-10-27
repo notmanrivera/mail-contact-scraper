@@ -1292,9 +1292,9 @@
     }).join("") || '<div class="hint">Agrega un buzón con su contraseña en Configuración ▸ Buzones.</div>';
     if (!$("cp-daily").value && c.senders && c.senders[0]) $("cp-daily").placeholder = String(c.senders[0].daily_limit);
     const n = p ? Math.min(p.this_run, +$("cp-limit").value || p.this_run) : 0;
-    const hours = (n * 4) / 3600;
+    const hours = (n * 5.8) / 3600;  // 3 to 6 s each plus a 30-90 s break every ~50
     $("cp-plan").innerHTML = c.error ? esc(c.error)
-      : !p ? "" : n ? `Hoy saldrían <b>${fmt.format(n)}</b> correos, uno cada ~4 s (${hours < 1 ? `${Math.max(1, Math.round(hours * 60))} min` : `${hours.toFixed(1)} h`}). Deja la Mac encendida con la app abierta; si se interrumpe, al volver a enviar sigue donde se quedó.`
+      : !p ? "" : n ? `Hoy saldrían <b>${fmt.format(n)}</b> correos, uno cada 3 a 6 s con una pausa cada ~50 (~${hours < 1 ? `${Math.max(1, Math.round(hours * 60))} min` : `${hours.toFixed(1)} h`}). Deja la app abierta; la Mac no se duerme mientras envía. Si se corta la conexión, reconecta sola; si se interrumpe, al volver a enviar sigue donde se quedó.`
       : p.pending ? "Ya se acabó el cupo de hoy de estos buzones. Mañana sigue con los que faltan." : "Ya todos los de la lista la recibieron.";
     $("cp-start").disabled = !!run.running || !n || $("cp-confirm").value.trim() !== "ENVIAR";
     $("cp-run").hidden = !run.phase;

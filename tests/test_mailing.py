@@ -181,10 +181,10 @@ def _send(tmp_path, smtp, senders=None, daily_limit=1500, **kw):
     if not contacts.exists():
         write_contacts(contacts, [{"email": f"p{i}@cliente.mx", "name": f"Persona{i} X", "source": "signature"}
                                   for i in range(5)])
+    kw.setdefault("sleep", lambda s: None)
     return send_campaign(CAMPAIGN, contacts, tmp_path / "mailing" / "qc-aro",
                          senders=senders or [_sender(smtp, daily_limit=daily_limit)],
-                         sleep=lambda s: None, say=lambda *a: None,
-                         suppression_path=tmp_path / "suppression.txt", **kw)
+                         say=lambda *a: None, suppression_path=tmp_path / "suppression.txt", **kw)
 
 
 def test_send_dry_run_sends_nothing(tmp_path):
@@ -512,3 +512,70 @@ def test_dashboard_fills_greeting_name(tmp_path):
         assert get("otro%40x.com") == {"name": "", "first": ""}
     finally:
         server.shutdown()
+
+
+# ---------- long runs: Gmail expires the SMTP session ----------
+
+class ExpiringSMTP(FakeSMTP):
+    """One connection; after `expires_after` messages it answers 421 like Gmail does."""
+    def __init__(self, sent, expires_after=None, fail=0):
+        super().__init__()
+        self.sent, self.expires_after, self.fail = sent, expires_after, fail
+
+    def send_message(self, msg):
+        import smtplib
+        if self.expires_after is not None and self.count >= self.expires_after:
+            raise smtplib.SMTPSenderRefused(421, b"4.7.0 Connection expired, try reconnecting.", "pedro@x")
+        self.count += 1
+        super().send_message(msg)
+
+    count = 0
+
+
+def _expiring_sender(sent, expires_after=None, always_fail=False, connects=None):
+    import smtplib
+
+    def connect():
+        if connects is not None:
+            connects.append(1)
+        if always_fail:
+            return ExpiringSMTP(sent, expires_after=0)
+        return ExpiringSMTP(sent, expires_after)
+    return {"email": "pedro@dindustrimex.com", "name": "Pedro", "host": "smtp.test", "daily_limit": 1500,
+            "connect": connect}
+
+
+def _many(tmp_path, n):
+    write_contacts(tmp_path / "contacts.csv", [{"email": f"p{i}@cliente{i}.mx", "name": f"Persona{i} X",
+                                                "source": "signature"} for i in range(n)])
+
+
+def test_expired_connection_reconnects_and_retries_same_person(tmp_path):
+    from mailing.send import read_log
+    _many(tmp_path, 30)
+    sent, connects, pauses = [], [], []
+    summary = _send(tmp_path, None, senders=[_expiring_sender(sent, expires_after=7, connects=connects)],
+                    send=True, sleep=pauses.append)
+    assert summary["sent"] == 30 and summary["errors"] == 0 and not summary["stopped"]
+    assert len({m["To"] for m in sent}) == 30  # nobody skipped, nobody twice
+    assert len(connects) >= 5 and 10 in pauses  # reconnected after each 421, after a pause
+    log = read_log(tmp_path / "mailing" / "qc-aro" / "envios.csv")
+    assert [r["estado"] for r in log] == ["enviado"] * 30
+
+
+def test_connection_is_renewed_before_gmail_expires_it(tmp_path):
+    from mailing import send as s
+    _many(tmp_path, s.RECONNECT_EVERY * 2 + 5)
+    sent, connects = [], []
+    summary = _send(tmp_path, None, senders=[_expiring_sender(sent, connects=connects)], send=True)
+    assert summary["sent"] == s.RECONNECT_EVERY * 2 + 5 and len(connects) == 3
+
+
+def test_mailbox_given_up_after_retries_keeps_prospect_pending(tmp_path):
+    from mailing.send import read_log
+    _many(tmp_path, 3)
+    sent, pauses = [], []
+    summary = _send(tmp_path, None, senders=[_expiring_sender(sent, always_fail=True)], send=True,
+                    sleep=pauses.append)
+    assert summary["sent"] == 0 and "421" in summary["stopped"] and pauses == [10, 30, 60]
+    assert read_log(tmp_path / "mailing" / "qc-aro" / "envios.csv") == []  # still pending for next run
