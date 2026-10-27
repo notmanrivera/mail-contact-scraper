@@ -550,6 +550,7 @@
       </select>
       <a class="btn btn-outline" id="wa-csv" href="/whatsapp.csv" download hidden style="height:38px"
          title="Un renglón por teléfono, sin omitidos ni bajas del mailing">Descargar para WhatsApp</a>
+      <select class="filter" id="sector-filter" aria-label="Giro" hidden></select>
       <select class="filter" id="box-filter" aria-label="Buzón" hidden></select>
     </div>
     <div class="table-wrap">
@@ -843,7 +844,7 @@
   let contacts = [], version = "", known = new Set(), fresh = new Set();
   let view = "contacts", filter = "all", query = "", sortKey = "last_seen", sortDir = -1;
   let openEmail = null, activeCompany = null, limit = PAGE;
-  let mailboxes = [], boxFilter = "all", months = 6;
+  let mailboxes = [], boxFilter = "all", months = 6, sectors = [], sectorFilter = "all";
   let lastUpdate = null, rateSamples = [], pendingAction = null, actionError = "";
 
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -949,6 +950,10 @@
       pctText = pending || !running ? `${width}%` : "—";
       label = running ? (st.refresh ? "Volviendo a leer todo" : "Leyendo correos") : st.error === "Detenido" ? "Escaneo detenido"
         : st.error ? "Escaneo con error" : st.refresh ? "Relectura completa" : "Escaneo completo";
+      if (running && st.enriching) {
+        label = "Revisando el giro de las empresas";
+        numbers = `${fmt.format(st.enriching)} sitios web por revisar`;
+      }
       if (running) {
         rateSamples.push([Date.now(), done]);
         rateSamples = rateSamples.filter(([t]) => Date.now() - t < 120000);
@@ -983,8 +988,9 @@
     const map = new Map();
     for (const c of contacts) {
       if (!c.company) continue;
-      const s = map.get(c.company) || { name: c.company, contacts: 0, phones: 0, messages: 0, last: "" };
+      const s = map.get(c.company) || { name: c.company, contacts: 0, phones: 0, messages: 0, last: "", sector: "" };
       s.contacts += 1;
+      if (!s.sector && c.sector) s.sector = c.sector;
       if (c.mobile_phones || c.office_phones) s.phones += 1;
       s.messages += +c.messages || 0;
       if ((c.last_seen || "") > s.last) s.last = c.last_seen;
@@ -1068,6 +1074,19 @@
     return true;
   }
 
+  function renderSectorFilter() {
+    const list = [...new Set(contacts.map((c) => c.sector).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es"));
+    if (list.join() === sectors.join()) return;
+    sectors = list;
+    if (sectorFilter !== "all" && !list.includes(sectorFilter)) sectorFilter = "all";
+    const sel = $("sector-filter");
+    sel.hidden = !list.length || view === "dormant";
+    sel.innerHTML = '<option value="all">Todos los giros</option>' +
+      list.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join("") +
+      '<option value="none">Sin giro detectado</option>';
+    sel.value = sectorFilter;
+  }
+
   /* Clientes dormidos: empresas (o dominios propios) sin correos desde hace N meses. */
   const FREE_MAIL = /^(gmail|hotmail|outlook|live|yahoo|icloud|me|aol|prodigy|msn)\./;
   const groupOf = (c) => {
@@ -1106,6 +1125,7 @@
 
   function matches(c) {
     if (boxFilter !== "all" && !(c.mailboxes || "").split("; ").includes(boxFilter)) return false;
+    if (sectorFilter === "none" ? c.sector : sectorFilter !== "all" && c.sector !== sectorFilter) return false;
     if (activeCompany && groupOf(c) !== activeCompany) return false;
     if (filter === "phone" && !(c.mobile_phones || c.office_phones)) return false;
     if (filter === "signature" && !c.source.includes("signature")) return false;
@@ -1114,7 +1134,7 @@
     if (filter === "bounced" && !c.bounced) return false;
     const q = query.trim().toLowerCase();
     if (!q) return true;
-    const hay = `${c.name} ${c.company} ${c.location || ""} ${c.title} ${c.email} ${c.other_emails} ${c.websites}`.toLowerCase();
+    const hay = `${c.name} ${c.company} ${c.sector || ""} ${c.location || ""} ${c.title} ${c.email} ${c.other_emails} ${c.websites}`.toLowerCase();
     if (hay.includes(q)) return true;
     const digits = q.replace(/\D/g, "");
     return digits.length >= 3 && `${c.mobile_phones}${c.office_phones}${c.fax}`.replace(/\D/g, "").includes(digits);
@@ -1143,9 +1163,11 @@
     if (view === "companies" || view === "dormant") {
       const q = query.trim().toLowerCase();
       const base = view === "dormant" ? dormantStats() : companyStats();
-      const rows = sorted(base.filter((s) => !q || s.name.toLowerCase().includes(q)), ["contacts", "phones", "messages"]);
+      const rows = sorted(base.filter((s) => (!q || `${s.name} ${s.sector || ""}`.toLowerCase().includes(q))
+        && (view !== "companies" || sectorFilter === "all" || (sectorFilter === "none" ? !s.sector : s.sector === sectorFilter))),
+        ["contacts", "phones", "messages"]);
       $("rows").innerHTML = rows.map((s) => `<tr data-company="${esc(s.name)}">
-        <td><div class="name">${esc(s.name)}</div></td>
+        <td><div class="name">${esc(s.name)}</div>${s.sector ? `<div class="sub-email">${esc(s.sector)}</div>` : ""}</td>
         <td class="r num">${s.contacts}</td><td class="r num">${s.phones}</td>
         <td class="r num col-msgs">${fmt.format(s.messages)}</td><td class="col-last">${esc(shortDate(s.last))}</td></tr>`).join("")
         || `<tr><td colspan="5" class="muted">${view === "dormant" ? `Ninguna empresa lleva ${months} meses sin escribir.` : "Todavía no hay empresas."}</td></tr>`;
@@ -1163,7 +1185,7 @@
         <td><div class="person"><span class="avatar">${esc(initials(c))}</span><div>
           <div class="name">${esc(c.name) || '<span class="muted">Sin nombre</span>'}${c.source.includes("image") ? '<span class="badge">IMAGEN</span>' : ""}${c.bounced ? '<span class="badge dark" title="El último correo que le mandaron rebotó">REBOTÓ</span>' : ""}</div>
           <div class="sub-email">${esc(c.email)}</div></div></div></td>
-        <td>${esc(c.company) || '<span class="muted">—</span>'}${c.location ? `<div class="sub-email">${esc(c.location)}</div>` : ""}</td>
+        <td>${esc(c.company) || '<span class="muted">—</span>'}${c.sector || c.location ? `<div class="sub-email">${esc([c.sector, c.location].filter(Boolean).join(" · "))}</div>` : ""}</td>
         <td class="col-title">${esc(c.title) || '<span class="muted">—</span>'}</td>
         <td class="phones num">${phoneCell(c)}</td>
         <td class="r num col-msgs">${esc(c.messages)}</td>
@@ -1174,6 +1196,8 @@
         c.fax && `Fax: ${c.fax}`,
         c.other_emails && `Otros correos: ${c.other_emails}`,
         c.websites && `Web: ${c.websites}`,
+        c.sector && `Giro: ${c.sector}`,
+        c.company_web && `Su página dice: ${c.company_web}`,
         c.first_seen && `Primer correo: ${shortDate(c.first_seen)}`,
         mailboxes.length > 1 && c.mailboxes && `Buzones: ${c.mailboxes.split("; ").join(", ")}`,
         `Correos: ${c.messages}`,
@@ -1206,6 +1230,7 @@
     $("filter").disabled = v === "companies";
     $("box-filter").disabled = v !== "contacts";
     $("months").hidden = $("dormant-csv").hidden = v !== "dormant";
+    $("sector-filter").hidden = !sectors.length || v === "dormant";
     showWhatsapp();
     renderTable();
   }
@@ -1236,6 +1261,7 @@
         known = new Set(data.contacts.map((c) => c.email));
         contacts = data.contacts;
         renderBoxFilter(lastStatus);
+        renderSectorFilter();
         renderAll();
       }
     } catch (e) {
@@ -1289,6 +1315,7 @@
     if (b) { e.stopPropagation(); ignore(b.dataset.ignore); }
   }, true);
   $("box-filter").addEventListener("change", (e) => { boxFilter = e.target.value; limit = PAGE; renderTable(); });
+  $("sector-filter").addEventListener("change", (e) => { sectorFilter = e.target.value; limit = PAGE; renderTable(); });
   document.querySelectorAll(".seg button").forEach((b) => b.addEventListener("click", () => setView(b.dataset.view)));
   $("thead").addEventListener("click", (e) => {
     const th = e.target.closest("th[data-key]");

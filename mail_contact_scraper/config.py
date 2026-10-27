@@ -48,6 +48,8 @@ class Settings:
     ocr_engine: str = "tesseract"       # tesseract | auto (Claude when unsure) | claude
     anthropic_api_key: str = ""
     ocr_claude_model: str = ""
+    enrich_domains: bool = True         # visit each company's website once to tell its sector
+    enrich_max: int = 400               # new websites per scan
     output_dir: str = "output"
     mailboxes: list = field(default_factory=list)
 
@@ -112,6 +114,8 @@ def load_settings(env_file=".env", base=None):
         ocr_engine=(env("OCR_ENGINE", "") or "tesseract").strip().lower(),
         anthropic_api_key=env("ANTHROPIC_API_KEY", ""),
         ocr_claude_model=env("OCR_CLAUDE_MODEL", ""),
+        enrich_domains=_bool(env("ENRICH_DOMAINS"), True),
+        enrich_max=int(env("ENRICH_MAX", "400") or 400),
         output_dir=env("OUTPUT_DIR", "output"),
         mailboxes=mailboxes,
     )

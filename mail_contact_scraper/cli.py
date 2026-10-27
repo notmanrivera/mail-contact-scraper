@@ -1,5 +1,6 @@
 """Command line entry point: python -m mail_contact_scraper [options]."""
 import argparse
+import csv
 import json
 import logging
 import mailbox
@@ -9,6 +10,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from . import enrich
 from .config import load_settings
 from .contacts import ContactBook, read_ignore_file, read_services_file
 from .extract import parse_signature
@@ -157,6 +159,7 @@ def build_contacts(records, settings, out_dir):
         ignore=read_ignore_file(settings.ignore_file),
         allow=read_ignore_file(settings.allow_file),
         services=read_services_file(settings.services_file),
+        companies=enrich.lookup(enrich.load(out_dir)) if settings.enrich_domains else None,
     )
     for rec in records:
         book.add_sender(rec)
@@ -372,11 +375,37 @@ def main(argv=None):
         raise
     if args.refresh:
         _compact(jsonl_path, records)
+    if settings.enrich_domains:
+        try:
+            enrich_companies(records, settings, out_dir, status)
+        except KeyboardInterrupt:  # Stop while visiting websites: keep what was read, finish the rest next scan
+            log.info("Revisión de sitios web detenida.")
+        except Exception as exc:  # never lose a scan over a website
+            log.warning("No se pudo revisar el giro de las empresas: %s", exc)
     count = write_outputs(records, settings, out_dir, status, running=False)
     log.info("Processed %d new messages (%d total). Wrote %d contacts to %s",
              new, len(records), count, out_dir / "contacts.csv")
     _auto_sheets(out_dir)
     return 0
+
+
+def enrich_companies(records, settings, out_dir, status=None):
+    """Visit the websites of the companies not classified yet, then rebuild contacts.csv."""
+    build_contacts(records, settings, out_dir)  # the contacts of this scan's last batch too
+    with open(out_dir / "contacts.csv", newline="", encoding="utf-8-sig") as fh:
+        domains = {enrich.domain_of(row) for row in csv.DictReader(fh)}
+    todo = enrich.pending(domains, enrich.load(out_dir))[: settings.enrich_max]
+    if not todo:
+        return 0
+    if status is not None:
+        status["enriching"] = len(todo)
+        write_outputs(records, settings, out_dir, status)
+    try:
+        visited = enrich.enrich(out_dir, todo, limit=settings.enrich_max)
+    finally:
+        if status is not None:
+            status.pop("enriching", None)
+    return visited
 
 
 _LOCKS = {}

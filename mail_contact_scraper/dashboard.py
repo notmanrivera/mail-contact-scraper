@@ -211,7 +211,7 @@ def _read_suppression(path):
     return out
 
 
-WHATSAPP_FIELDS = ["telefono", "tipo", "nombre", "nombre_pila", "empresa", "puesto", "correo", "ciudad", "ultimo_correo"]
+WHATSAPP_FIELDS = ["telefono", "tipo", "nombre", "nombre_pila", "empresa", "giro", "puesto", "correo", "ciudad", "ultimo_correo"]
 
 
 def _first_name(name):
@@ -246,7 +246,7 @@ def whatsapp_rows(out_dir, only_mobile=False):
                 seen.add(phone)
                 rows.append({"telefono": phone, "tipo": kind, "nombre": c.get("name", ""),
                              "nombre_pila": _first_name(c.get("name", "")), "empresa": c.get("company", ""),
-                             "puesto": c.get("title", ""), "correo": c["email"], "ciudad": c.get("location", ""),
+                             "giro": c.get("sector", ""), "puesto": c.get("title", ""), "correo": c["email"], "ciudad": c.get("location", ""),
                              "ultimo_correo": (c.get("last_seen") or "")[:10]})
     return rows
 
