@@ -42,15 +42,14 @@ cta_url = "mailto:ventas@dindustrimex.com?subject=Quiero%20mi%20cotizaci%C3%B3n"
 [[blocks]]
 brand = "Q-Pumps · Serie QC"
 title = "La centrífuga que mantiene tu proceso **limpio y en marcha**"
-body = "Para alimentos, bebidas, lácteos y agroquímicos. Diseño de fácil ensamble, hecha aquí en Querétaro."
+body = "Para alimentos, bebidas, lácteos y agroquímicos. Diseño de fácil ensamble, hecha en Querétaro."
 image = "qc.png"
 image_alt = "Bomba centrífuga sanitaria Q-Pumps Serie QC"
 checks = [
   "Certificación sanitaria 3-A",
   "Partes húmedas en acero inoxidable 316L",
   "Hasta 1,200 gpm, 600 cP y 120 °C",
-  "Motores NEMA o IEC",
-  "¿Ya tienes una QC? Conviértela a QC+ con un Kit+, sin cambiar de bomba",
+  "¿Ya tienes una Serie C de otra marca? Conviértela a QC+ con un Kit+, sin cambiar de bomba",
 ]
 cta_label = "Cotizar QC"
 cta_url = "mailto:ventas@dindustrimex.com?subject=Cotizaci%C3%B3n%20Q-Pumps%20QC"
@@ -65,7 +64,7 @@ image_alt = "Bomba neumática de doble diafragma ARO"
 checks = [
   "Diseño sin sellos mecánicos: menos fugas, menos mantenimiento",
   "Opciones en polipropileno, acetal, PVDF o metálicas",
-  "Hasta 275 gpm según modelo",
+  "Hasta 275 gpm",
   "Versiones certificadas ATEX para zonas con riesgo de explosión",
   "Respaldo de garantía de fábrica",
 ]

@@ -253,8 +253,9 @@ def mailing_action(path, body, out_dir, env_path, run):
     slug = str(body.get("campaign") or "")
     try:
         if path == "/mailing/test":
-            return 200, {"ok": True, **send.send_test_html(body.get("html"), body.get("subject"), body.get("to"),
-                                                           body.get("from"), slug, env_path)}
+            return 200, {"ok": True, **send.send_test_html(
+                body.get("html"), body.get("subject"), body.get("to"), body.get("from"), slug, env_path,
+                name=str(body.get("name") or ""), contacts_csv=Path(out_dir) / "contacts.csv")}
         if path == "/mailing/campaign/start":
             return 200, {"ok": True, "run": run.start(out_dir, env_path, body)}
         if path == "/mailing/campaign/stop":
