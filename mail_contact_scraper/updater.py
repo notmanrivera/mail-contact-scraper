@@ -107,6 +107,9 @@ class Updater:
         self.checked_at = None
         self.downloading = False
         self.installing = False
+        self.stage = ""      # what the updater is doing right now, shown live in the dashboard
+        self.received = 0    # bytes of the update downloaded so far
+        self.total = 0       # its size, 0 if unknown
         self.on_exit = None  # set by the app: stops it so the swap script can replace the bundle
         self.lock = threading.Lock()
 
@@ -130,6 +133,8 @@ class Updater:
         """Ask GitHub for the newest release. Returns status(); errors land in status()["error"]."""
         if not self.enabled:
             return self.status()
+        if not self.downloading:
+            self.stage = "checking"
         try:
             with self._request(f"{API}/repos/{self.repo}/releases/latest") as resp:
                 release = json.loads(resp.read().decode("utf-8"))
@@ -137,7 +142,8 @@ class Updater:
             if not asset:
                 raise UpdateError(f"La versión {release.get('tag_name')} no trae la app para esta Mac ({self.arch}).")
             self.latest = {"tag": release.get("tag_name", ""), "notes": (release.get("body") or "")[:3000],
-                           "asset_url": asset["url"], "published_at": release.get("published_at", "")}
+                           "asset_url": asset["url"], "size": int(asset.get("size") or 0),
+                           "published_at": release.get("published_at", "")}
             self.error = ""
         except urllib.error.HTTPError as exc:
             self.error = self._http_message(exc.code)
@@ -145,6 +151,8 @@ class Updater:
             self.error = f"Sin conexión con GitHub ({getattr(exc, 'reason', exc)})."
         except (UpdateError, ValueError, KeyError) as exc:
             self.error = str(exc)
+        if self.stage == "checking":
+            self.stage = ""
         self.checked_at = datetime.now().isoformat(timespec="seconds")
         return self.status()
 
@@ -178,6 +186,7 @@ class Updater:
             return ready[1]
         with self.lock:
             self.downloading = True
+            self.stage, self.received, self.total = "downloading", 0, self.latest.get("size", 0)
             try:
                 self.updates_dir.mkdir(parents=True, exist_ok=True)
                 work = Path(tempfile.mkdtemp(prefix=".download-", dir=self.updates_dir))
@@ -185,7 +194,15 @@ class Updater:
                     archive = work / "app.zip"
                     with self._request(self.latest["asset_url"], "application/octet-stream", timeout=120) as resp, \
                             open(archive, "wb") as fh:
-                        shutil.copyfileobj(resp, fh, 1024 * 1024)
+                        length = getattr(resp, "headers", None) and resp.headers.get("Content-Length")
+                        self.total = int(length) if length and length.isdigit() else self.total
+                        while True:
+                            chunk = resp.read(256 * 1024)
+                            if not chunk:
+                                break
+                            fh.write(chunk)
+                            self.received += len(chunk)
+                    self.stage = "unpacking"
                     unpacked = work / "app"
                     # ditto keeps the bundle's symlinks and signatures, unlike zipfile.
                     result = subprocess.run(["ditto", "-x", "-k", str(archive), str(unpacked)],
@@ -211,6 +228,7 @@ class Updater:
                 raise UpdateError(f"No se pudo descargar la actualización: {exc}") from exc
             finally:
                 self.downloading = False
+                self.stage = ""
 
     def _prune(self, keep):
         for folder in self.updates_dir.iterdir():
@@ -333,6 +351,11 @@ class Updater:
             "has_token": bool(self.token()),
             "downloading": self.downloading,
             "installing": self.installing,
+            # apply_now() downloads after setting installing: show the download until it's done.
+            "stage": ((self.stage if self.stage in ("downloading", "unpacking") else "installing")
+                      if self.installing else self.stage or ("ready" if ready else "")),
+            "received": self.received,
+            "total": self.total,
             "problem": self.install_problem() if self.enabled else "",
         }
 

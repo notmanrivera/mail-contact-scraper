@@ -106,6 +106,26 @@ def test_download_stages_the_new_app(tmp_path, monkeypatch):
     assert [p.name for p in (tmp_path / "data" / "updates").iterdir()] == ["v1.0.12"]
 
 
+def test_download_reports_progress(tmp_path, monkeypatch):
+    release = json.loads(json.dumps(RELEASE))
+    release["assets"][1]["size"] = 600 * 1024
+    up = make_updater(tmp_path, FakeGitHub(release, asset=b"x" * (600 * 1024)))
+    assert up.check()["stage"] == ""
+    seen = []
+
+    def fake_ditto(cmd, **kw):
+        seen.append(up.status())
+        make_bundle(cmd[4])
+        return type("R", (), {"returncode": 0, "stderr": ""})()
+
+    monkeypatch.setattr(updater.subprocess, "run", fake_ditto)
+    up.download()
+    assert seen[0]["stage"] == "unpacking"
+    assert seen[0]["received"] == seen[0]["total"] == 600 * 1024
+    status = up.status()
+    assert status["stage"] == "ready" and status["ready"]
+
+
 def test_download_rejects_another_app(tmp_path, monkeypatch):
     up = make_updater(tmp_path, FakeGitHub(RELEASE))
     up.check()
