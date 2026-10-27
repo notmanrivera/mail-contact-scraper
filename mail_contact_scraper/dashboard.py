@@ -457,6 +457,9 @@ def mailing_action(path, body, out_dir, env_path, run):
         if path == "/mailing/bajas":
             unsub, bounced = mailing_app.check_unsubscribes(out_dir, env_path, slug)
             return 200, {"ok": True, "unsubscribed": len(unsub), "bounced": len(bounced)}
+        if path == "/mailing/replies":
+            found = mailing_app.check_replies(out_dir, env_path, slug)
+            return 200, {"ok": True, **{k: len(v) for k, v in found.items()}}
         if path == "/mailing/clean":
             return 200, {"ok": True, **mailing_app.clean_list(out_dir, slug, apply=body.get("apply") is True)}
         if path == "/mailing/health":
@@ -476,7 +479,8 @@ def mailing_overview(query, out_dir, env_path, run):
 
     try:
         return 200, mailing_app.overview(out_dir, env_path, run, query.get("campaign", [""])[0],
-                                         query.get("from", []), query.get("daily_limit", ["0"])[0])
+                                         query.get("from", []), query.get("daily_limit", ["0"])[0],
+                                         query.get("per_company", [None])[0])
     except ValueError as exc:
         return 400, {"error": str(exc)}
 

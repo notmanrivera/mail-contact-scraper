@@ -123,7 +123,10 @@ def _ensure(out_dir):
     index = _index(out_dir)
     before = json.dumps(index, sort_keys=True)
     for toml in sorted(BUILT_IN.glob("*.toml")):
-        if toml.stem.startswith("_") or toml.stem in index["seeded"]:
+        if toml.stem.startswith("_"):
+            continue
+        if toml.stem in index["seeded"]:
+            _add_kept(base / toml.stem, toml)
             continue
         if not (base / toml.stem).exists():
             _seed(base / toml.stem, load_campaign(toml))
@@ -132,6 +135,21 @@ def _ensure(out_dir):
     if json.dumps(index, sort_keys=True) != before or not (base / INDEX).exists():
         _write_json(base / INDEX, index)
     return index
+
+
+def _add_kept(folder, toml):
+    """A copy seeded before the built-in campaign had a follow-up text gets it, once; a copy
+    the person already gave one keeps theirs."""
+    info_path = folder / INFO
+    if not info_path.exists():
+        return
+    info = json.loads(info_path.read_text(encoding="utf-8"))
+    if info.get("origin") != f"{toml.stem}.toml":
+        return
+    c = load_campaign(toml)
+    missing = {k: c[k] for k in KEEP if k in c and k not in info}
+    if missing:
+        _write_json(info_path, {**info, **missing})
 
 
 def _seed(folder, c):

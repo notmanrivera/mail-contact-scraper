@@ -204,7 +204,7 @@
   .health { display: grid; gap: 8px; margin-bottom: 12px; }
   .health .dom { padding: 10px 12px; border-radius: 12px; background: #F4F2F1; }
   .health .head { display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--ink); }
-  .health .head .sum { margin-left: auto; font-size: 11.5px; font-weight: 600; color: var(--muted); }
+  .health .sum { margin: 2px 0 0 19px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
   .health ul { margin: 6px 0 0; padding: 0; list-style: none; font-size: 12.5px; color: var(--text); display: grid; gap: 3px; }
   .light { width: 11px; height: 11px; border-radius: 50%; flex: none; display: inline-block; background: #B9B3B1; }
   .light.ok { background: #2E9E5B; } .light.warn { background: #E0A100; } .light.bad { background: #D23B2E; }
@@ -802,12 +802,13 @@
         <div class="field"><label for="cp-daily">Máximo al día por buzón</label><input class="input" id="cp-daily" type="number" min="1" placeholder="1500"></div>
         <div class="field"><label for="cp-limit">Máximo en este envío</label><input class="input" id="cp-limit" type="number" min="0" placeholder="Todo el cupo de hoy"></div>
       </div>
+      <div class="field"><label for="cp-company">Máximo por empresa al día (0 = sin tope)</label><input class="input" id="cp-company" type="number" min="0" placeholder="3"></div>
       <div class="send-box">
         <p class="plan-line" id="cp-plan"></p>
         <div class="field"><label for="cp-confirm">Para enviar a los prospectos escribe ENVIAR</label><input class="input" id="cp-confirm" type="text" autocomplete="off" placeholder="ENVIAR"></div>
         <div class="actions-row">
           <button class="btn btn-primary" id="cp-start" type="button" disabled>Enviar campaña</button>
-          <button class="btn btn-outline" id="cp-bajas" type="button">Revisar bajas y rebotes</button>
+          <button class="btn btn-outline" id="cp-bajas" type="button">Revisar bajas, rebotes y respuestas</button>
         </div>
         <div class="run-box" id="cp-run" hidden>
           <div class="t" id="cp-run-text"></div>
@@ -817,6 +818,22 @@
         <div class="msg" id="cp-msg" hidden></div>
       </div>
     </section>
+    <section class="set" id="cp-fu" hidden>
+      <h3>Seguimiento</h3>
+      <p class="hint" id="cp-fu-hint"></p>
+      <div class="mini-stats">
+        <div class="stat"><div class="k">Listos para el seguimiento</div><div class="v num" id="cp-fu-due">—</div></div>
+        <div class="stat"><div class="k">Aún no cumplen los días</div><div class="v num" id="cp-fu-recent">—</div></div>
+        <div class="stat"><div class="k">Contestaron (leads)</div><div class="v num" id="cp-fu-replied">—</div></div>
+        <div class="stat"><div class="k">Fuera de oficina, esperando</div><div class="v num" id="cp-fu-away">—</div></div>
+      </div>
+      <div class="send-box">
+        <p class="plan-line" id="cp-fu-plan"></p>
+        <div class="field"><label for="cp-fu-confirm">Para mandar el seguimiento escribe ENVIAR</label><input class="input" id="cp-fu-confirm" type="text" autocomplete="off" placeholder="ENVIAR"></div>
+        <div class="actions-row"><button class="btn btn-primary" id="cp-fu-start" type="button" disabled>Enviar seguimiento</button></div>
+        <div class="msg" id="cp-fu-msg" hidden></div>
+      </div>
+    </section>
     <section class="set">
       <h3>Registro de envíos</h3>
       <p class="hint">Cada correo enviado queda anotado; al volver a enviar sigue con los que faltan y nunca repite a nadie.</p>
@@ -824,6 +841,7 @@
       <div class="actions-row" style="margin-bottom:12px">
         <a class="btn btn-outline" id="cp-csv-sent" href="#" download>Descargar enviados (CSV)</a>
         <a class="btn btn-outline" id="cp-csv-pending" href="#" download>Descargar pendientes (CSV)</a>
+        <a class="btn btn-outline" id="cp-csv-replies" href="#" download>Descargar respuestas (CSV)</a>
       </div>
       <table class="log-table"><thead><tr><th>Fecha</th><th>Correo</th><th>Estado</th><th>Desde</th></tr></thead><tbody id="cp-log"></tbody></table>
     </section>
@@ -1679,14 +1697,17 @@
 
   /* Campaña: lista, buzones, envío real con confirmación, registro */
   let camp = null, campTimer = null, chosenBoxes = null;
-  const ESTADO = { enviado: "Enviados", rechazado: "Rechazados", error: "Con error" };
-  const BAJA = { baja: "bajas", rebote: "rebotes", rechazado: "rechazados" };
+  const ESTADO = { enviado: "Enviados", seguimiento: "Seguimientos", rechazado: "Rechazados", error: "Con error" };
+  const BAJA = { baja: "bajas", rebote: "rebotes", rechazado: "rechazados", "ya-no-labora": "ya no laboran ahí",
+    "error-de-dedo": "errores de dedo", "dominio-sin-correo": "dominios sin correo" };
+  const RESP = { "respondió": "Contestaron", "fuera-de-oficina": "Fuera de oficina", "ya-no-labora": "Ya no laboran ahí" };
   async function refreshCampaign() {
     clearTimeout(campTimer);
     if ($("mailer").hidden || !mailing) return;
     const q = new URLSearchParams({ campaign: $("ml-campaign").value || "" });
     (chosenBoxes || []).forEach((e) => q.append("from", e));
     if ($("cp-daily").value) q.set("daily_limit", $("cp-daily").value);
+    if ($("cp-company").value !== "") q.set("per_company", $("cp-company").value);
     try { camp = await (await fetch(`/mailing/campaign?${q}`, { cache: "no-store" })).json(); } catch (e) { camp = null; }
     if (camp) renderCampaign(camp);
     const running = camp && camp.run && camp.run.running;
@@ -1709,16 +1730,20 @@
     if (!$("cp-daily").value && c.senders && c.senders[0]) $("cp-daily").placeholder = String(c.senders[0].daily_limit);
     const n = p ? Math.min(p.this_run, +$("cp-limit").value || p.this_run) : 0;
     const hours = (n * 5.8) / 3600;  // 3 to 6 s each plus a 30-90 s break every ~50
+    const extra = p ? [p.held_by_company && `${fmt.format(p.held_by_company)} esperan otro día por el tope por empresa`,
+      sk.duplicate && `${fmt.format(sk.duplicate)} duplicados omitidos (misma persona con dos correos)`].filter(Boolean) : [];
     $("cp-plan").innerHTML = c.error ? esc(c.error)
-      : !p ? "" : n ? `Hoy saldrían <b>${fmt.format(n)}</b> correos, uno cada 3 a 6 s con una pausa cada ~50 (~${hours < 1 ? `${Math.max(1, Math.round(hours * 60))} min` : `${hours.toFixed(1)} h`}). Deja la app abierta; la Mac no se duerme mientras envía. Si se corta la conexión, reconecta sola; si se interrumpe, al volver a enviar sigue donde se quedó.`
-      : p.pending ? "Ya se acabó el cupo de hoy de estos buzones. Mañana sigue con los que faltan." : "Ya todos los de la lista la recibieron.";
+      : !p ? "" : (extra.length ? `${extra.join(" · ")}. ` : "") + (n ? `Hoy saldrían <b>${fmt.format(n)}</b> correos, uno cada 3 a 6 s con una pausa cada ~50 (~${hours < 1 ? `${Math.max(1, Math.round(hours * 60))} min` : `${hours.toFixed(1)} h`}). Deja la app abierta; la Mac no se duerme mientras envía. Si se corta la conexión, reconecta sola; si se interrumpe, al volver a enviar sigue donde se quedó.`
+      : p.pending ? "Por hoy ya no sale más (cupo de los buzones o tope por empresa). Mañana sigue con los que faltan." : "Ya todos los de la lista la recibieron.");
+    if ($("cp-company").value === "") $("cp-company").placeholder = String(c.per_company ?? 3);
+    renderFollowup(c);
     $("cp-start").disabled = !!run.running || !n || $("cp-confirm").value.trim() !== "ENVIAR";
     $("cp-run").hidden = !run.phase;
     if (run.phase) {
       const pctDone = run.total ? Math.round((run.sent / run.total) * 100) : 0;
       $("cp-run-bar").style.width = `${run.running ? pctDone : 100}%`;
       const phase = run.phase === "bajas" ? "Revisando bajas y rebotes antes de enviar…"
-        : run.phase === "enviando" ? `Enviando: <b>${fmt.format(run.sent)}</b> de ${fmt.format(run.total)}${run.last ? ` · último: ${esc(run.last)}` : ""}`
+        : run.phase === "enviando" ? `${run.mode === "seguimiento" ? "Enviando seguimiento" : "Enviando"}: <b>${fmt.format(run.sent)}</b> de ${fmt.format(run.total)}${run.last ? ` · último: ${esc(run.last)}` : ""}`
         : run.phase === "deteniendo" ? "Deteniendo…"
         : `Terminó: <b>${fmt.format(run.sent || 0)}</b> enviados${run.rejected ? `, ${run.rejected} rechazados` : ""}${run.errors ? `, ${run.errors} con error` : ""}.`;
       const stopped = (run.stopped || "").split("; ").filter((x) => x && x !== `Pausado: ${run.paused}`).join("; ");
@@ -1730,20 +1755,50 @@
     const slug = encodeURIComponent(c.campaign || "");
     $("cp-csv-sent").href = `/mailing/export?campaign=${slug}&which=enviados`;
     $("cp-csv-pending").href = `/mailing/export?campaign=${slug}&which=pendientes`;
+    $("cp-csv-replies").href = `/mailing/export?campaign=${slug}&which=respuestas`;
     const counts = (c.log && c.log.counts) || {}, supp = c.suppression || {};
     $("cp-counts").innerHTML = [
       ...Object.entries(counts).map(([k, v]) => `<span>${esc(ESTADO[k] || k)}: ${fmt.format(v)}</span>`),
+      ...Object.entries(c.replies || {}).map(([k, v]) => `<span>${esc(RESP[k] || k)}: ${fmt.format(v)}</span>`),
       ...Object.entries(supp).map(([k, v]) => `<span>Lista de exclusión, ${esc(BAJA[k] || k)}: ${fmt.format(v)}</span>`),
     ].join("") || '<span>Todavía no se ha enviado nada.</span>';
     $("cp-log").innerHTML = ((c.log && c.log.recent) || []).map((r) => `<tr><td>${esc(r.fecha)}</td>
       <td title="${esc(r.detalle)}">${esc(r.email)}</td><td class="st-${esc(r.estado)}">${esc(r.estado)}</td><td>${esc(r.remitente)}</td></tr>`).join("");
   }
+  function renderFollowup(c) {
+    const f = c.followup, run = c.run || {};
+    $("cp-fu").hidden = !f;
+    if (!f) return;
+    const w = f.waiting || {};
+    $("cp-fu-hint").textContent = `A los ${f.days} días, como respuesta al primer correo (mismo hilo y mismo buzón), solo a quien no contestó. A quien está fuera de oficina le llega cuando regresa. Antes de enviar revisa las respuestas de los buzones.`;
+    $("cp-fu-due").textContent = fmt.format(f.due);
+    $("cp-fu-recent").textContent = fmt.format(w.recent || 0);
+    $("cp-fu-replied").textContent = fmt.format(w.replied || 0);
+    $("cp-fu-away").textContent = fmt.format(w.away || 0);
+    const n = Math.min(f.this_run, +$("cp-limit").value || f.this_run);
+    $("cp-fu-plan").innerHTML = n ? `Hoy saldrían <b>${fmt.format(n)}</b> seguimientos${f.sent ? ` (ya van ${fmt.format(f.sent)})` : ""}.${w.other_mailbox ? ` ${fmt.format(w.other_mailbox)} esperan a que marques el buzón que les mandó el primero.` : ""}`
+      : f.due ? "Por hoy ya no sale más (cupo de los buzones o tope por empresa)."
+      : f.sent ? `Ya van ${fmt.format(f.sent)} seguimientos; por ahora nadie más cumple los días.` : "Por ahora nadie cumple los días para el seguimiento.";
+    $("cp-fu-start").disabled = !!run.running || !n || $("cp-fu-confirm").value.trim() !== "ENVIAR";
+  }
+  $("cp-fu-confirm").addEventListener("input", () => { if (camp) renderFollowup(camp); });
+  $("cp-fu-start").addEventListener("click", async () => {
+    $("cp-fu-start").disabled = true; showMsg("cp-fu-msg", "");
+    const r = await settingsCall("/mailing/campaign/start", {
+      campaign: $("ml-campaign").value, mode: "seguimiento", from: chosenBoxes || (camp.senders || []).map((s) => s.email),
+      daily_limit: $("cp-daily").value, limit: $("cp-limit").value, per_company: $("cp-company").value,
+      confirm: $("cp-fu-confirm").value.trim(),
+    }).catch(() => ({ ok: false, error: "No se pudo iniciar el seguimiento." }));
+    $("cp-fu-confirm").value = "";
+    if (!r.ok) showMsg("cp-fu-msg", r.error, false);
+    refreshCampaign();
+  });
   $("cp-boxes").addEventListener("change", () => {
     chosenBoxes = [...$("cp-boxes").querySelectorAll("input:checked")].map((i) => i.value);
     refreshCampaign();
   });
   let campInputTimer = null;
-  ["cp-daily", "cp-limit"].forEach((id) => $(id).addEventListener("input", () => {
+  ["cp-daily", "cp-limit", "cp-company"].forEach((id) => $(id).addEventListener("input", () => {
     clearTimeout(campInputTimer); campInputTimer = setTimeout(refreshCampaign, 400);
   }));
   $("cp-confirm").addEventListener("input", () => { if (camp) renderCampaign(camp); });
@@ -1751,7 +1806,8 @@
     const btn = $("cp-start"); btn.disabled = true; showMsg("cp-msg", "");
     const r = await settingsCall("/mailing/campaign/start", {
       campaign: $("ml-campaign").value, from: chosenBoxes || (camp.senders || []).map((s) => s.email),
-      daily_limit: $("cp-daily").value, limit: $("cp-limit").value, confirm: $("cp-confirm").value.trim(),
+      daily_limit: $("cp-daily").value, limit: $("cp-limit").value, per_company: $("cp-company").value,
+      confirm: $("cp-confirm").value.trim(),
     }).catch(() => ({ ok: false, error: "No se pudo iniciar el envío." }));
     $("cp-confirm").value = "";
     if (!r.ok) showMsg("cp-msg", r.error, false);
@@ -1765,8 +1821,11 @@
     const btn = $("cp-bajas"); btn.disabled = true; btn.textContent = "Revisando buzones…"; showMsg("cp-msg", "");
     const r = await settingsCall("/mailing/bajas", { campaign: $("ml-campaign").value })
       .catch(() => ({ ok: false, error: "No se pudo revisar." }));
-    showMsg("cp-msg", r.ok ? `Listo: ${r.unsubscribed} bajas y ${r.bounced} rebotes nuevos quedaron fuera de la lista.` : r.error, r.ok);
-    btn.disabled = false; btn.textContent = "Revisar bajas y rebotes";
+    const a = r.ok ? await settingsCall("/mailing/replies", { campaign: $("ml-campaign").value })
+      .catch(() => ({ ok: false, error: "No se pudieron revisar las respuestas." })) : null;
+    const answers = !a ? "" : a.ok ? ` Respuestas nuevas: ${a["respondió"] || 0}; fuera de oficina: ${a["fuera-de-oficina"] || 0}; ya no laboran ahí: ${a["ya-no-labora"] || 0}.` : ` ${a.error}`;
+    showMsg("cp-msg", r.ok ? `Listo: ${r.unsubscribed} bajas y ${r.bounced} rebotes nuevos quedaron fuera de la lista.${answers}` : r.error, r.ok && (!a || a.ok));
+    btn.disabled = false; btn.textContent = "Revisar bajas, rebotes y respuestas";
     refreshCampaign();
   });
   /* Antes de enviar: semáforo SPF/DKIM/DMARC y limpieza de la lista */
@@ -1778,8 +1837,8 @@
     healthFor = slug;
     const r = await settingsCall("/mailing/health", { campaign: slug }).catch(() => ({ ok: false, error: "No se pudo revisar el dominio." }));
     $("cp-health").innerHTML = !r.ok ? `<div class="hint">${esc(r.error)}</div>` : (r.domains || []).map((d) => `
-      <div class="dom"><div class="head"><span class="light ${esc(d.light)}" title="${LIGHT[d.light] || ""}"></span>${esc(d.domain)}
-        <span class="sum">${esc(d.summary)}</span></div>
+      <div class="dom"><div class="head"><span class="light ${esc(d.light)}" title="${LIGHT[d.light] || ""}"></span><span>${esc(d.domain)}</span></div>
+        <div class="sum">${esc(d.summary)}</div>
         <ul>${Object.entries(d.checks || {}).map(([k, v]) => `<li><span class="light ${esc(v.light)}"></span><span><b>${k.toUpperCase()}</b>: ${esc(v.text)}</span></li>`).join("")}</ul></div>`).join("")
       || '<div class="hint">Agrega un buzón para revisar su dominio.</div>';
   }
