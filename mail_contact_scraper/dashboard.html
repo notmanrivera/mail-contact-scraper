@@ -153,6 +153,15 @@
   .update-bar b { color: var(--red); }
   .update-bar .grow { flex: 1; min-width: 200px; }
   .update-bar .btn { height: 36px; padding: 0 16px; }
+  .up-progress { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+  .up-progress[hidden] { display: none; }
+  .up-track { flex: 1; height: 8px; border-radius: 100px; background: var(--rail); overflow: hidden; }
+  .up-fill { height: 100%; width: 0; border-radius: 100px; background: var(--red); transition: width .4s ease; }
+  .up-fill.busy { width: 35% !important; animation: up-busy 1.2s ease-in-out infinite alternate; }
+  @keyframes up-busy { from { margin-left: 0; } to { margin-left: 65%; } }
+  .up-pct { font-size: 12px; font-weight: 700; color: var(--muted); min-width: 38px; text-align: right; font-variant-numeric: tabular-nums; }
+  .up-live { font-size: 12.5px; font-weight: 600; color: var(--ink); margin-top: 10px; }
+  .up-live[hidden] { display: none; }
 
   /* ---------- Titular ---------- */
   .head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px 32px; flex-wrap: wrap; margin-bottom: 20px; }
@@ -392,7 +401,9 @@
   </header>
 
   <div class="update-bar" id="update-bar" hidden>
-    <span class="grow" id="update-text"></span>
+    <span class="grow"><span id="update-text"></span>
+      <span class="up-progress" id="bar-progress" hidden><span class="up-track"><span class="up-fill" id="bar-fill" style="display:block"></span></span><span class="up-pct" id="bar-pct"></span></span>
+    </span>
     <button class="btn btn-primary" id="update-now" type="button">Actualizar ahora</button>
   </div>
 
@@ -570,6 +581,8 @@
       <div class="field"><label for="up-token">Token de GitHub (solo lectura)</label><input class="input" id="up-token" type="password" placeholder="github_pat_…" autocomplete="off"></div>
       <p class="hint">El repositorio es privado: crea un <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">token fine-grained</a> solo para mail-contact-scraper con el permiso Contents: Read-only. Se guarda solo en esta Mac.</p>
       <div class="actions-row"><button class="btn btn-outline" id="up-check" type="button">Guardar y buscar ahora</button></div>
+      <div class="up-live" id="up-live" hidden></div>
+      <div class="up-progress" id="up-progress" hidden><div class="up-track"><div class="up-fill" id="up-fill"></div></div><span class="up-pct" id="up-pct"></span></div>
       <div class="msg" id="up-msg" hidden></div>
     </section>
   </div>
@@ -1011,7 +1024,7 @@
       $("start").hidden = true; $("stop").hidden = true;
     }
     $("updated").textContent = lastUpdate ? `· actualizado ${ago(lastUpdate)}` : "";
-    timer = setTimeout(poll, POLL_MS);
+    timer = setTimeout(poll, updateBusy ? 1000 : POLL_MS);  // faster while an update downloads
   }
 
   async function action(kind) {
@@ -1261,23 +1274,52 @@
   });
 
   /* ---------- Actualizaciones (solo en la app de Mac) ---------- */
-  let appVersion = null, restarting = false;
+  let appVersion = null, restarting = false, updateBusy = false;
+  const mb = (n) => (n / 1048576).toFixed(n < 10485760 ? 1 : 0);
+  // What the updater is doing now, as a sentence plus a percentage (null = indeterminate bar).
+  function updateStage(u) {
+    const pct = u.total ? Math.min(100, Math.round((u.received / u.total) * 100)) : null;
+    switch (u.stage) {
+      case "checking": return { text: "Buscando versiones nuevas…", pct: null };
+      case "downloading": return {
+        text: `Descargando ${u.latest || "la versión nueva"}: ` +
+          (u.total ? `${mb(u.received)} de ${mb(u.total)} MB` : `${mb(u.received)} MB`), pct };
+      case "unpacking": return { text: "Preparando la actualización…", pct: null };
+      case "ready": return { text: `${u.latest} lista para instalar.`, pct: 100, done: true };
+      case "installing": return { text: "Instalando: la app se va a reiniciar y esta página se recarga sola.", pct: null };
+      default: return null;
+    }
+  }
+  function showProgress(prefix, st) {
+    const box = $(`${prefix}-progress`), fill = $(`${prefix}-fill`), label = $(`${prefix}-pct`);
+    box.hidden = !st || st.done;
+    if (!st || st.done) return;
+    fill.classList.toggle("busy", st.pct === null);
+    fill.style.width = st.pct === null ? "" : `${st.pct}%`;
+    label.textContent = st.pct === null ? "" : `${st.pct}%`;
+  }
   function renderUpdate(u) {
     if (!u) return;
     if (appVersion && u.version !== appVersion) { location.reload(); return; }  // came back updated
     appVersion = u.version;
+    updateBusy = ["checking", "downloading", "unpacking", "installing"].includes(u.stage);
     $("up-section").hidden = !u.enabled;
     if (!u.enabled) return;
-    const bar = $("update-bar");
+    const bar = $("update-bar"), st = updateStage(u);
     bar.hidden = !(u.available || u.installing);
     if (u.installing) {
-      $("update-text").innerHTML = "<b>Instalando la versión nueva.</b> La app se va a reiniciar y esta página se recarga sola.";
+      $("update-text").innerHTML = `<b>Instalando la versión nueva.</b> ${esc(st ? st.text : "")}`;
       $("update-now").hidden = true;
     } else if (u.available) {
       $("update-text").innerHTML = `<b>Hay una versión nueva (${esc(u.latest)}).</b> ` +
-        (u.problem ? esc(u.problem) : u.ready ? "Se instala sola la próxima vez que abras la app, o ahora mismo." : "Se está descargando.");
+        (u.problem ? esc(u.problem) : u.ready ? "Se instala sola la próxima vez que abras la app, o ahora mismo."
+          : st ? esc(st.text) : "Se descargará en un momento.");
       $("update-now").hidden = !!u.problem;
     }
+    showProgress("bar", bar.hidden || u.problem ? null : st);
+    $("up-live").hidden = !st;
+    $("up-live").textContent = st ? st.text : "";
+    showProgress("up", st);
     const when = u.checked_at ? `, revisado ${shortDate(u.checked_at)} ${u.checked_at.slice(11, 16)}` : "";
     $("up-status").textContent = `Versión instalada: ${u.version}${when}. ` +
       (u.available ? `Disponible: ${u.latest}.` : u.latest ? "Es la más reciente." : "La app busca versiones nuevas sola y las instala al volver a abrirla.");
@@ -1300,7 +1342,8 @@
       const r = await updateCall(token ? { token } : {});
       if (r.ok && !r.update.error) {
         $("up-token").value = "";
-        showMsg("up-msg", r.update.available ? `Hay una versión nueva: ${r.update.latest}. Se está descargando.` : "Ya tienes la versión más reciente.", true);
+        // While it downloads, the live line and bar above say so; this only confirms the result.
+        showMsg("up-msg", r.update.available ? `Hay una versión nueva: ${r.update.latest}.` : "Ya tienes la versión más reciente.", true);
       } else if (!r.ok) showMsg("up-msg", r.error, false);
     } catch (e) { showMsg("up-msg", "No se pudo buscar.", false); }
     btn.disabled = false;
