@@ -1,8 +1,10 @@
 """Send a mailing from the company's own mailbox, without YAMM or a paid platform.
 
-Uses SMTP with the same mailbox and app password the scraper already has in .env, so
-every message leaves from pedro@ (and shows up in its Sent folder). Nothing goes out
-unless you pass --test or --send:
+Uses SMTP with the same mailboxes and app passwords the scraper already has in .env, so
+every message leaves from pedro@ (and shows up in its Sent folder). For more volume it
+spreads the run across several mailboxes (--from), or goes through a bulk relay such as
+Amazon SES or Brevo (SMTP_USER / SMTP_PASSWORD in .env). Nothing goes out unless you
+pass --test or --send:
 
     python -m mailing.send                       # what would be sent, nothing goes out
     python -m mailing.send --test tu@correo.com  # one sample to you
@@ -22,7 +24,7 @@ import smtplib
 import sys
 import time
 from datetime import date, datetime, timedelta
-from email.utils import make_msgid, formatdate, parseaddr
+from email.utils import formataddr, formatdate, make_msgid, parseaddr
 from pathlib import Path
 
 from .build import (EMAIL_RE, build_eml, greeting, load_audience, load_campaign, render_html,
@@ -30,9 +32,12 @@ from .build import (EMAIL_RE, build_eml, greeting, load_audience, load_campaign,
 
 HERE = Path(__file__).parent
 LOG_NAME = "envios.csv"
-LOG_FIELDS = ["fecha", "email", "estado", "detalle"]
+LOG_FIELDS = ["fecha", "email", "estado", "detalle", "remitente"]
 SENT = "enviado"
 UNSUBSCRIBE_SUBJECT = "Baja de correos"
+# Google Workspace allows 2,000 messages a day per user (Microsoft 365: 10,000); stay under it.
+MAILBOX_DAILY_LIMIT = 1500
+RELAY_DAILY_LIMIT = 10000
 
 # IMAP host the scraper uses -> (SMTP host, port)
 SMTP_FOR_IMAP = {
@@ -51,24 +56,47 @@ class StopSending(Exception):
 
 # --- mailbox and SMTP ---------------------------------------------------------------
 
-def sender_mailbox(sender_email, env_file=".env"):
-    """The .env mailbox (address + app password) the campaign sends from, and its SMTP host."""
+def load_senders(addresses, campaign, env_file=".env", daily_limit=None):
+    """Mailboxes to send from, each with its SMTP login and daily limit.
+
+    With SMTP_USER / SMTP_PASSWORD in .env (Amazon SES, Brevo, Mailgun...) every message
+    goes through that relay instead, so any verified address of the domain can be a sender.
+    """
     from mail_contact_scraper import envfile
     from mail_contact_scraper.config import load_settings
     from mail_contact_scraper.provider import guess_imap_host
 
     settings = load_settings(env_file)
-    box = next((b for b in settings.mailboxes if b.email.lower() == sender_email.lower()), None)
-    if not box or not (box.password or box.oauth_token):
-        raise SystemExit(f"Para enviar desde {sender_email} ponlo en .env (IMAP_USER o IMAP_USER_2...) "
-                         "con su contraseña de aplicación, la misma que usa el scraper.")
-    if not box.imap_host:
-        box.imap_host = guess_imap_host(box.email)[0]
     env = envfile.environ(env_file).get
-    host, port = SMTP_FOR_IMAP.get(box.imap_host.lower(), (f"smtp.{box.email.split('@')[-1]}", 465))
-    host = env("SMTP_HOST", "") or host
-    port = int(env("SMTP_PORT", "") or port)
-    return box, host, port, settings
+    relay_user, relay_password = env("SMTP_USER", ""), env("SMTP_PASSWORD", "")
+    names = {s["email"].lower(): s.get("name", "") for s in [campaign["sender"], *campaign.get("senders", [])]}
+    senders = []
+    for address in addresses:
+        box = next((b for b in settings.mailboxes if b.email.lower() == address.lower()), None)
+        if relay_user:
+            from mail_contact_scraper.config import Mailbox
+            login = Mailbox(relay_user, relay_password)
+            host, port = env("SMTP_HOST", ""), int(env("SMTP_PORT", "") or 587)
+            if not host:
+                raise SystemExit("Con SMTP_USER pon también SMTP_HOST (ej. email-smtp.us-east-1.amazonaws.com).")
+            limit = daily_limit or int(env("SMTP_DAILY_LIMIT", "") or RELAY_DAILY_LIMIT)
+        else:
+            if not box or not (box.password or box.oauth_token):
+                raise SystemExit(f"Para enviar desde {address} ponlo en .env (IMAP_USER o IMAP_USER_2...) "
+                                 "con su contraseña de aplicación, la misma que usa el scraper.")
+            if not box.imap_host:
+                box.imap_host = guess_imap_host(box.email)[0]
+            host, port = SMTP_FOR_IMAP.get(box.imap_host.lower(), (f"smtp.{box.email.split('@')[-1]}", 465))
+            host = env("SMTP_HOST", "") or host
+            port = int(env("SMTP_PORT", "") or port)
+            login = box
+            limit = daily_limit or MAILBOX_DAILY_LIMIT
+        senders.append({
+            "email": address.lower(), "name": names.get(address.lower(), campaign["sender"]["name"]),
+            "host": host, "daily_limit": limit,
+            "connect": (lambda login=login, host=host, port=port: open_smtp(login, host, port)),
+        })
+    return senders, settings
 
 
 def open_smtp(box, host, port, timeout=60):
@@ -92,20 +120,24 @@ def read_log(path):
         return list(csv.DictReader(fh))
 
 
-def append_log(path, email_addr, status, detail="", now=None):
+def append_log(path, email_addr, status, detail="", now=None, sender=""):
     new = not Path(path).exists()
     with open(path, "a", newline="", encoding="utf-8-sig") as fh:
         w = csv.writer(fh)
         if new:
             w.writerow(LOG_FIELDS)
-        w.writerow([(now or datetime.now()).strftime("%Y-%m-%d %H:%M:%S"), email_addr, status, detail])
+        w.writerow([(now or datetime.now()).strftime("%Y-%m-%d %H:%M:%S"), email_addr, status, detail, sender])
 
 
-def sent_today(mailing_root, day):
-    """Messages sent today across every campaign, to respect the mailbox's daily limit."""
-    prefix = day.isoformat()
-    return sum(1 for log in Path(mailing_root).glob(f"*/{LOG_NAME}") for row in read_log(log)
-               if row["estado"] == SENT and row["fecha"].startswith(prefix))
+def sent_today(mailing_root, day, default_sender=""):
+    """Messages sent today per sending mailbox, across every campaign."""
+    prefix, counts = day.isoformat(), {}
+    for log in Path(mailing_root).glob(f"*/{LOG_NAME}"):
+        for row in read_log(log):
+            if row["estado"] == SENT and row["fecha"].startswith(prefix):
+                sender = (row.get("remitente") or default_sender).lower()
+                counts[sender] = counts.get(sender, 0) + 1
+    return counts
 
 
 def read_suppression(path):
@@ -169,15 +201,17 @@ def sync_suppression(mailboxes, suppression_path, connect, own_domains=(), days=
 
 # --- sending -------------------------------------------------------------------------
 
-def make_message(campaign, person, subject_prefix=""):
+def make_message(campaign, person, subject_prefix="", sender=None):
     unsub = unsubscribe_mailto(campaign, person["email"])
     msg = build_eml(campaign, person, render_html(campaign, person["greeting"], unsub),
                     render_text(campaign, person["greeting"], unsub))
     del msg["X-Unsent"]
+    if sender:
+        msg.replace_header("From", formataddr((sender["name"], sender["email"])))
     if subject_prefix:
         msg.replace_header("Subject", subject_prefix + msg["Subject"])
     msg["Date"] = formatdate(localtime=True)
-    msg["Message-ID"] = make_msgid(domain=campaign["sender"]["email"].split("@")[-1])
+    msg["Message-ID"] = make_msgid(domain=(sender or campaign["sender"])["email"].split("@")[-1])
     return msg
 
 
@@ -187,10 +221,14 @@ def _is_limit(err):
         k in text for k in ("limit", "quota", "rate", "too many", "blocked", "suspended"))
 
 
-def send_campaign(campaign_path, contacts_csv, out_dir, *, smtp_connect, send=False, test_to=None,
-                  limit=200, daily_limit=500, pause=8.0, suppression_path="output/suppression.txt",
+def send_campaign(campaign_path, contacts_csv, out_dir, *, senders, send=False, test_to=None,
+                  limit=0, pause=4.0, suppression_path="output/suppression.txt",
                   now=datetime.now, sleep=time.sleep, say=print, **audience_opts):
-    """Send pending prospects (or one test). Returns a summary dict."""
+    """Send pending prospects (or one test), taking turns between the senders.
+
+    `senders` are dicts with email, name, daily_limit and connect() (see load_senders).
+    `limit` caps this run (0 = whatever today's limits allow). Returns a summary dict.
+    """
     campaign = load_campaign(campaign_path)
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -198,73 +236,89 @@ def send_campaign(campaign_path, contacts_csv, out_dir, *, smtp_connect, send=Fa
     people, skipped = load_audience(contacts_csv, campaign, suppression_path=suppression_path, **audience_opts)
     done = {r["email"].lower() for r in read_log(log_path) if r["estado"] == SENT}
     pending = [p for p in people if p["email"] not in done]
-    today = sent_today(out.parent, now().date())
-    room = max(0, min(limit, daily_limit - today))
+    today = sent_today(out.parent, now().date(), campaign["sender"]["email"])
+    room = {s["email"]: max(0, s["daily_limit"] - today.get(s["email"], 0)) for s in senders}
+    capacity = sum(room.values())
+    this_run = min(len(pending), capacity, limit or capacity)
     summary = {"audience": len(people), "already_sent": len(people) - len(pending), "pending": len(pending),
-               "sent_today": today, "this_run": min(room, len(pending)), "sent": 0, "errors": 0,
-               "rejected": [], "stopped": "", "skipped": skipped}
+               "sent_today": sum(today.get(s["email"], 0) for s in senders), "room": room,
+               "this_run": this_run, "sent": 0, "errors": 0, "rejected": [], "stopped": "",
+               "skipped": skipped, "by_sender": {}}
 
     if test_to:
         sample = dict(pending[0] if pending else people[0] if people else
                       {"email": test_to, "name": "", "greeting": greeting("")})
         sample.update(email=test_to, name="")
-        conn = smtp_connect()
-        try:
-            conn.send_message(make_message(campaign, sample, "[PRUEBA] "))
-        finally:
-            conn.quit()
-        summary["sent"] = 1
+        for s in senders:  # one sample from each mailbox, to check they all deliver
+            conn = s["connect"]()
+            try:
+                conn.send_message(make_message(campaign, sample, "[PRUEBA] ", s))
+            finally:
+                conn.quit()
+            summary["sent"] += 1
         return summary
-    if not send or not summary["this_run"]:
+    if not send or not this_run:
         return summary
 
-    batch = pending[:summary["this_run"]]
-    conn = smtp_connect()
-    consecutive_errors = 0
+    conns, errors_in_row = {}, {s["email"]: 0 for s in senders}
+    queue = list(pending)
+    turn = 0
     try:
-        for i, person in enumerate(batch):
-            msg = make_message(campaign, person)
+        while queue and summary["sent"] < this_run:
+            active = [s for s in senders if room[s["email"]] > 0]
+            if not active:
+                summary["stopped"] = summary["stopped"] or "Se acabó el cupo de hoy de todos los buzones."
+                break
+            sender = active[turn % len(active)]
+            turn += 1
+            person = queue[0]
+            msg = make_message(campaign, person, sender=sender)
+            who = sender["email"]
             try:
                 try:
-                    conn.send_message(msg)
+                    if who not in conns:
+                        conns[who] = sender["connect"]()
+                    conns[who].send_message(msg)
                 except smtplib.SMTPServerDisconnected:
-                    conn = smtp_connect()
-                    conn.send_message(msg)
+                    conns[who] = sender["connect"]()
+                    conns[who].send_message(msg)
             except smtplib.SMTPRecipientsRefused as err:
                 detail = "; ".join(f"{c} {m.decode(errors='replace') if isinstance(m, bytes) else m}"
                                    for c, m in err.recipients.values())
-                append_log(log_path, person["email"], "rechazado", detail, now())
-                summary["rejected"].append(person["email"])
+                append_log(log_path, person["email"], "rechazado", detail, now(), who)
+                summary["rejected"].append(queue.pop(0)["email"])
                 continue
-            except (smtplib.SMTPDataError, smtplib.SMTPSenderRefused, smtplib.SMTPResponseException) as err:
-                append_log(log_path, person["email"], "error", str(err)[:300], now())
+            except (smtplib.SMTPResponseException, OSError, smtplib.SMTPException) as err:
                 summary["errors"] += 1
-                if _is_limit(err):
-                    summary["stopped"] = f"El servidor no acepta más correos por ahora: {err}"
-                    break
-                consecutive_errors += 1
-                if consecutive_errors >= 5:
-                    summary["stopped"] = "5 errores seguidos, se detuvo el envío"
-                    break
+                errors_in_row[who] += 1
+                if _is_limit(err) or errors_in_row[who] >= 5 or not isinstance(err, smtplib.SMTPResponseException):
+                    # this mailbox is done for today; the prospect stays in the queue for the next one
+                    room[who] = 0
+                    conns.pop(who, None)
+                    note = f"{who}: {err}"
+                    say(f"  {who} dejó de enviar: {err}")
+                    summary["stopped"] = "; ".join(filter(None, [summary["stopped"], note]))
+                    continue
+                append_log(log_path, person["email"], "error", str(err)[:300], now(), who)
+                queue.pop(0)
                 continue
-            except (OSError, smtplib.SMTPException) as err:
-                append_log(log_path, person["email"], "error", str(err)[:300], now())
-                summary["errors"] += 1
-                summary["stopped"] = f"Se perdió la conexión: {err}"
-                break
-            consecutive_errors = 0
-            append_log(log_path, person["email"], SENT, msg["Message-ID"], now())
+            errors_in_row[who] = 0
+            room[who] -= 1
+            queue.pop(0)
+            append_log(log_path, person["email"], SENT, msg["Message-ID"], now(), who)
             summary["sent"] += 1
-            say(f"  {summary['sent']}/{len(batch)}  {person['email']}")
-            if i < len(batch) - 1:
+            summary["by_sender"][who] = summary["by_sender"].get(who, 0) + 1
+            say(f"  {summary['sent']}/{this_run}  {person['email']}  ({who})")
+            if queue and summary["sent"] < this_run:
                 sleep(pause * random.uniform(0.7, 1.3))  # steady, human pace
     except KeyboardInterrupt:
         summary["stopped"] = "Detenido a mano. Al volver a correrlo sigue con los que faltan."
     finally:
-        try:
-            conn.quit()
-        except Exception:
-            pass
+        for conn in conns.values():
+            try:
+                conn.quit()
+            except Exception:
+                pass
     if summary["rejected"]:
         add_suppression(suppression_path, summary["rejected"], "rechazado")
     return summary
@@ -282,10 +336,13 @@ def main(argv=None):
     ap.add_argument("--test", metavar="CORREO", help="manda una sola prueba a este correo")
     ap.add_argument("--send", action="store_true", help="envía de verdad a los prospectos pendientes")
     ap.add_argument("--yes", action="store_true", help="no pedir confirmación")
-    ap.add_argument("--limit", type=int, default=200, help="máximo de correos en esta corrida (default 200)")
-    ap.add_argument("--daily-limit", type=int, default=500,
-                    help="máximo por día sumando todas las campañas (default 500; Google Workspace permite 2,000)")
-    ap.add_argument("--pause", type=float, default=8.0, help="segundos entre correos (default 8)")
+    ap.add_argument("--from", dest="senders", action="append", metavar="CORREO",
+                    help="buzón desde el que se envía (repetible: se turnan). Default: el sender de la campaña")
+    ap.add_argument("--limit", type=int, default=0, help="máximo de correos en esta corrida (default: lo que dé el cupo de hoy)")
+    ap.add_argument("--daily-limit", type=int,
+                    help=f"máximo por día y por buzón (default {MAILBOX_DAILY_LIMIT}; Google Workspace permite 2,000; "
+                         f"con un servidor de envío SMTP_DAILY_LIMIT o {RELAY_DAILY_LIMIT})")
+    ap.add_argument("--pause", type=float, default=4.0, help="segundos entre correos (default 4)")
     ap.add_argument("--no-bajas", action="store_true", help="no revisar bajas y rebotes antes de enviar")
     ap.add_argument("--bajas", action="store_true", help="solo revisar bajas y rebotes, sin enviar")
     ap.add_argument("--suppression", default="output/suppression.txt")
@@ -295,17 +352,18 @@ def main(argv=None):
     args = ap.parse_args(argv)
 
     campaign = load_campaign(args.campaign)
-    sender = campaign["sender"]["email"]
-    box, host, port, settings = sender_mailbox(sender, args.env)
+    own_domain = campaign["sender"]["email"].split("@")[-1]
+    addresses = args.senders or [campaign["sender"]["email"]]
+    senders, settings = load_senders(addresses, campaign, args.env, args.daily_limit)
 
     if args.bajas or (args.send and not args.no_bajas):
         boxes = [b for b in settings.mailboxes if b.password or b.oauth_token]
         for b in boxes:
             if not b.imap_host:
-                b.imap_host = box.imap_host
+                from mail_contact_scraper.provider import guess_imap_host
+                b.imap_host = guess_imap_host(b.email)[0]
         try:
-            unsub, bounced = sync_suppression(boxes, args.suppression, imap_connect,
-                                              own_domains=[sender.split("@")[-1]])
+            unsub, bounced = sync_suppression(boxes, args.suppression, imap_connect, own_domains=[own_domain])
             print(f"Bajas nuevas: {len(unsub)} · rebotes nuevos: {len(bounced)} → {args.suppression}")
         except Exception as err:
             print(f"No pude revisar bajas y rebotes ({err}). Sigo con la lista que ya había.")
@@ -315,18 +373,19 @@ def main(argv=None):
     if not Path(args.contacts).exists():
         sys.exit(f"No existe {args.contacts}. Corre primero: python -m mail_contact_scraper")
     out = args.out or Path(settings.output_dir) / "mailing" / campaign["slug"]
-    opts = dict(smtp_connect=lambda: open_smtp(box, host, port), limit=args.limit,
-                daily_limit=args.daily_limit, pause=args.pause, suppression_path=args.suppression,
+    opts = dict(senders=senders, limit=args.limit, pause=args.pause, suppression_path=args.suppression,
                 exclude_domains=args.exclude_domain, require_signature=args.require_signature)
 
     plan = send_campaign(args.campaign, args.contacts, out, **opts)
-    print(f"Campaña {campaign['slug']} desde {sender} ({host})")
+    print(f"Campaña {campaign['slug']}")
+    for s in senders:
+        print(f"  {s['email']} ({s['host']}): quedan {plan['room'][s['email']]} de {s['daily_limit']} hoy")
     print(f"Prospectos: {plan['audience']} · ya enviados: {plan['already_sent']} · pendientes: {plan['pending']}")
-    print(f"Enviados hoy: {plan['sent_today']} de {args.daily_limit} · en esta corrida: {plan['this_run']}")
+    print(f"En esta corrida: {plan['this_run']}")
 
     if args.test:
         send_campaign(args.campaign, args.contacts, out, test_to=args.test, **opts)
-        print(f"Prueba enviada a {args.test}.")
+        print(f"Prueba enviada a {args.test} desde " + ", ".join(s["email"] for s in senders) + ".")
         return
     if not args.send:
         print("No se envió nada. Usa --test tu@correo.com para una prueba o --send para enviar.")
@@ -334,13 +393,15 @@ def main(argv=None):
     if not plan["this_run"]:
         print("No hay nada que enviar hoy.")
         return
-    minutes = plan["this_run"] * args.pause / 60
-    if not args.yes and input(f"Se van a enviar {plan['this_run']} correos (~{minutes:.0f} min). "
+    hours = plan["this_run"] * args.pause / 3600
+    if not args.yes and input(f"Se van a enviar {plan['this_run']} correos (~{hours:.1f} h). "
                               "Escribe ENVIAR para seguir: ").strip() != "ENVIAR":
         print("Cancelado, no se envió nada.")
         return
     result = send_campaign(args.campaign, args.contacts, out, send=True, **opts)
     print(f"Enviados: {result['sent']} · rechazados: {len(result['rejected'])} · errores: {result['errors']}")
+    for who, n in result["by_sender"].items():
+        print(f"  {who}: {n}")
     if result["stopped"]:
         print(result["stopped"])
     print(f"Registro: {Path(out) / LOG_NAME}")
