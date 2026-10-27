@@ -200,3 +200,20 @@ def test_export_replies_csv(tmp_path, monkeypatch):
     text, name = mailing_app.export_csv(tmp_path, "qc-aro", "respuestas")
     lines = text.lstrip("﻿").splitlines()
     assert name == "qc-aro-respuestas.csv" and lines[1].startswith("2026-11-04 09:00:00,p0@cliente.mx,Persona0 X")
+
+
+def test_library_copy_seeded_before_the_followup_gets_it(tmp_path):
+    import json
+    from mailing import library
+    library.ensure(tmp_path)
+    info = library.folder(tmp_path, "qc-aro") / library.INFO
+    data = json.loads(info.read_text())
+    assert data["followup"]["days"] == 5
+    del data["followup"]
+    info.write_text(json.dumps(data))
+    library.ensure(tmp_path)
+    assert json.loads(info.read_text())["followup"]["days"] == 5
+    data["followup"] = {"days": 3, "body": ["mío"]}
+    info.write_text(json.dumps(data))
+    library.ensure(tmp_path)
+    assert json.loads(info.read_text())["followup"]["days"] == 3
