@@ -30,7 +30,11 @@ class FakeGitHub:
         self.requests.append(req)
         if self.code:
             raise urllib.error.HTTPError(req.full_url, self.code, "error", {}, io.BytesIO(b""))
-        body = self.asset if req.get_header("Accept") == "application/octet-stream" else json.dumps(self.release).encode()
+        if req.get_header("Accept") == "application/octet-stream":
+            body = self.asset
+        else:
+            releases = self.release if isinstance(self.release, list) else [self.release]
+            body = json.dumps(releases).encode()
         return io.BytesIO(body)
 
 
@@ -66,7 +70,16 @@ def test_check_picks_this_mac_and_sends_token(tmp_path):
     assert status["available"] and status["latest"] == "v1.0.12" and not status["error"]
     assert up.latest["asset_url"].endswith("/2")
     assert gh.requests[0].get_header("Authorization") == "Bearer github_pat_x"
-    assert gh.requests[0].full_url.endswith("/repos/notmanrivera/mail-contact-scraper/releases/latest")
+    assert "/repos/notmanrivera/mail-contact-scraper/releases?" in gh.requests[0].full_url
+
+
+def test_check_skips_releases_without_this_mac(tmp_path):
+    intel_only = dict(RELEASE, tag_name="v1.0.13", assets=[RELEASE["assets"][0]])
+    draft = dict(RELEASE, tag_name="v1.0.14", draft=True)
+    up = make_updater(tmp_path, FakeGitHub([draft, intel_only, RELEASE]))
+    assert up.check()["latest"] == "v1.0.12" and up.latest["asset_url"].endswith("/2")
+    up = make_updater(tmp_path / "b", FakeGitHub([intel_only]))
+    assert "arm64" in up.check()["error"]
 
 
 def test_check_without_token_on_private_repo(tmp_path):

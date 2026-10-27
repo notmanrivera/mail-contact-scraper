@@ -146,11 +146,13 @@ class Updater:
         if not self.downloading:
             self.stage = "checking"
         try:
-            with self._request(f"{API}/repos/{self.repo}/releases/latest") as resp:
-                release = json.loads(resp.read().decode("utf-8"))
-            asset = next((a for a in release.get("assets", []) if a.get("name", "").endswith(f"-{self.arch}.app.zip")), None)
+            with self._request(f"{API}/repos/{self.repo}/releases?per_page=15") as resp:
+                releases = json.loads(resp.read().decode("utf-8"))
+            # Newest published release with the app for this Mac: one built on a single Mac
+            # (packaging/release_local.sh) only carries that Mac's architecture.
+            release, asset = self._newest_for_this_mac(releases)
             if not asset:
-                raise UpdateError(f"La versión {release.get('tag_name')} no trae la app para esta Mac ({self.arch}).")
+                raise UpdateError(f"Ninguna versión publicada trae la app para esta Mac ({self.arch}).")
             self.latest = {"tag": release.get("tag_name", ""), "notes": (release.get("body") or "")[:3000],
                            "asset_url": asset["url"], "size": int(asset.get("size") or 0),
                            "published_at": release.get("published_at", "")}
@@ -165,6 +167,15 @@ class Updater:
             self.stage = ""
         self.checked_at = datetime.now().isoformat(timespec="seconds")
         return self.status()
+
+    def _newest_for_this_mac(self, releases):
+        for release in releases:
+            if release.get("draft") or release.get("prerelease"):
+                continue
+            for asset in release.get("assets", []):
+                if asset.get("name", "").endswith(f"-{self.arch}.app.zip"):
+                    return release, asset
+        return None, None
 
     def _http_message(self, code):
         if code == 401:

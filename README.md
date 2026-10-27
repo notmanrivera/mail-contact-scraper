@@ -187,9 +187,12 @@ barra de menú y abre el panel en el navegador. Los buzones se agregan desde el 
 - **Cómo se publica:** cada merge a `main` corre `.github/workflows/mac-app.yml` en Macs de
   GitHub (Apple Silicon e Intel), arma la app, la prueba (OCR, scraper con los correos de
   `tests/fixtures`, panel) y crea un release `v1.0.N` con `…-arm64.dmg` / `…-x86_64.dmg` para
-  instalar y `….app.zip` para las actualizaciones. En cada PR se arma igual y queda como
-  artefacto del workflow, sin publicarse.
-- **Actualizaciones:** la app revisa el último release al abrirse y cada 6 horas, lo descarga
+  instalar y `….app.zip` para las actualizaciones. En los PRs solo corren las pruebas en
+  Linux: los minutos de macOS cuentan 10 veces en el plan gratis de GitHub, así que la app
+  se arma solo al hacer merge (o a mano desde la pestaña Actions).
+- **Sin minutos de GitHub Actions:** `packaging/release_local.sh` hace lo mismo desde una Mac
+  (ver abajo).
+- **Actualizaciones:** la app revisa los releases al abrirse y cada media hora, lo descarga
   en segundo plano y lo instala la próxima vez que se abre o al salir (o al momento con
   *Actualizar ahora* en el panel). No actualiza a media corrida de escaneo.
   La v1.0.6 no podía conectarse por HTTPS (le faltaban los certificados); quien la tenga
@@ -221,6 +224,20 @@ open dist/
 ```
 
 `python -m mail_contact_scraper.app` corre lo mismo desde el código, sin el ícono de la barra.
+
+### Publicar una versión desde una Mac (sin GitHub Actions)
+
+```bash
+git clone https://github.com/notmanrivera/mail-contact-scraper.git   # solo la primera vez
+cd mail-contact-scraper
+packaging/release_local.sh
+```
+
+Instala lo que falte con Homebrew, pide entrar a GitHub la primera vez (`gh auth login`),
+arma lo que está en `main`, lo prueba y publica el release `v1.0.N` siguiente. Solo arma
+para el procesador de esa Mac: las Macs del otro tipo se quedan en la última versión que
+traiga la suya. Correrlo en una Mac del otro tipo sobre el mismo commit agrega esa versión al
+mismo release.
 
 ## Firmas en imagen
 
