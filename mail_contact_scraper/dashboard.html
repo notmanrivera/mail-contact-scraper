@@ -767,6 +767,10 @@
       <h3>Registro de envíos</h3>
       <p class="hint">Cada correo enviado queda anotado; al volver a enviar sigue con los que faltan y nunca repite a nadie.</p>
       <div class="log-chips" id="cp-counts"></div>
+      <div class="actions-row" style="margin-bottom:12px">
+        <a class="btn btn-outline" id="cp-csv-sent" href="#" download>Descargar enviados (CSV)</a>
+        <a class="btn btn-outline" id="cp-csv-pending" href="#" download>Descargar pendientes (CSV)</a>
+      </div>
       <table class="log-table"><thead><tr><th>Fecha</th><th>Correo</th><th>Estado</th><th>Desde</th></tr></thead><tbody id="cp-log"></tbody></table>
     </section>
   </div>
@@ -1414,6 +1418,9 @@
         .filter(Boolean).join("<br>");
       $("cp-stop").hidden = !run.running;
     }
+    const slug = encodeURIComponent(c.campaign || "");
+    $("cp-csv-sent").href = `/mailing/export?campaign=${slug}&which=enviados`;
+    $("cp-csv-pending").href = `/mailing/export?campaign=${slug}&which=pendientes`;
     const counts = (c.log && c.log.counts) || {}, supp = c.suppression || {};
     $("cp-counts").innerHTML = [
       ...Object.entries(counts).map(([k, v]) => `<span>${esc(ESTADO[k] || k)}: ${fmt.format(v)}</span>`),

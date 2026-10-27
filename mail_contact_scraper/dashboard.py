@@ -427,6 +427,21 @@ def make_handler(out_dir, control, env_path=".env", updater=None):
                 name = send.contact_name(csv_path, address) if send and address else ""
                 first = send.split_name(name)[0] if name else ""
                 self._json({"name": name, "first": first})
+            elif url.path == "/mailing/export" and _mailing_send():
+                from mailing import app as mailing_app
+                q = parse_qs(url.query)
+                try:
+                    text, name = mailing_app.export_csv(out_dir, q.get("campaign", [""])[0], q.get("which", [""])[0])
+                except ValueError as exc:
+                    return self._send(str(exc).encode(), "text/plain; charset=utf-8", 400)
+                self.send_response(200)
+                body = text.encode("utf-8")
+                self.send_header("Content-Type", "text/csv; charset=utf-8")
+                self.send_header("Content-Disposition", f'attachment; filename="{name}"')
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(body)
             elif url.path == "/mailing/campaign":
                 code, payload = mailing_overview(parse_qs(url.query), out_dir, env_path, send_run)
                 self._json(payload, code)

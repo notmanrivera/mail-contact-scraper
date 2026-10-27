@@ -4,6 +4,8 @@ Same rules as `python -m mailing.send --send`: today's limit per mailbox, mailbo
 turns, nobody gets it twice (envios.csv), unsubscribes and bounces are checked first.
 Nothing goes out unless the request carries confirm="ENVIAR", typed by the person.
 """
+import csv
+import io
 import subprocess
 import sys
 import threading
@@ -11,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import send
-from .build import load_campaign
+from .build import load_audience, load_campaign
 
 CONFIRM_WORD = "ENVIAR"
 RECENT_ROWS = 40
@@ -98,6 +100,44 @@ def overview(out_dir, env_path, run, slug="", chosen=(), daily_limit=0):
     info["plan"] = {k: plan[k] for k in ("audience", "already_sent", "pending", "sent_today", "room",
                                          "this_run", "skipped")}
     return info
+
+
+EXPORTS = {
+    "enviados": ["fecha", "email", "nombre", "empresa", "puesto", "remitente"],
+    "pendientes": ["email", "nombre", "empresa", "puesto", "saludo"],
+}
+
+
+def export_csv(out_dir, slug, which):
+    """CSV (Excel-ready) of who already got the campaign, or who is still pending.
+    Pending uses the same list the next send would use (no unsubscribes or bounces)."""
+    if which not in EXPORTS:
+        raise ValueError("Elige enviados o pendientes.")
+    path = campaign_path(slug)
+    campaign = load_campaign(path)
+    where = paths(out_dir, campaign)
+    sent = {}
+    for row in send.read_log(where["out"] / send.LOG_NAME):
+        if row["estado"] == send.SENT:
+            sent.setdefault(row["email"].lower(), row)
+    contacts = {}
+    if where["contacts"].exists():
+        with open(where["contacts"], newline="", encoding="utf-8-sig") as fh:
+            contacts = {(r.get("email") or "").strip().lower(): r for r in csv.DictReader(fh)}
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow(EXPORTS[which])
+    if which == "enviados":
+        for email_addr, row in sent.items():
+            c = contacts.get(email_addr, {})
+            w.writerow([row["fecha"], email_addr, c.get("name", ""), c.get("company", ""), c.get("title", ""),
+                        row.get("remitente", "")])
+    elif where["contacts"].exists():
+        people, _ = load_audience(where["contacts"], campaign, suppression_path=where["suppression"])
+        for p in people:
+            if p["email"] not in sent:
+                w.writerow([p["email"], p["name"], p["company"], p["title"], p["greeting"]])
+    return "\ufeff" + out.getvalue(), f"{path.stem}-{which}.csv"
 
 
 def check_unsubscribes(out_dir, env_path, slug=""):
