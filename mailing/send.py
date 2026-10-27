@@ -201,6 +201,29 @@ def sync_suppression(mailboxes, suppression_path, connect, own_domains=(), days=
             add_suppression(suppression_path, keep(bounced), "rebote"))
 
 
+def inboxes(settings):
+    """Mailboxes of .env that can be read, for the unsubscribe and bounce check."""
+    from mail_contact_scraper.provider import guess_imap_host
+
+    boxes = [b for b in settings.mailboxes if b.password or b.oauth_token]
+    for b in boxes:
+        if not b.imap_host:
+            b.imap_host = guess_imap_host(b.email)[0]
+    return boxes
+
+
+def suppression_counts(path):
+    """How many addresses the list holds per reason (baja, rebote, rechazado...)."""
+    counts, reason = {}, "otro"
+    if Path(path).exists():
+        for line in Path(path).read_text(encoding="utf-8").splitlines():
+            if line.startswith("#"):
+                reason = (line[1:].split() or ["otro"])[0]
+            elif line.strip():
+                counts[reason] = counts.get(reason, 0) + 1
+    return counts
+
+
 # --- sending -------------------------------------------------------------------------
 
 def make_message(campaign, person, subject_prefix="", sender=None):
@@ -225,11 +248,13 @@ def _is_limit(err):
 
 def send_campaign(campaign_path, contacts_csv, out_dir, *, senders, send=False, test_to=None,
                   limit=0, pause=4.0, suppression_path="output/suppression.txt",
-                  now=datetime.now, sleep=time.sleep, say=print, **audience_opts):
+                  now=datetime.now, sleep=time.sleep, say=print, stop=None, progress=None, **audience_opts):
     """Send pending prospects (or one test), taking turns between the senders.
 
     `senders` are dicts with email, name, daily_limit and connect() (see load_senders).
-    `limit` caps this run (0 = whatever today's limits allow). Returns a summary dict.
+    `limit` caps this run (0 = whatever today's limits allow). `stop()` returning True ends
+    the run between messages; `progress(summary, email, sender)` follows each one sent.
+    Returns a summary dict.
     """
     campaign = load_campaign(campaign_path)
     out = Path(out_dir)
@@ -267,6 +292,9 @@ def send_campaign(campaign_path, contacts_csv, out_dir, *, senders, send=False, 
     turn = 0
     try:
         while queue and summary["sent"] < this_run:
+            if stop and stop():
+                summary["stopped"] = "Detenido a mano. Al volver a enviar sigue con los que faltan."
+                break
             active = [s for s in senders if room[s["email"]] > 0]
             if not active:
                 summary["stopped"] = summary["stopped"] or "Se acabó el cupo de hoy de todos los buzones."
@@ -311,6 +339,8 @@ def send_campaign(campaign_path, contacts_csv, out_dir, *, senders, send=False, 
             summary["sent"] += 1
             summary["by_sender"][who] = summary["by_sender"].get(who, 0) + 1
             say(f"  {summary['sent']}/{this_run}  {person['email']}  ({who})")
+            if progress:
+                progress(summary, person["email"], who)
             if queue and summary["sent"] < this_run:
                 sleep(pause * random.uniform(0.7, 1.3))  # steady, human pace
     except KeyboardInterrupt:
@@ -429,13 +459,8 @@ def main(argv=None):
     senders, settings = load_senders(addresses, campaign, args.env, args.daily_limit)
 
     if args.bajas or (args.send and not args.no_bajas):
-        boxes = [b for b in settings.mailboxes if b.password or b.oauth_token]
-        for b in boxes:
-            if not b.imap_host:
-                from mail_contact_scraper.provider import guess_imap_host
-                b.imap_host = guess_imap_host(b.email)[0]
         try:
-            unsub, bounced = sync_suppression(boxes, args.suppression, imap_connect, own_domains=[own_domain])
+            unsub, bounced = sync_suppression(inboxes(settings), args.suppression, imap_connect, own_domains=[own_domain])
             print(f"Bajas nuevas: {len(unsub)} · rebotes nuevos: {len(bounced)} → {args.suppression}")
         except Exception as err:
             print(f"No pude revisar bajas y rebotes ({err}). Sigo con la lista que ya había.")

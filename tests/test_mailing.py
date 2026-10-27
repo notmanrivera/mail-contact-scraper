@@ -377,3 +377,107 @@ def test_dashboard_mailing_panel(tmp_path, monkeypatch):
         assert len(smtp.sent) == 1
     finally:
         server.shutdown()
+
+
+# ---------- sending the campaign from the app ----------
+
+def _app_setup(tmp_path, monkeypatch, smtp):
+    from mailing import app as mailing_app
+    env = tmp_path / ".env"
+    env.write_text("IMAP_USER=pedro@dindustrimex.com\nIMAP_PASSWORD=x\n"
+                   "IMAP_USER_2=ventas@dindustrimex.com\nIMAP_PASSWORD_2=y\n")
+    write_contacts(tmp_path / "contacts.csv", [{"email": f"p{i}@cliente.mx", "name": f"Persona{i} X",
+                                                "source": "signature"} for i in range(5)])
+    monkeypatch.setattr(send, "load_senders", lambda addrs, campaign, env, limit=None: (
+        [_sender(smtp, a, daily_limit=limit or 1500) for a in addrs], None))
+    return mailing_app, env
+
+
+def _wait(run):
+    import time
+    for _ in range(200):
+        if not run.status()["running"]:
+            return run.status()
+        time.sleep(0.02)
+    raise AssertionError("the run did not finish")
+
+
+def test_app_overview_plans_without_sending(tmp_path, monkeypatch):
+    smtp = FakeSMTP()
+    mailing_app, env = _app_setup(tmp_path, monkeypatch, smtp)
+    info = mailing_app.overview(tmp_path, env, mailing_app.SendRun(), "qc-aro",
+                                ["pedro@dindustrimex.com", "ventas@dindustrimex.com"], "2")
+    assert info["available"] == ["pedro@dindustrimex.com", "ventas@dindustrimex.com"]
+    assert info["plan"]["pending"] == 5 and info["plan"]["this_run"] == 4  # 2 a day x 2 mailboxes
+    assert smtp.sent == [] and info["log"]["recent"] == []
+    default = mailing_app.overview(tmp_path, env, mailing_app.SendRun(), "nope")
+    assert [s["email"] for s in default["senders"]] == ["pedro@dindustrimex.com"]
+
+
+def test_app_run_needs_the_typed_confirmation(tmp_path, monkeypatch):
+    smtp = FakeSMTP()
+    mailing_app, env = _app_setup(tmp_path, monkeypatch, smtp)
+    run = mailing_app.SendRun(check=lambda *a: ([], []))
+    for confirm in ("", "enviar", "SI"):
+        with pytest.raises(ValueError, match="ENVIAR"):
+            run.start(tmp_path, env, {"campaign": "qc-aro", "confirm": confirm})
+    assert smtp.sent == [] and not run.status()["running"]
+
+
+def test_app_run_sends_logs_and_resumes(tmp_path, monkeypatch):
+    smtp = FakeSMTP()
+    mailing_app, env = _app_setup(tmp_path, monkeypatch, smtp)
+    run = mailing_app.SendRun(check=lambda *a: (["baja@x.com"], []))
+    run.start(tmp_path, env, {"campaign": "qc-aro", "confirm": "ENVIAR", "limit": "3"}, pause=0)
+    state = _wait(run)
+    assert state["sent"] == 3 and state["phase"] == "terminado" and "Bajas nuevas: 1" in state["note"]
+    run.start(tmp_path, env, {"campaign": "qc-aro", "confirm": "ENVIAR"}, pause=0)
+    assert _wait(run)["sent"] == 2
+    assert len({m["To"] for m in smtp.sent}) == 5  # nobody twice
+    info = mailing_app.overview(tmp_path, env, run, "qc-aro")
+    assert info["log"]["counts"] == {"enviado": 5} and info["plan"]["pending"] == 0
+
+
+def test_app_run_stops_between_messages(tmp_path, monkeypatch):
+    import threading
+    smtp = FakeSMTP()
+    mailing_app, env = _app_setup(tmp_path, monkeypatch, smtp)
+    gate = threading.Event()
+    run = mailing_app.SendRun(check=lambda *a: (gate.wait(5), ([], []))[1])
+    run.start(tmp_path, env, {"campaign": "qc-aro", "confirm": "ENVIAR"}, pause=30)
+    with pytest.raises(ValueError, match="en curso"):
+        run.start(tmp_path, env, {"campaign": "qc-aro", "confirm": "ENVIAR"})
+    gate.set()
+    import time
+    for _ in range(200):
+        if smtp.sent:
+            break
+        time.sleep(0.01)
+    assert run.stop()  # wakes the 30 s pause right away
+    state = _wait(run)
+    assert state["sent"] == 1 and "Detenido" in state["stopped"]
+
+
+def test_dashboard_campaign_endpoints(tmp_path, monkeypatch):
+    import json
+    import threading
+    import urllib.error
+    import urllib.request
+    from mail_contact_scraper import dashboard
+
+    smtp = FakeSMTP()
+    mailing_app, env = _app_setup(tmp_path, monkeypatch, smtp)
+    server, url = dashboard.serve(tmp_path, port=18990, open_browser=False, env_path=env)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        info = json.loads(urllib.request.urlopen(url + "mailing/campaign?campaign=qc-aro").read())
+        assert info["plan"]["pending"] == 5 and info["run"] == {"running": False}
+        req = urllib.request.Request(url + "mailing/campaign/start", method="POST",
+                                     data=json.dumps({"campaign": "qc-aro"}).encode(),
+                                     headers={"X-Requested-With": "dashboard"})
+        with pytest.raises(urllib.error.HTTPError) as err:
+            urllib.request.urlopen(req)
+        assert err.value.code == 400 and "ENVIAR" in json.loads(err.value.read())["error"]
+        assert smtp.sent == []
+    finally:
+        server.shutdown()

@@ -242,17 +242,42 @@ def mailing_payload(env_path):
     return {"available": True, "campaigns": found, "senders": senders, "default_sender": default}
 
 
-def mailing_action(body, env_path):
-    """POST /mailing/test: one test message to one address. Returns (status code, payload)."""
+def mailing_action(path, body, out_dir, env_path, run):
+    """POST /mailing/<action>: a test, the campaign run, or the unsubscribe check.
+    Returns (status code, payload)."""
     send = _mailing_send()
     if not send:
         return 404, {"ok": False, "error": "Esta versión no incluye los mailings."}
+    from mailing import app as mailing_app
+
+    slug = str(body.get("campaign") or "")
     try:
-        result = send.send_test_html(body.get("html"), body.get("subject"), body.get("to"),
-                                     body.get("from"), str(body.get("campaign") or ""), env_path)
+        if path == "/mailing/test":
+            return 200, {"ok": True, **send.send_test_html(body.get("html"), body.get("subject"), body.get("to"),
+                                                           body.get("from"), slug, env_path)}
+        if path == "/mailing/campaign/start":
+            return 200, {"ok": True, "run": run.start(out_dir, env_path, body)}
+        if path == "/mailing/campaign/stop":
+            return 200, {"ok": run.stop(), "run": run.status()}
+        if path == "/mailing/bajas":
+            unsub, bounced = mailing_app.check_unsubscribes(out_dir, env_path, slug)
+            return 200, {"ok": True, "unsubscribed": len(unsub), "bounced": len(bounced)}
     except ValueError as exc:
         return 400, {"ok": False, "error": str(exc)}
-    return 200, {"ok": True, **result}
+    return 404, {"ok": False, "error": "not found"}
+
+
+def mailing_overview(query, out_dir, env_path, run):
+    """GET /mailing/campaign: the Campaña tab (list, room per mailbox, log, current run)."""
+    if not _mailing_send():
+        return 404, {"available": False}
+    from mailing import app as mailing_app
+
+    try:
+        return 200, mailing_app.overview(out_dir, env_path, run, query.get("campaign", [""])[0],
+                                         query.get("from", []), query.get("daily_limit", ["0"])[0])
+    except ValueError as exc:
+        return 400, {"error": str(exc)}
 
 
 def update_action(updater, body, control, out_dir):
@@ -276,6 +301,10 @@ def make_handler(out_dir, control, env_path=".env", updater=None):
     out_dir = Path(out_dir)
     package = resources.files(__package__)
     page = package.joinpath("dashboard.html").read_bytes()
+    send_run = None
+    if _mailing_send():
+        from mailing.app import SendRun
+        send_run = SendRun()
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):  # keep the console clean
@@ -317,6 +346,9 @@ def make_handler(out_dir, control, env_path=".env", updater=None):
                 self._json(settings_payload(out_dir, env_path))
             elif url.path == "/mailing":
                 self._json(mailing_payload(env_path))
+            elif url.path == "/mailing/campaign":
+                code, payload = mailing_overview(parse_qs(url.query), out_dir, env_path, send_run)
+                self._json(payload, code)
             elif url.path == "/contacts.csv" and csv_path.exists():
                 self._send(csv_path.read_bytes(), "text/csv; charset=utf-8")
             elif url.path.startswith("/static/"):
@@ -343,7 +375,7 @@ def make_handler(out_dir, control, env_path=".env", updater=None):
             elif self.path == "/stop":
                 stopped = control.stop()
                 self._json({"ok": stopped}, 200 if stopped else 409)
-            elif self.path.startswith("/settings/") or self.path == "/mailing/test" or (self.path == "/update" and updater):
+            elif self.path.startswith(("/settings/", "/mailing/")) or (self.path == "/update" and updater):
                 length = int(self.headers.get("Content-Length") or 0)
                 if length > (MAX_HTML if self.path == "/mailing/test" else 65536):
                     return self._send(b"too large", "text/plain", 413)
@@ -354,8 +386,8 @@ def make_handler(out_dir, control, env_path=".env", updater=None):
                 body = body if isinstance(body, dict) else {}
                 if self.path == "/update":
                     code, payload = update_action(updater, body, control, out_dir)
-                elif self.path == "/mailing/test":
-                    code, payload = mailing_action(body, env_path)
+                elif self.path.startswith("/mailing/"):
+                    code, payload = mailing_action(self.path, body, out_dir, env_path, send_run)
                 else:
                     code, payload = settings_action(self.path, body, out_dir, env_path, control)
                 self._json(payload, code)
