@@ -245,9 +245,13 @@ def suppression_counts(path):
 # --- sending -------------------------------------------------------------------------
 
 def make_message(campaign, person, subject_prefix="", sender=None):
-    unsub = unsubscribe_mailto(campaign, person["email"])
-    msg = build_eml(campaign, person, render_html(campaign, person["greeting"], unsub),
-                    render_text(campaign, person["greeting"], unsub))
+    if "html" in campaign:  # a campaign of the app's library (mailing/library.py)
+        from .library import build_message
+        msg = build_message(campaign, person)
+    else:
+        unsub = unsubscribe_mailto(campaign, person["email"])
+        msg = build_eml(campaign, person, render_html(campaign, person["greeting"], unsub),
+                        render_text(campaign, person["greeting"], unsub))
     del msg["X-Unsent"]
     if sender:
         msg.replace_header("From", formataddr((sender["name"], sender["email"])))
@@ -474,22 +478,29 @@ def html_to_text(body):
     return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip() + "\n"
 
 
-def contact_name(contacts_csv, address):
-    """Name the scraper found for an address, or ''."""
+def _contact_field(contacts_csv, address, field):
     if not contacts_csv or not Path(contacts_csv).exists():
         return ""
     with open(contacts_csv, newline="", encoding="utf-8-sig") as fh:
         for row in csv.DictReader(fh):
             if (row.get("email") or "").strip().lower() == address.lower():
-                return row.get("name") or ""
+                return row.get(field) or ""
     return ""
 
 
+def contact_name(contacts_csv, address):
+    """Name the scraper found for an address, or ''."""
+    return _contact_field(contacts_csv, address, "name")
+
+
 def send_test_html(html_body, subject, to, sender_email, campaign_slug="", env_file=".env",
-                   name="", contacts_csv=None):
+                   name="", contacts_csv=None, out_dir=None):
     """Send pasted HTML once to one address, marked [PRUEBA]. {{Saludo}} becomes "Hola <name>,"
-    with the name typed, or else the one in contacts.csv, like the real run. Raises ValueError
-    with a message for the person on anything wrong (bad address, login refused...)."""
+    with the name typed, or else the one in contacts.csv, like the real run. With `out_dir`
+    the campaign comes from the app's library, so its images go attached like in the real
+    run. Raises ValueError with a message for the person on anything wrong."""
+    from .library import build_message, folder, load
+
     to, sender_email, subject = (to or "").strip(), (sender_email or "").strip(), (subject or "").strip()
     if not EMAIL_RE.match(to):
         raise ValueError("Escribe un correo válido para recibir la prueba.")
@@ -497,24 +508,28 @@ def send_test_html(html_body, subject, to, sender_email, campaign_slug="", env_f
         raise ValueError("Pega el HTML del mailing.")
     if not subject:
         raise ValueError("Escribe el asunto.")
-    path = CAMPAIGNS / f"{campaign_slug}.toml"
-    campaign = load_campaign(path if campaign_slug and path.is_file() else next(iter(sorted(CAMPAIGNS.glob("*.toml")))))
+    campaign = None
+    if out_dir is not None:
+        try:
+            campaign = load(folder(out_dir, campaign_slug))
+        except ValueError:
+            campaign = None
+    if campaign is None:
+        path = CAMPAIGNS / f"{campaign_slug}.toml"
+        toml = load_campaign(path if campaign_slug and path.is_file() else next(iter(sorted(CAMPAIGNS.glob("*.toml")))))
+        campaign = {"slug": campaign_slug, "sender": toml["sender"], "subject": subject, "_folder": None}
+    campaign = {**campaign, "html": html_body, "subject": subject}
     try:
         sender = load_senders([sender_email], campaign, env_file)[0][0]
     except SystemExit as exc:
         raise ValueError(str(exc)) from None
     first = split_name(name or contact_name(contacts_csv, to))[0]
-    html_body = MERGE_GREETING.sub(greeting(first), html_body)
-    msg = EmailMessage()
-    msg["From"] = formataddr((sender["name"], sender["email"]))
-    msg["To"] = to
-    msg["Subject"] = "[PRUEBA] " + subject
-    if campaign["sender"].get("reply_to"):
-        msg["Reply-To"] = campaign["sender"]["reply_to"]
+    person = {"email": to, "name": "", "first_name": first, "greeting": greeting(first),
+              "company": _contact_field(contacts_csv, to, "company")}
+    msg = build_message(campaign, person, subject="[PRUEBA] " + subject)
+    msg.replace_header("From", formataddr((sender["name"], sender["email"])))
     msg["Date"] = formatdate(localtime=True)
     msg["Message-ID"] = make_msgid(domain=sender["email"].split("@")[-1])
-    msg.set_content(html_to_text(html_body))
-    msg.add_alternative(html_body, subtype="html")
     try:
         conn = sender["connect"]()
     except smtplib.SMTPAuthenticationError:

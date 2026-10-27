@@ -63,6 +63,10 @@ _env.filters["accent"] = accent
 
 
 def load_campaign(path):
+    """A .toml campaign of the code, or a folder of the app's library (mailing/library.py)."""
+    if Path(path).is_dir():
+        from .library import load
+        return load(path)
     with open(path, "rb") as fh:
         campaign = tomllib.load(fh)
     campaign["_dir"] = Path(path).resolve().parent.parent

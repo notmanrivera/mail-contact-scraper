@@ -12,19 +12,17 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-from . import deliverability, send
+from . import deliverability, library, send
 from .build import load_audience, load_campaign
 
 CONFIRM_WORD = "ENVIAR"
 RECENT_ROWS = 40
 
 
-def campaign_path(slug):
-    """Path of a saved campaign; only names from the campaigns folder are accepted."""
-    paths = {p.stem: p for p in send.CAMPAIGNS.glob("*.toml")}
-    if not paths:
-        raise ValueError("No hay campañas guardadas.")
-    return paths.get(slug) or paths[sorted(paths)[0]]
+def campaign_path(out_dir, slug=""):
+    """Folder of a campaign of this person's library (<out_dir>/campanas); with no valid
+    name, the one chosen in the Campaña tab."""
+    return library.pick(out_dir, slug)
 
 
 def paths(out_dir, campaign):
@@ -70,7 +68,7 @@ def _limit(value, name):
 
 def overview(out_dir, env_path, run, slug="", chosen=(), daily_limit=0):
     """Everything the Campaña tab shows: list, today's room per mailbox, log, run."""
-    path = campaign_path(slug)
+    path = campaign_path(out_dir, slug)
     campaign = load_campaign(path)
     where = paths(out_dir, campaign)
     log = send.read_log(where["out"] / send.LOG_NAME)
@@ -78,7 +76,8 @@ def overview(out_dir, env_path, run, slug="", chosen=(), daily_limit=0):
     for row in log:
         counts[row["estado"]] = counts.get(row["estado"], 0) + 1
     info = {
-        "campaign": path.stem, "available": available_senders(env_path, campaign),
+        "campaign": path.stem, "name": campaign["name"], "subject": campaign["subject"],
+        "available": available_senders(env_path, campaign),
         "default_sender": campaign["sender"]["email"], "plan": None, "error": "",
         "log": {"counts": counts, "recent": [
             {k: row.get(k, "") for k in ("fecha", "email", "estado", "detalle", "remitente")}
@@ -113,7 +112,7 @@ def export_csv(out_dir, slug, which):
     Pending uses the same list the next send would use (no unsubscribes or bounces)."""
     if which not in EXPORTS:
         raise ValueError("Elige enviados o pendientes.")
-    path = campaign_path(slug)
+    path = campaign_path(out_dir, slug)
     campaign = load_campaign(path)
     where = paths(out_dir, campaign)
     sent = {}
@@ -145,7 +144,7 @@ def check_unsubscribes(out_dir, env_path, slug=""):
     from mail_contact_scraper.config import load_settings
     from mail_contact_scraper.imap_source import connect as imap_connect
 
-    campaign = load_campaign(campaign_path(slug))
+    campaign = load_campaign(campaign_path(out_dir, slug))
     boxes = send.inboxes(load_settings(env_path))
     if not boxes:
         raise ValueError("No hay buzones con contraseña para revisar.")
@@ -156,9 +155,9 @@ def check_unsubscribes(out_dir, env_path, slug=""):
         raise ValueError(f"No pude revisar bajas y rebotes: {exc}") from None
 
 
-def health(env_path, slug=""):
+def health(out_dir, env_path, slug=""):
     """SPF / DKIM / DMARC light of each sending domain the Campaña tab can pick."""
-    campaign = load_campaign(campaign_path(slug))
+    campaign = load_campaign(campaign_path(out_dir, slug))
     by_domain = {}
     for address in available_senders(env_path, campaign):
         by_domain.setdefault(address.rsplit("@", 1)[-1].lower(), []).append(address)
@@ -168,7 +167,7 @@ def health(env_path, slug=""):
 def clean_list(out_dir, slug="", apply=False):
     """Pending addresses that would bounce for sure (domain with no mail server, typo in the
     domain). With apply=True they go to suppression.txt so no run sends to them."""
-    path = campaign_path(slug)
+    path = campaign_path(out_dir, slug)
     campaign = load_campaign(path)
     where = paths(out_dir, campaign)
     if not where["contacts"].exists():
@@ -241,7 +240,7 @@ class SendRun:
             raise ValueError(f"Escribe {CONFIRM_WORD} para confirmar el envío.")
         if self.status().get("running"):
             raise ValueError("Ya hay un envío en curso.")
-        path = campaign_path(str(body.get("campaign") or ""))
+        path = campaign_path(out_dir, str(body.get("campaign") or ""))
         campaign = load_campaign(path)
         where = paths(out_dir, campaign)
         if not where["contacts"].exists():

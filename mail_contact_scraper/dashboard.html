@@ -78,7 +78,7 @@
     border: 0; transition: background .15s ease, transform .08s ease, box-shadow .15s ease;
   }
   .btn:active { transform: translateY(1px); }
-  .btn[disabled] { opacity: .5; cursor: default; }
+  .btn[disabled], a.btn.disabled { opacity: .5; cursor: default; pointer-events: none; }
   .btn svg { width: 15px; height: 15px; }
   .btn-primary { background: var(--red); color: #fff; box-shadow: 0 8px 18px -8px var(--red-deep); }
   .btn-primary:hover:not([disabled]) { background: var(--red-hover); }
@@ -163,7 +163,25 @@
   .preview { background: var(--panel-solid); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
   .preview-head { padding: 10px 14px; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--muted); }
   .preview-head b { color: var(--ink); }
+  .preview-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .preview-stage { flex: 1; min-height: 0; display: flex; justify-content: center; background: #fff; }
+  .preview-stage.phone { background: #EDEAE9; padding: 14px 0; }
   .preview iframe { flex: 1; width: 100%; border: 0; background: #fff; }
+  .preview-stage.phone iframe { flex: none; width: 390px; max-width: 100%; border-radius: 22px; box-shadow: 0 6px 24px rgba(0,0,0,.15); }
+  .pv-seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 100px; background: rgba(110,99,96,.09); }
+  .pv-seg button { border: 0; background: none; padding: 5px 11px; border-radius: 100px; font: 600 12px var(--font); color: var(--muted); cursor: pointer; }
+  .pv-seg button[aria-pressed="true"] { background: var(--ink); color: #fff; }
+  .ed-tools { margin: -4px 0 10px; }
+  .ed-tools .btn { height: 34px; padding: 0 12px; font-size: 13px; }
+  .btn.danger { color: var(--red); }
+  .img-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+  .img-list .pic { display: flex; align-items: center; gap: 8px; padding: 5px 8px 5px 5px; border-radius: 12px; background: #F4F2F1; font-size: 12px; color: var(--ink); max-width: 100%; }
+  .img-list .pic img { width: 34px; height: 34px; object-fit: contain; border-radius: 7px; background: #fff; }
+  .img-list .pic code { cursor: copy; }
+  .img-list .pic button { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 15px; padding: 0 2px; }
+  .checks { margin: 0 0 12px; padding: 10px 12px 10px 28px; border-radius: 12px; background: var(--red-tint); border: 1px solid var(--red-line); color: var(--ink); font-size: 12.5px; display: grid; gap: 4px; }
+  .checks[hidden] { display: none; }
+  #ml-test-pane code { font-size: 11.5px; background: #F4F2F1; padding: 1px 5px; border-radius: 5px; }
   .tabs { display: inline-flex; padding: 4px; border-radius: 100px; background: rgba(110,99,96,.09); margin-left: auto; margin-right: 12px; }
   .tabs button { border: 0; background: none; padding: 7px 16px; border-radius: 100px; font: 600 13px var(--font); color: var(--muted); cursor: pointer; }
   .tabs button[aria-selected="true"] { background: var(--ink); color: #fff; }
@@ -751,7 +769,7 @@
     <div><div class="card-kicker">Mailing</div><h2 id="mailer-title">Envíos</h2></div>
     <div class="tabs" role="tablist">
       <button type="button" role="tab" data-tab="camp" aria-selected="true">Campaña</button>
-      <button type="button" role="tab" data-tab="test" aria-selected="false">Prueba</button>
+      <button type="button" role="tab" data-tab="test" aria-selected="false">Editar y probar</button>
     </div>
     <button class="icon-btn" id="close-mailer" type="button" aria-label="Cerrar">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
@@ -771,6 +789,7 @@
     </section>
     <section class="set">
       <h3>Enviar la campaña</h3>
+      <div class="field"><label for="ml-campaign">Campaña que se envía</label><select class="input" id="ml-campaign"></select></div>
       <p class="hint" id="cp-subject"></p>
       <div class="mini-stats">
         <div class="stat"><div class="k">En la lista</div><div class="v num" id="cp-audience">—</div></div>
@@ -811,26 +830,61 @@
   </div>
   <div class="mailer-body" id="ml-test-pane" hidden>
     <form class="set" id="ml-form" autocomplete="off">
-      <h3>Mandar una prueba</h3>
-      <p class="hint">Sale un solo correo, con [PRUEBA] en el asunto, a la dirección que escribas. No se envía a ningún contacto.</p>
-      <div class="field" id="ml-campaign-field" hidden><label for="ml-campaign">Campaña</label><select class="input" id="ml-campaign"></select></div>
-      <div class="field"><label for="ml-from">Enviar desde</label><select class="input" id="ml-from"></select></div>
-      <div class="row-half">
-        <div class="field"><label for="ml-to">Para</label><input class="input" id="ml-to" type="email" placeholder="tu@correo.com" required></div>
-        <div class="field"><label for="ml-name">Nombre para el saludo</label><input class="input" id="ml-name" type="text" placeholder="Ej. Pedro"></div>
+      <h3>Tus campañas</h3>
+      <p class="hint">Se guardan en esta Mac, en tu carpeta de datos. Lo que edites aquí no cambia las campañas de tu compañero; para pasarle una, expórtala y que la importe.</p>
+      <div class="field"><label for="ed-campaign">Campaña</label><select class="input" id="ed-campaign"></select></div>
+      <div class="actions-row ed-tools">
+        <button class="btn btn-outline" id="ed-new" type="button">Nueva</button>
+        <button class="btn btn-outline" id="ed-dup" type="button">Duplicar</button>
+        <button class="btn btn-outline" id="ed-import" type="button" title="Un .zip con el HTML y sus imágenes, o un .html">Importar…</button>
+        <a class="btn btn-outline" id="ed-export" href="#" download title="Un .zip para pasársela a otra persona">Exportar</a>
+        <button class="btn btn-outline danger" id="ed-delete" type="button">Borrar</button>
+        <input type="file" id="ed-import-file" accept=".zip,.html,.htm" hidden>
       </div>
-      <p class="hint" style="margin-top:-4px" id="ml-name-hint">Se llena solo con el nombre que tenga ese correo en tus contactos, igual que en el envío real. Puedes cambiarlo; sin nombre queda “Hola,”.</p>
+      <p class="hint" id="ed-meta"></p>
+      <div class="field"><label for="ed-name">Nombre (solo para ti)</label><input class="input" id="ed-name" type="text"></div>
       <div class="field"><label for="ml-subject">Asunto</label><input class="input" id="ml-subject" type="text" required></div>
-      <div class="field"><label for="ml-html">HTML del mailing</label><textarea class="input" id="ml-html" spellcheck="false" placeholder="Pega aquí el código HTML"></textarea></div>
-      <div class="actions-row">
-        <button class="btn btn-primary" id="ml-send" type="submit">Enviar prueba</button>
-        <button class="btn btn-outline" id="ml-reset" type="button">Volver al de la campaña</button>
+      <div class="row-half">
+        <div class="field"><label for="ed-sender-name">Nombre del remitente</label><input class="input" id="ed-sender-name" type="text" placeholder="Pedro Marquina"></div>
+        <div class="field"><label for="ed-reply">Las respuestas llegan a</label><input class="input" id="ed-reply" type="email" placeholder="ventas@dindustrimex.com"></div>
       </div>
-      <div class="msg" id="ml-msg" hidden></div>
+      <div class="field"><label for="ml-html">HTML del mailing</label><textarea class="input" id="ml-html" spellcheck="false" placeholder="Pega aquí el código HTML"></textarea></div>
+      <p class="hint" style="margin-top:-4px">Etiquetas que se llenan para cada persona: <code>{{Saludo}}</code> (“Hola Laura,”), <code>{{Nombre}}</code>, <code>{{Empresa}}</code> y <code>{{Baja}}</code> (liga para darse de baja).</p>
+      <div class="field"><label>Imágenes de la campaña</label>
+        <div class="img-list" id="ed-images"></div>
+        <div class="actions-row"><button class="btn btn-outline" id="ed-add-img" type="button">Agregar imágenes</button></div>
+        <input type="file" id="ed-img-file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>
+        <p class="hint">En el HTML ponlas por su nombre, ej. <code>src="hero.png"</code>. Viajan adjuntas dentro del correo, así se ven en Gmail sin subirlas a ningún lado. También sirven ligas https:// (Wix).</p>
+      </div>
+      <ul class="checks" id="ed-checks" hidden></ul>
+      <div class="actions-row">
+        <button class="btn btn-primary" id="ed-save" type="button" disabled>Guardar cambios</button>
+        <button class="btn btn-outline" id="ml-reset" type="button" disabled>Descartar cambios</button>
+        <button class="btn btn-outline" id="ed-use" type="button">Usar en Campaña</button>
+      </div>
+      <div class="msg" id="ed-msg" hidden></div>
+      <div class="send-box">
+        <h3>Mandar una prueba</h3>
+        <p class="hint">Sale un solo correo, con [PRUEBA] en el asunto, con lo que ves en la vista previa (aunque no lo hayas guardado). No se envía a ningún contacto.</p>
+        <div class="field"><label for="ml-from">Enviar desde</label><select class="input" id="ml-from"></select></div>
+        <div class="row-half">
+          <div class="field"><label for="ml-to">Para</label><input class="input" id="ml-to" type="email" placeholder="tu@correo.com" required></div>
+          <div class="field"><label for="ml-name">Nombre para el saludo</label><input class="input" id="ml-name" type="text" placeholder="Ej. Pedro"></div>
+        </div>
+        <p class="hint" style="margin-top:-4px" id="ml-name-hint">Se llena solo con el nombre que tenga ese correo en tus contactos, igual que en el envío real. Puedes cambiarlo; sin nombre queda “Hola,”.</p>
+        <div class="actions-row"><button class="btn btn-primary" id="ml-send" type="submit">Enviar prueba</button></div>
+        <div class="msg" id="ml-msg" hidden></div>
+      </div>
     </form>
     <div class="preview">
-      <div class="preview-head">Vista previa · <b id="ml-preview-subject"></b></div>
-      <iframe id="ml-preview" sandbox="" title="Vista previa del mailing"></iframe>
+      <div class="preview-head"><span>Vista previa · <b id="ml-preview-subject"></b></span>
+        <span class="pv-seg" id="ml-view">
+          <button type="button" data-pv="desk" aria-pressed="true">Escritorio</button>
+          <button type="button" data-pv="phone" aria-pressed="false">Celular</button>
+          <button type="button" data-pv="dark" aria-pressed="false" title="Aproximado: así invierte los colores Gmail en iPhone con modo oscuro">Modo oscuro</button>
+        </span>
+      </div>
+      <div class="preview-stage" id="ml-stage"><iframe id="ml-preview" sandbox="" title="Vista previa del mailing"></iframe></div>
     </div>
   </div>
 </aside>
@@ -1408,42 +1462,220 @@
     $("mb-email").focus();
   }
   function closeSettings() { $("drawer").hidden = $("scrim").hidden = true; }
-  /* ---------- Envío de prueba ---------- */
-  let mailing = null, previewTimer = null;
-  const currentCampaign = () => (mailing && mailing.campaigns.find((c) => c.slug === $("ml-campaign").value)) || null;
-  const GREETING_TAG = /\{\{\s*(?:Saludo|contact\.SALUDO)\s*\}\}|\*\|SALUDO\|\*/g;
-  function previewMailing() {
-    const first = $("ml-name").value.trim().split(/\s+/)[0];
-    $("ml-preview").srcdoc = $("ml-html").value.replace(GREETING_TAG, first ? `Hola ${esc(first)},` : "Hola,");
-    $("ml-preview-subject").textContent = $("ml-subject").value;
+  /* ---------- Envíos: tus campañas, editor con vista previa y prueba ---------- */
+  let mailing = null, previewTimer = null, edit = null, dirty = false, pvView = "desk", previewSeq = 0;
+  const STARTER = `<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Campaña nueva</title></head>
+<body style="margin:0;padding:0;background:#F4F2F1;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F4F2F1;"><tr><td align="center" style="padding:24px 12px;">
+    <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;font-family:Arial,Helvetica,sans-serif;color:#2B2523;">
+      <tr><td style="padding:32px 32px 8px;font-size:16px;">{{Saludo}}</td></tr>
+      <tr><td style="padding:0 32px 32px;font-size:15px;line-height:1.6;">Escribe aquí tu mensaje.</td></tr>
+    </table>
+    <p style="font:12px Arial,sans-serif;color:#8a8a8a;">¿Prefieres no recibir más correos? <a href="{{Baja}}" style="color:#8a8a8a;">Darte de baja</a></p>
+  </td></tr></table>
+</body></html>
+`;
+  const fileData = (file) => new Promise((ok, fail) => {
+    const r = new FileReader();
+    r.onload = () => ok(String(r.result).split(",")[1] || "");
+    r.onerror = () => fail(r.error);
+    r.readAsDataURL(file);
+  });
+  function darken(html) {  // roughly what Gmail on iPhone does in dark mode: invert colors, keep photos
+    const css = "<style>html{filter:invert(1) hue-rotate(180deg);background:#fff}img{filter:invert(1) hue-rotate(180deg)}</style>";
+    return /<\/head>/i.test(html) ? html.replace(/<\/head>/i, css + "</head>") : css + html;
   }
-  function loadCampaign() {
-    const c = currentCampaign();
-    if (!c) return;
-    $("ml-subject").value = c.subject; $("ml-html").value = c.html;
-    previewMailing();
+  async function previewMailing() {
+    $("ml-preview-subject").textContent = $("ml-subject").value;
+    if (!edit) { $("ml-preview").srcdoc = ""; return; }
+    const seq = ++previewSeq;
+    const r = await settingsCall("/mailing/library/preview", {
+      campaign: edit.slug, html: $("ml-html").value, subject: $("ml-subject").value, name: $("ml-name").value.trim(),
+    }).catch(() => null);
+    if (!r || !r.ok || seq !== previewSeq) return;
+    $("ml-preview").srcdoc = pvView === "dark" ? darken(r.html) : r.html;
+    renderChecks(r.checks);
+  }
+  function renderChecks(list) {
+    $("ed-checks").hidden = !(list && list.length);
+    $("ed-checks").innerHTML = (list || []).map((t) => `<li>${esc(t)}</li>`).join("");
+  }
+  function renderImages() {
+    const pics = (edit && edit.images) || [];
+    const base = edit ? `/mailing/library/img?campaign=${encodeURIComponent(edit.slug)}&name=` : "";
+    $("ed-images").innerHTML = pics.map((p) => `<span class="pic"><img src="${base}${encodeURIComponent(p.name)}" alt="">
+      <code title="Copiar src=&quot;${esc(p.name)}&quot;" data-copy="${esc(p.name)}">${esc(p.name)}</code>
+      <span class="hint">${Math.max(1, Math.round(p.size / 1024))} KB</span>
+      <button type="button" data-remove="${esc(p.name)}" aria-label="Quitar ${esc(p.name)}">×</button></span>`).join("")
+      || '<span class="hint">Sin imágenes propias (las ligas https:// no necesitan subirse).</span>';
+  }
+  function setDirty(value) {
+    dirty = value;
+    $("ed-save").disabled = $("ml-reset").disabled = !value || !edit;
+  }
+  function fillEditor() {
+    const c = edit || { sender: {} };
+    $("ed-name").value = c.name || ""; $("ml-subject").value = c.subject || "";
+    $("ed-sender-name").value = c.sender.name || ""; $("ed-reply").value = c.sender.reply_to || "";
+    $("ml-html").value = c.html || "";
+    renderMeta();
+    ["ed-dup", "ed-delete", "ed-use", "ml-send", "ed-add-img", "ed-name", "ml-subject", "ed-sender-name", "ed-reply", "ml-html"]
+      .forEach((id) => { $(id).disabled = !edit; });
+    $("ed-export").href = edit ? `/mailing/library/export?campaign=${encodeURIComponent(edit.slug)}` : "#";
+    $("ed-export").classList.toggle("disabled", !edit);
+    setDirty(false); renderImages(); renderChecks(edit ? edit.checks : []); previewMailing();
+  }
+  function renderMeta() {
+    const active = mailing && edit && edit.slug === mailing.active;
+    $("ed-meta").textContent = !edit ? "No tienes campañas: crea una con Nueva o importa un .zip."
+      : [`Guardada el ${edit.updated}`, active && "es la que se envía en Campaña",
+         edit.sent && `ya la recibieron ${fmt.format(edit.sent)} (si la cambias, los que faltan reciben la versión nueva)`]
+        .filter(Boolean).join(" · ") + ".";
+    $("ed-use").hidden = !!active;
+  }
+  async function openCampaign(slug, force) {
+    if (!force && dirty && !confirm("Tienes cambios sin guardar en esta campaña. ¿Descartarlos?")) {
+      $("ed-campaign").value = edit ? edit.slug : ""; return;
+    }
+    edit = null;
+    if (slug) {
+      try {
+        const r = await fetch(`/mailing/library?campaign=${encodeURIComponent(slug)}`, { cache: "no-store" });
+        if (r.ok) edit = await r.json();
+      } catch (e) {}
+    }
+    $("ed-campaign").value = edit ? edit.slug : "";
+    showMsg("ed-msg", "");
+    fillEditor();
+  }
+  async function loadLibrary(edSlug) {
+    try { mailing = await (await fetch("/mailing", { cache: "no-store" })).json(); } catch (e) { mailing = null; }
+    if (!mailing || !mailing.available) {
+      setTab("test"); showMsg("ml-msg", "Esta versión de la app no incluye los mailings.", false); mailing = null; return false;
+    }
+    const options = (selected) => mailing.campaigns.map((c) => `<option value="${esc(c.slug)}"${c.slug === selected ? " selected" : ""}>${
+      esc(c.name)}${c.sent ? ` · ${fmt.format(c.sent)} enviados` : ""}</option>`).join("");
+    $("ml-campaign").innerHTML = options(mailing.active) || '<option value="">No hay campañas</option>';
+    $("ed-campaign").innerHTML = options(edSlug || (edit && edit.slug) || mailing.active);
+    return true;
+  }
+  async function afterChange(r, okText) {
+    if (!r.ok) { showMsg("ed-msg", r.error || "No se pudo.", false); return; }
+    await loadLibrary(r.slug);
+    await openCampaign(r.slug, true);
+    if (okText) showMsg("ed-msg", okText, true);
+  }
+  function editorBody() {
+    return { campaign: edit && edit.slug, name: $("ed-name").value.trim(), subject: $("ml-subject").value.trim(), html: $("ml-html").value,
+             sender: { name: $("ed-sender-name").value.trim(), reply_to: $("ed-reply").value.trim() } };
+  }
+  async function saveEdit() {
+    if (!edit) return false;
+    const r = await settingsCall("/mailing/library/save", editorBody()).catch(() => ({ ok: false, error: "No se pudo guardar." }));
+    if (!r.ok) { showMsg("ed-msg", r.error, false); return false; }
+    edit = r.campaign;
+    await loadLibrary(edit.slug);
+    fillEditor();
+    showMsg("ed-msg", "Guardada.", true);
+    return true;
   }
   async function openMailer() {
     $("mailer").hidden = $("scrim").hidden = false;
     showMsg("ml-msg", "");
-    if (!mailing) {
-      try { mailing = await (await fetch("/mailing", { cache: "no-store" })).json(); } catch (e) { mailing = null; }
-      if (!mailing || !mailing.available) { setTab("test"); showMsg("ml-msg", "Esta versión de la app no incluye los mailings.", false); mailing = null; return; }
-      $("ml-campaign").innerHTML = mailing.campaigns.map((c) => `<option value="${esc(c.slug)}">${esc(c.subject)}</option>`).join("");
-      $("ml-campaign-field").hidden = mailing.campaigns.length < 2;
-      loadCampaign();
-    }
+    if (!await loadLibrary()) return;
+    if (!edit) await openCampaign($("ed-campaign").value, true);
     $("ml-from").innerHTML = mailing.senders.map((e) => `<option${e.toLowerCase() === (mailing.default_sender || "").toLowerCase() ? " selected" : ""}>${esc(e)}</option>`).join("");
     if (!mailing.senders.length) showMsg("ml-msg", "Primero agrega un buzón con su contraseña de aplicación en Configuración ▸ Buzones.", false);
     refreshCampaign(); refreshHealth();
   }
-  function closeMailer() { $("mailer").hidden = $("scrim").hidden = true; clearTimeout(campTimer); }
+  function closeMailer() {
+    if (dirty && !confirm("Tienes cambios sin guardar en la campaña. ¿Cerrar de todos modos? (Se quedan aquí mientras la app siga abierta.)")) return;
+    $("mailer").hidden = $("scrim").hidden = true; clearTimeout(campTimer);
+  }
   function setTab(tab) {
     document.querySelectorAll("#mailer .tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === tab));
     $("ml-camp-pane").hidden = tab !== "camp"; $("ml-test-pane").hidden = tab !== "test";
-    if (tab === "test") $("ml-to").focus(); else { refreshCampaign(); refreshHealth(); }
+    if (tab === "camp") { refreshCampaign(); refreshHealth(); }
   }
   document.querySelectorAll("#mailer .tabs button").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
+  $("ed-campaign").addEventListener("change", () => openCampaign($("ed-campaign").value));
+  ["ed-name", "ml-subject", "ed-sender-name", "ed-reply", "ml-html"].forEach((id) => $(id).addEventListener("input", () => {
+    setDirty(true);
+    clearTimeout(previewTimer); previewTimer = setTimeout(previewMailing, 300);
+  }));
+  $("ml-name").addEventListener("input", () => { clearTimeout(previewTimer); previewTimer = setTimeout(previewMailing, 300); });
+  $("ed-save").addEventListener("click", saveEdit);
+  $("ml-reset").addEventListener("click", () => { if (edit) openCampaign(edit.slug, true); });
+  $("ed-new").addEventListener("click", async () => {
+    if (dirty && !confirm("Tienes cambios sin guardar en esta campaña. ¿Descartarlos?")) return;
+    const name = prompt("Nombre de la campaña nueva (solo para ti):", "");
+    if (name === null) return;
+    const r = await settingsCall("/mailing/library/new", { name: name.trim() || "Campaña nueva", subject: name.trim(), html: STARTER,
+      sender: edit ? edit.sender : undefined }).catch(() => ({ ok: false }));
+    afterChange(r, "Campaña creada. Pega tu HTML o escribe sobre el de ejemplo, y guarda.");
+  });
+  $("ed-dup").addEventListener("click", async () => {
+    if (!edit || (dirty && !confirm("Se duplica la versión guardada; tus cambios sin guardar se pierden. ¿Seguir?"))) return;
+    afterChange(await settingsCall("/mailing/library/duplicate", { campaign: edit.slug }).catch(() => ({ ok: false })),
+      "Copia lista. El registro de envíos empieza en cero: la recibe toda la lista.");
+  });
+  $("ed-import").addEventListener("click", () => {
+    if (dirty && !confirm("Tienes cambios sin guardar en esta campaña. ¿Descartarlos?")) return;
+    $("ed-import-file").click();
+  });
+  $("ed-import-file").addEventListener("change", async () => {
+    const file = $("ed-import-file").files[0];
+    $("ed-import-file").value = "";
+    if (!file) return;
+    showMsg("ed-msg", `Importando ${file.name}…`, true);
+    const data = await fileData(file).catch(() => "");
+    afterChange(await settingsCall("/mailing/library/import", { filename: file.name, data })
+      .catch(() => ({ ok: false, error: "No se pudo importar (¿pesa más de 30 MB?)." })), `Importada desde ${file.name}. Revisa la vista previa y los avisos.`);
+  });
+  $("ed-delete").addEventListener("click", async () => {
+    if (!edit || !confirm(`¿Borrar “${edit.name}”? Se mueve a la papelera de tu carpeta de datos. El registro de envíos se conserva.`)) return;
+    const r = await settingsCall("/mailing/library/delete", { campaign: edit.slug }).catch(() => ({ ok: false }));
+    if (!r.ok) return showMsg("ed-msg", r.error || "No se pudo borrar.", false);
+    edit = null; setDirty(false);
+    await loadLibrary(r.active);
+    await openCampaign(r.active, true);
+    showMsg("ed-msg", "Borrada.", true);
+  });
+  $("ed-use").addEventListener("click", async () => {
+    if (!edit || (dirty && !await saveEdit())) return;
+    const r = await settingsCall("/mailing/library/active", { campaign: edit.slug }).catch(() => ({ ok: false }));
+    if (!r.ok) return showMsg("ed-msg", r.error || "No se pudo.", false);
+    await loadLibrary(edit.slug); renderMeta(); setTab("camp");
+  });
+  $("ed-add-img").addEventListener("click", () => $("ed-img-file").click());
+  $("ed-img-file").addEventListener("change", async () => {
+    const files = [...$("ed-img-file").files];
+    $("ed-img-file").value = "";
+    if (!files.length || !edit) return;
+    const payload = await Promise.all(files.map(async (f) => ({ name: f.name, data: await fileData(f) }))).catch(() => []);
+    const r = await settingsCall("/mailing/library/image", { campaign: edit.slug, files: payload })
+      .catch(() => ({ ok: false, error: "No se pudieron subir." }));
+    if (!r.ok) return showMsg("ed-msg", r.error, false);
+    edit.images = r.campaign.images; renderImages(); previewMailing();
+    showMsg("ed-msg", `Listo: ${r.added.join(", ")}. Úsalas en el HTML con src="${r.added[0]}".`, true);
+  });
+  $("ed-images").addEventListener("click", async (e) => {
+    const copy = e.target.closest("[data-copy]"), remove = e.target.closest("[data-remove]");
+    if (copy) {
+      navigator.clipboard && navigator.clipboard.writeText(`src="${copy.dataset.copy}"`).catch(() => {});
+      showMsg("ed-msg", `Copiado: src="${copy.dataset.copy}"`, true);
+    } else if (remove && edit && confirm(`¿Quitar ${remove.dataset.remove} de la campaña?`)) {
+      const r = await settingsCall("/mailing/library/image-delete", { campaign: edit.slug, name: remove.dataset.remove }).catch(() => ({ ok: false }));
+      if (r.ok) { edit.images = r.campaign.images; renderImages(); previewMailing(); }
+    }
+  });
+  document.querySelectorAll("#ml-view button").forEach((b) => b.addEventListener("click", () => {
+    pvView = b.dataset.pv;
+    document.querySelectorAll("#ml-view button").forEach((x) => x.setAttribute("aria-pressed", x === b));
+    $("ml-stage").classList.toggle("phone", pvView !== "desk");
+    previewMailing();
+  }));
 
   /* Campaña: lista, buzones, envío real con confirmación, registro */
   let camp = null, campTimer = null, chosenBoxes = null;
@@ -1462,8 +1694,7 @@
   }
   function renderCampaign(c) {
     const p = c.plan, run = c.run || {}, sk = (p && p.skipped) || {};
-    const current = currentCampaign();
-    $("cp-subject").textContent = current ? `“${current.subject}”, desde ${c.default_sender}.` : "";
+    $("cp-subject").innerHTML = c.subject ? `Asunto: “${esc(c.subject)}”, desde ${esc(c.default_sender)}. <a href="#" id="cp-edit">Editar o probar</a>` : "";
     $("cp-audience").textContent = p ? fmt.format(p.audience) : "—";
     $("cp-done").textContent = p ? fmt.format(p.already_sent) : "—";
     $("cp-pending").textContent = p ? fmt.format(p.pending) : "—";
@@ -1575,7 +1806,20 @@
   $("cp-clean-apply").addEventListener("click", () => cleanList(true));
   $("open-mailer").addEventListener("click", openMailer);
   $("close-mailer").addEventListener("click", closeMailer);
-  $("ml-campaign").addEventListener("change", () => { loadCampaign(); refreshCampaign(); refreshHealth(); });
+  $("ml-campaign").addEventListener("change", async () => {
+    const slug = $("ml-campaign").value;
+    const r = await settingsCall("/mailing/library/active", { campaign: slug }).catch(() => ({ ok: false }));
+    if (r.ok && mailing) mailing.active = r.active;
+    await loadLibrary();
+    renderMeta();
+    refreshCampaign(); refreshHealth();
+  });
+  $("cp-subject").addEventListener("click", (e) => {
+    if (e.target.id !== "cp-edit") return;
+    e.preventDefault();
+    if (!edit || edit.slug !== $("ml-campaign").value) openCampaign($("ml-campaign").value);
+    setTab("test");
+  });
   // Fill the greeting name from the contacts as the address is typed; a name typed by hand stays.
   let nameAuto = true, nameTimer = null;
   $("ml-name").addEventListener("input", () => { nameAuto = !$("ml-name").value.trim(); });
@@ -1596,17 +1840,13 @@
       previewMailing();
     }, 350);
   });
-  $("ml-reset").addEventListener("click", loadCampaign);
-  ["ml-html", "ml-subject", "ml-name"].forEach((id) => $(id).addEventListener("input", () => {
-    clearTimeout(previewTimer); previewTimer = setTimeout(previewMailing, 300);
-  }));
   $("ml-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const btn = $("ml-send"), to = $("ml-to").value.trim();
     btn.disabled = true; btn.textContent = "Enviando…"; showMsg("ml-msg", "");
     try {
       const r = await settingsCall("/mailing/test", {
-        campaign: $("ml-campaign").value, from: $("ml-from").value, to, name: $("ml-name").value.trim(),
+        campaign: edit && edit.slug, from: $("ml-from").value, to, name: $("ml-name").value.trim(),
         subject: $("ml-subject").value, html: $("ml-html").value,
       });
       if (r.ok) showMsg("ml-msg", `Listo: se envió la prueba a ${to} desde ${r.from}, con el saludo “${r.greeting}”. Revisa la bandeja (y spam).`, true);
