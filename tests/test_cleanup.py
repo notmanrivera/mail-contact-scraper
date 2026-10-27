@@ -216,3 +216,56 @@ def test_services_tab_adds_and_disables(tmp_path, monkeypatch):
     assert (tmp_path / "servicios.txt").read_text().splitlines()[-2:] == ["cinepolis.*", "-banorte.*"]
     dashboard.settings_action("/settings/services", {"enable": "banorte.*", "remove": "cinepolis.*"}, out, env)
     assert "compras@banorte.com" not in rows() and "hola@cinepolis.com" in rows()
+
+
+def test_refresh_reads_everything_again_without_losing_contacts(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("IMAP_USER", "pedro@dindustrimex.com")
+    (tmp_path / "in").mkdir()
+    for i, m in enumerate([mail("Laura <laura@aceroslaguna.com.mx>"), mail("Rafa <rafa@ruido.mx>"),
+                           mail("Promo <ventas@acerosdelnorte.mx>", List_Unsubscribe_Post="List-Unsubscribe=One-Click")]):
+        (tmp_path / "in" / f"{i}.eml").write_bytes(m.as_bytes())
+    cli.main(["--local", "in", "--output", "out", "--no-ocr"])
+    out = tmp_path / "out"
+    jsonl = out / "messages.jsonl"
+    # As if read by the version before bulk detection: no "v", no "bulk".
+    old = [{**json.loads(l), "bulk": ""} for l in jsonl.read_text().splitlines()]
+    for r in old:
+        r.pop("v")
+    jsonl.write_text("".join(json.dumps(r) + "\n" for r in old))
+    (out / "mailing").mkdir()
+    (out / "mailing" / "envios.csv").write_text("fecha,correo\n")
+    (out / "suppression.txt").write_text("# baja 2026-10-20\nx@cliente.mx\n")
+    cli.rebuild(out)
+    rows = lambda: {r["email"] for r in csv.DictReader(open(out / "contacts.csv", encoding="utf-8-sig"))}
+    assert "ventas@acerosdelnorte.mx" in rows()
+    assert cli.refresh_progress(jsonl) == (0, 3)
+
+    cli.main(["--local", "in", "--output", "out", "--no-ocr", "--refresh", "--limit", "1"])  # stopped midway
+    assert cli.refresh_progress(jsonl) == (1, 3)
+    assert len(rows()) == 3  # nobody disappears while the rest waits
+    cli.main(["--local", "in", "--output", "out", "--no-ocr", "--refresh"])
+    assert cli.refresh_progress(jsonl) == (3, 3)
+    assert len(jsonl.read_text().splitlines()) == 3  # the old copies are gone
+    assert rows() == {"laura@aceroslaguna.com.mx", "rafa@ruido.mx"}  # the newsletter is now detected
+    status = json.loads((out / "status.json").read_text())
+    assert status["refresh"] and status["messages_total"] == 3
+    assert (out / "mailing" / "envios.csv").exists() and "x@cliente.mx" in (out / "suppression.txt").read_text()
+    # A normal scan afterwards finds nothing new to read.
+    cli.main(["--local", "in", "--output", "out", "--no-ocr"])
+    assert len(jsonl.read_text().splitlines()) == 3
+
+
+def test_load_done_keeps_the_last_reading_and_skips_old_versions_on_refresh(tmp_path):
+    path = tmp_path / "messages.jsonl"
+    recs = [{"uid": "1", "folder": "INBOX", "uidvalidity": "7", "mailbox": "a@x.mx", "subject": "viejo"},
+            {"uid": "2", "folder": "INBOX", "uidvalidity": "7", "mailbox": "a@x.mx", "v": cli.READER_VERSION},
+            {"uid": "1", "folder": "INBOX", "uidvalidity": "7", "mailbox": "a@x.mx", "subject": "nuevo",
+             "v": cli.READER_VERSION}]
+    path.write_text("".join(json.dumps(r) + "\n" for r in recs[:2]))
+    done, records = cli._load_done(path, min_version=cli.READER_VERSION)
+    assert done == {"a@x.mx": {("INBOX", "7", "2")}} and len(records) == 2
+    path.write_text("".join(json.dumps(r) + "\n" for r in recs))
+    done, records = cli._load_done(path, min_version=cli.READER_VERSION)
+    assert done == {"a@x.mx": {("INBOX", "7", "1"), ("INBOX", "7", "2")}}
+    assert [r.get("subject") for r in records] == [None, "nuevo"]
