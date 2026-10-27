@@ -156,6 +156,12 @@ Configuración ▸ Ignorados ▸ **Ver la lista completa** abre una ventana con 
   persona vuelve a escribir, la marca se quita sola.
 - La vista **Dormidos** muestra las empresas sin correos en 3, 6 o 12 meses, y **Descargar
   lista** baja sus contactos (sin los rebotados) en CSV para llamarles.
+- Con el filtro **Con teléfono**, **Descargar para WhatsApp** baja `whatsapp-telefonos.csv`
+  (o `whatsapp-celulares.csv` con **Solo celulares**). Trae un renglón por número en formato
+  internacional (`+524422546851`), con tipo (celular u oficina, según la firma), nombre,
+  nombre de pila, empresa, puesto, correo, ciudad y fecha del último correo. No incluye a los
+  omitidos ni a quien pidió su baja del mailing. Un número que comparten varios contactos,
+  como un conmutador, sale una sola vez.
 
 ### Contactos de la propia empresa
 
