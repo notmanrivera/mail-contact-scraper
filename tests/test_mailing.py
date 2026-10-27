@@ -7,6 +7,7 @@ import openpyxl
 import pytest
 from pathlib import Path
 
+from mailing import send
 from mailing.build import build, load_campaign, render_html, split_name
 
 CAMPAIGN = "mailing/campaigns/qc-aro.toml"
@@ -294,3 +295,85 @@ def test_load_senders_uses_mailboxes_or_a_relay(tmp_path):
     senders, _ = load_senders(["pedro@dindustrimex.com", "ventas@dindustrimex.com"], campaign, env)
     assert [s["daily_limit"] for s in senders] == [20000, 20000]
     assert senders[1]["host"] == "email-smtp.us-east-1.amazonaws.com"
+
+
+# ---------- "Envío de prueba" in the app ----------
+
+def test_campaigns_render_ready_html():
+    found = send.campaigns()
+    qc = next(c for c in found if c["slug"] == "qc-aro")
+    assert qc["sender"] == "pedro@dindustrimex.com" and "Hola," in qc["html"]
+    assert "https://static.wixstatic.com/" in qc["html"] and "cid:" not in qc["html"]
+
+
+def test_send_test_html_sends_one_marked_message(monkeypatch):
+    smtp = FakeSMTP()
+    monkeypatch.setattr(send, "load_senders", lambda addrs, campaign, env: ([_sender(smtp, addrs[0])], None))
+    html = "<html><body><p>{{Saludo}}</p><p>Bombas &amp; aros</p></body></html>"
+    result = send.send_test_html(html, "Asunto", "ruben@test.com", "pedro@dindustrimex.com", "qc-aro")
+    assert result["from"] == "pedro@dindustrimex.com" and len(smtp.sent) == 1
+    msg = smtp.sent[0]
+    assert msg["To"] == "ruben@test.com" and msg["Subject"] == "[PRUEBA] Asunto"
+    assert msg["Reply-To"] == "ventas@dindustrimex.com"
+    assert "<p>Hola,</p>" in msg.get_body(("html",)).get_content()
+    assert "Bombas & aros" in msg.get_body(("plain",)).get_content()
+
+
+@pytest.mark.parametrize("args, error", [
+    (("<p>x</p>", "Asunto", "no-es-correo"), "correo válido"),
+    (("  ", "Asunto", "a@b.com"), "HTML"),
+    (("<p>x</p>", "", "a@b.com"), "asunto"),
+])
+def test_send_test_html_validates(args, error, monkeypatch):
+    monkeypatch.setattr(send, "load_senders", lambda *a: pytest.fail("should not connect"))
+    with pytest.raises(ValueError, match=error):
+        send.send_test_html(*args, "pedro@dindustrimex.com")
+
+
+def test_send_test_html_reports_refused_login(monkeypatch):
+    import smtplib
+
+    def refuse():
+        raise smtplib.SMTPAuthenticationError(535, b"bad credentials")
+    sender = {**_sender(None), "connect": refuse}
+    monkeypatch.setattr(send, "load_senders", lambda *a: ([sender], None))
+    with pytest.raises(ValueError, match="contraseña de aplicación"):
+        send.send_test_html("<p>x</p>", "Asunto", "a@b.com", "pedro@dindustrimex.com")
+
+
+def test_send_test_html_needs_a_configured_mailbox(tmp_path):
+    with pytest.raises(ValueError, match="IMAP_USER"):
+        send.send_test_html("<p>x</p>", "Asunto", "a@b.com", "nadie@dindustrimex.com", env_file=tmp_path / ".env")
+
+
+def test_dashboard_mailing_panel(tmp_path, monkeypatch):
+    import json
+    import threading
+    import urllib.error
+    import urllib.request
+    from mail_contact_scraper import dashboard
+
+    env = tmp_path / ".env"
+    env.write_text("IMAP_USER=pedro@dindustrimex.com\nIMAP_PASSWORD=xxxx\n")
+    smtp = FakeSMTP()
+    monkeypatch.setattr(send, "load_senders", lambda addrs, campaign, env: ([_sender(smtp, addrs[0])], None))
+    server, url = dashboard.serve(tmp_path / "out", port=18960, open_browser=False, env_path=env)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    post = lambda body, headers={"X-Requested-With": "dashboard"}: urllib.request.urlopen(urllib.request.Request(
+        url + "mailing/test", data=json.dumps(body).encode(), method="POST", headers=headers))
+    try:
+        panel = json.loads(urllib.request.urlopen(url + "mailing").read())
+        assert panel["senders"] == ["pedro@dindustrimex.com"] and panel["default_sender"] == "pedro@dindustrimex.com"
+        big = "<p>" + "x" * 200_000 + "</p>"  # pasted HTML is larger than settings bodies
+        data = json.loads(post({"from": "pedro@dindustrimex.com", "to": "ruben@test.com",
+                                "subject": "Prueba", "html": big}).read())
+        assert data["ok"] and len(smtp.sent) == 1
+        with pytest.raises(urllib.error.HTTPError) as err:
+            post({"from": "pedro@dindustrimex.com", "to": "x", "subject": "s", "html": "<p/>"})
+        assert err.value.code == 400 and "correo" in json.loads(err.value.read())["error"]
+        with pytest.raises(urllib.error.HTTPError) as err:  # other websites can't send
+            post({"to": "ruben@test.com"}, headers={})
+        assert err.value.code == 403
+        assert len(smtp.sent) == 1
+    finally:
+        server.shutdown()

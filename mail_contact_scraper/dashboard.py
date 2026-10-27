@@ -24,6 +24,7 @@ from urllib.parse import parse_qs, urlparse
 
 log = logging.getLogger(__name__)
 DEFAULT_PORT = 8765
+MAX_HTML = 5 * 1024 * 1024  # pasted mailing HTML can carry base64 images
 STATIC_TYPES = {".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp"}
 
 
@@ -217,6 +218,43 @@ def settings_action(path, body, out_dir, env_path, control=None):
     return 200, {"ok": True, **settings_payload(out_dir, env_path)}
 
 
+def _mailing_send():
+    try:
+        from mailing import send
+    except ImportError:  # a pip install without the mailing folder
+        return None
+    return send
+
+
+def mailing_payload(env_path):
+    """Campaigns and the mailboxes a test can go out from, for the "Envío de prueba" panel."""
+    from . import accounts, envfile
+
+    send = _mailing_send()
+    if not send:
+        return {"available": False, "campaigns": [], "senders": []}
+    senders = [m["email"] for m in accounts.list_mailboxes(env_path) if m["has_password"]]
+    found = send.campaigns()
+    default = found[0]["sender"] if found else ""
+    relay = bool(envfile.environ(env_path).get("SMTP_USER"))
+    if default and default.lower() not in (e.lower() for e in senders) and relay:
+        senders.insert(0, default)  # a relay can send as any address of the domain
+    return {"available": True, "campaigns": found, "senders": senders, "default_sender": default}
+
+
+def mailing_action(body, env_path):
+    """POST /mailing/test: one test message to one address. Returns (status code, payload)."""
+    send = _mailing_send()
+    if not send:
+        return 404, {"ok": False, "error": "Esta versión no incluye los mailings."}
+    try:
+        result = send.send_test_html(body.get("html"), body.get("subject"), body.get("to"),
+                                     body.get("from"), str(body.get("campaign") or ""), env_path)
+    except ValueError as exc:
+        return 400, {"ok": False, "error": str(exc)}
+    return 200, {"ok": True, **result}
+
+
 def update_action(updater, body, control, out_dir):
     """POST /update/<...> from the packaged app. Returns (status code, payload)."""
     from .updater import UpdateError
@@ -277,6 +315,8 @@ def make_handler(out_dir, control, env_path=".env", updater=None):
                 self._json(payload)
             elif url.path == "/settings":
                 self._json(settings_payload(out_dir, env_path))
+            elif url.path == "/mailing":
+                self._json(mailing_payload(env_path))
             elif url.path == "/contacts.csv" and csv_path.exists():
                 self._send(csv_path.read_bytes(), "text/csv; charset=utf-8")
             elif url.path.startswith("/static/"):
@@ -303,9 +343,9 @@ def make_handler(out_dir, control, env_path=".env", updater=None):
             elif self.path == "/stop":
                 stopped = control.stop()
                 self._json({"ok": stopped}, 200 if stopped else 409)
-            elif self.path.startswith("/settings/") or (self.path == "/update" and updater):
+            elif self.path.startswith("/settings/") or self.path == "/mailing/test" or (self.path == "/update" and updater):
                 length = int(self.headers.get("Content-Length") or 0)
-                if length > 65536:
+                if length > (MAX_HTML if self.path == "/mailing/test" else 65536):
                     return self._send(b"too large", "text/plain", 413)
                 try:
                     body = json.loads(self.rfile.read(length) or b"{}")
@@ -314,6 +354,8 @@ def make_handler(out_dir, control, env_path=".env", updater=None):
                 body = body if isinstance(body, dict) else {}
                 if self.path == "/update":
                     code, payload = update_action(updater, body, control, out_dir)
+                elif self.path == "/mailing/test":
+                    code, payload = mailing_action(body, env_path)
                 else:
                     code, payload = settings_action(self.path, body, out_dir, env_path, control)
                 self._json(payload, code)

@@ -17,6 +17,7 @@ continue later without repeating anyone. Before each run it reads the inbox for
 import argparse
 import csv
 import email
+import html as html_lib
 import imaplib
 import random
 import re
@@ -24,6 +25,7 @@ import smtplib
 import sys
 import time
 from datetime import date, datetime, timedelta
+from email.message import EmailMessage
 from email.utils import formataddr, formatdate, make_msgid, parseaddr
 from pathlib import Path
 
@@ -322,6 +324,76 @@ def send_campaign(campaign_path, contacts_csv, out_dir, *, senders, send=False, 
     if summary["rejected"]:
         add_suppression(suppression_path, summary["rejected"], "rechazado")
     return summary
+
+# --- one test message from pasted HTML (the app's "Envío de prueba") -----------------
+
+CAMPAIGNS = HERE / "campaigns"
+# Greeting merge tags of the platforms, filled with a plain "Hola," in a test.
+MERGE_GREETING = re.compile(r"\{\{\s*(?:Saludo|contact\.SALUDO)\s*\}\}|\*\|SALUDO\|\*")
+
+
+def campaigns():
+    """Saved campaigns with their subject and ready-to-send HTML, for the app."""
+    out = []
+    for path in sorted(CAMPAIGNS.glob("*.toml")):
+        c = load_campaign(path)
+        out.append({"slug": path.stem, "subject": c["subject"], "sender": c["sender"]["email"],
+                    "html": render_html(c, greeting(""), unsubscribe_mailto(c, ""))})
+    return out
+
+
+def html_to_text(body):
+    body = re.sub(r"(?is)<(style|script|head)\b.*?</\1>", " ", body)
+    body = re.sub(r"(?i)<br\s*/?>|</(p|div|tr|h[1-6]|li|table)>", "\n", body)
+    body = html_lib.unescape(re.sub(r"<[^>]+>", " ", body))
+    lines = (re.sub(r"[ \t\xa0]+", " ", line).strip() for line in body.splitlines())
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip() + "\n"
+
+
+def send_test_html(html_body, subject, to, sender_email, campaign_slug="", env_file=".env"):
+    """Send pasted HTML once to one address, marked [PRUEBA]. Raises ValueError with a
+    message for the person on anything wrong (bad address, login refused...)."""
+    to, sender_email, subject = (to or "").strip(), (sender_email or "").strip(), (subject or "").strip()
+    if not EMAIL_RE.match(to):
+        raise ValueError("Escribe un correo válido para recibir la prueba.")
+    if not (html_body or "").strip():
+        raise ValueError("Pega el HTML del mailing.")
+    if not subject:
+        raise ValueError("Escribe el asunto.")
+    path = CAMPAIGNS / f"{campaign_slug}.toml"
+    campaign = load_campaign(path if campaign_slug and path.is_file() else next(iter(sorted(CAMPAIGNS.glob("*.toml")))))
+    try:
+        sender = load_senders([sender_email], campaign, env_file)[0][0]
+    except SystemExit as exc:
+        raise ValueError(str(exc)) from None
+    html_body = MERGE_GREETING.sub(greeting(""), html_body)
+    msg = EmailMessage()
+    msg["From"] = formataddr((sender["name"], sender["email"]))
+    msg["To"] = to
+    msg["Subject"] = "[PRUEBA] " + subject
+    if campaign["sender"].get("reply_to"):
+        msg["Reply-To"] = campaign["sender"]["reply_to"]
+    msg["Date"] = formatdate(localtime=True)
+    msg["Message-ID"] = make_msgid(domain=sender["email"].split("@")[-1])
+    msg.set_content(html_to_text(html_body))
+    msg.add_alternative(html_body, subtype="html")
+    try:
+        conn = sender["connect"]()
+    except smtplib.SMTPAuthenticationError:
+        raise ValueError(f"{sender['email']} no aceptó su contraseña de aplicación para enviar. "
+                         "Revísala en Configuración ▸ Buzones.") from None
+    except (smtplib.SMTPException, OSError) as exc:
+        raise ValueError(f"No se pudo conectar a {sender['host']}: {exc}") from None
+    try:
+        conn.send_message(msg)
+    except smtplib.SMTPException as exc:
+        raise ValueError(f"El servidor rechazó la prueba: {exc}") from None
+    finally:
+        try:
+            conn.quit()
+        except Exception:
+            pass
+    return {"to": to, "from": sender["email"], "subject": msg["Subject"]}
 
 
 def main(argv=None):
