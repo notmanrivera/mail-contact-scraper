@@ -535,6 +535,12 @@
         <option value="12">Sin correos en 12 meses</option>
       </select>
       <button class="btn btn-outline" id="dormant-csv" type="button" hidden style="height:38px">Descargar lista</button>
+      <select class="filter" id="wa-kind" aria-label="Qué teléfonos" hidden>
+        <option value="">Celulares y oficina</option>
+        <option value="celulares">Solo celulares</option>
+      </select>
+      <a class="btn btn-outline" id="wa-csv" href="/whatsapp.csv" download hidden style="height:38px"
+         title="Un renglón por teléfono, sin omitidos ni bajas del mailing">Descargar para WhatsApp</a>
       <select class="filter" id="box-filter" aria-label="Buzón" hidden></select>
     </div>
     <div class="table-wrap">
@@ -1180,6 +1186,7 @@
     $("filter").disabled = v === "companies";
     $("box-filter").disabled = v !== "contacts";
     $("months").hidden = $("dormant-csv").hidden = v !== "dormant";
+    showWhatsapp();
     renderTable();
   }
 
@@ -1236,7 +1243,13 @@
   $("start").addEventListener("click", () => action("start"));
   $("stop").addEventListener("click", () => action("stop"));
   $("search").addEventListener("input", (e) => { query = e.target.value; limit = PAGE; renderTable(); });
-  $("filter").addEventListener("change", (e) => { filter = e.target.value; limit = PAGE; renderTable(); });
+  function showWhatsapp() {
+    $("wa-kind").hidden = $("wa-csv").hidden = !(view === "contacts" && filter === "phone");
+  }
+  $("filter").addEventListener("change", (e) => { filter = e.target.value; limit = PAGE; showWhatsapp(); renderTable(); });
+  $("wa-kind").addEventListener("change", (e) => {
+    $("wa-csv").href = e.target.value ? `/whatsapp.csv?solo=${e.target.value}` : "/whatsapp.csv";
+  });
   $("months").addEventListener("change", (e) => { months = +e.target.value; renderTable(); });
   $("dormant-csv").addEventListener("click", downloadDormant);
   let toastTimer = null;
@@ -1281,7 +1294,7 @@
     const card = e.target.closest(".rc");
     if (!card) return;
     openEmail = openEmail === card.dataset.email ? null : card.dataset.email;
-    activeCompany = null; query = ""; $("search").value = ""; filter = "all"; $("filter").value = "all";
+    activeCompany = null; query = ""; $("search").value = ""; filter = "all"; $("filter").value = "all"; showWhatsapp();
     if (view !== "contacts") setView("contacts");
     renderRecent(); renderCompanies(); renderTable();
     const row = document.querySelector(`tr[data-email="${CSS.escape(card.dataset.email)}"]`);

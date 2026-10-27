@@ -8,6 +8,7 @@ Serves on 127.0.0.1 only, so the contact data never leaves this computer.
 import argparse
 import importlib.util
 import csv
+import io
 import json
 import logging
 import os
@@ -208,6 +209,55 @@ def _read_suppression(path):
         elif line.strip():
             out.append({"email": line.strip().lower(), "reason": reason, "date": when})
     return out
+
+
+WHATSAPP_FIELDS = ["telefono", "tipo", "nombre", "nombre_pila", "empresa", "puesto", "correo", "ciudad", "ultimo_correo"]
+
+
+def _first_name(name):
+    try:
+        from mailing.build import split_name
+    except ImportError:
+        return (name or "").split(" ")[0]
+    return split_name(name)[0]
+
+
+def whatsapp_rows(out_dir, only_mobile=False):
+    """One row per phone number, for a WhatsApp Business list.
+
+    contacts.csv already leaves out the omitted senders; this also drops anyone who
+    unsubscribed from the mailing (a bounced address still has a good phone). A number
+    shared by several contacts, like a switchboard, appears once, for the contact who
+    writes most. Celulares go first.
+    """
+    out_dir = Path(out_dir)
+    opted_out = {s["email"] for s in _read_suppression(out_dir / "suppression.txt") if s["reason"] != "rebote"}
+    contacts = sorted(_read_contacts(out_dir / "contacts.csv"), key=lambda c: -int(c.get("messages") or 0))
+    rows, seen = [], set()
+    for kind, column in (("celular", "mobile_phones"), ("oficina", "office_phones")):
+        if only_mobile and kind != "celular":
+            break
+        for c in contacts:
+            if c["email"].lower() in opted_out:
+                continue
+            for phone in filter(None, (p.strip() for p in (c.get(column) or "").split(";"))):
+                if phone in seen:
+                    continue
+                seen.add(phone)
+                rows.append({"telefono": phone, "tipo": kind, "nombre": c.get("name", ""),
+                             "nombre_pila": _first_name(c.get("name", "")), "empresa": c.get("company", ""),
+                             "puesto": c.get("title", ""), "correo": c["email"], "ciudad": c.get("location", ""),
+                             "ultimo_correo": (c.get("last_seen") or "")[:10]})
+    return rows
+
+
+def whatsapp_csv(out_dir, only_mobile=False):
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=WHATSAPP_FIELDS, lineterminator="\r\n")
+    writer.writeheader()
+    writer.writerows(whatsapp_rows(out_dir, only_mobile))
+    name = "whatsapp-celulares.csv" if only_mobile else "whatsapp-telefonos.csv"
+    return "\ufeff" + buf.getvalue(), name
 
 
 OCR_ENGINES = ("tesseract", "auto", "claude")
@@ -455,6 +505,17 @@ def make_handler(out_dir, control, env_path=".env", updater=None):
             elif url.path == "/mailing/campaign":
                 code, payload = mailing_overview(parse_qs(url.query), out_dir, env_path, send_run)
                 self._json(payload, code)
+            elif url.path == "/whatsapp.csv":
+                only_mobile = parse_qs(url.query).get("solo", [""])[0] == "celulares"
+                text, name = whatsapp_csv(out_dir, only_mobile)
+                body = text.encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/csv; charset=utf-8")
+                self.send_header("Content-Disposition", f'attachment; filename="{name}"')
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(body)
             elif url.path == "/contacts.csv" and csv_path.exists():
                 self._send(csv_path.read_bytes(), "text/csv; charset=utf-8")
             elif url.path.startswith("/static/"):
