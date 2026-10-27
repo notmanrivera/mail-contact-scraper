@@ -37,7 +37,7 @@ body = "Dos equipos que resuelven el 80% de los dolores de cabeza en planta. Los
 image = "hero.png"
 image_alt = "Bomba centrífuga Q-Pumps QC y bomba de doble diafragma ARO"
 cta_label = "Quiero mi cotización"
-cta_url = "mailto:ventas@dindustrimex.com?subject=Quiero%20mi%20cotizaci%C3%B3n"
+cta_url = "https://wa.me/524424998283?text=Hola%2C%20quiero%20una%20cotizaci%C3%B3n%20de%20bombas%20Q-Pumps%20/%20ARO."
 
 [[blocks]]
 brand = "Q-Pumps · Serie QC"
@@ -52,7 +52,7 @@ checks = [
   "¿Ya tienes una Serie C de otra marca? Conviértela a QC+ con un Kit+, sin cambiar de bomba",
 ]
 cta_label = "Cotizar QC"
-cta_url = "mailto:ventas@dindustrimex.com?subject=Cotizaci%C3%B3n%20Q-Pumps%20QC"
+cta_url = "https://wa.me/524424998283?text=Hola%2C%20quiero%20cotizar%20una%20bomba%20centr%C3%ADfuga%20Q-Pumps%20Serie%20QC."
 
 [[blocks]]
 brand = "ARO · Doble diafragma"
@@ -69,7 +69,7 @@ checks = [
   "Respaldo de garantía de fábrica",
 ]
 cta_label = "Cotizar ARO"
-cta_url = "mailto:ventas@dindustrimex.com?subject=Cotizaci%C3%B3n%20ARO%20doble%20diafragma"
+cta_url = "https://wa.me/524424998283?text=Hola%2C%20quiero%20cotizar%20una%20bomba%20ARO%20de%20doble%20diafragma."
 
 [closing]
 question = "¿No sabes cuál **te toca**?"
@@ -83,7 +83,7 @@ body = [
 ]
 contact = "ventas@dindustrimex.com · 442 499 8283"
 cta_label = "Quiero mi cotización"
-cta_url = "mailto:ventas@dindustrimex.com?subject=Quiero%20mi%20cotizaci%C3%B3n"
+cta_url = "https://wa.me/524424998283?text=Hola%2C%20quiero%20una%20cotizaci%C3%B3n%20de%20bombas%20Q-Pumps%20/%20ARO."
 
 [signature]
 name = "Pedro Marquina"
