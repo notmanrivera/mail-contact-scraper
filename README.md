@@ -184,12 +184,13 @@ barra de menú y abre el panel en el navegador. Los buzones se agregan desde el 
   (`.env` con los buzones y contraseñas, `output/` con `contacts.csv`). Cada usuario de la Mac
   tiene los suyos; la app no lleva ninguna credencial. Menú del sobre ▸ *Abrir carpeta de
   contactos* abre `output/`.
-- **Cómo se publica:** cada merge a `main` corre `.github/workflows/mac-app.yml` en Macs de
-  GitHub (Apple Silicon e Intel), arma la app, la prueba (OCR, scraper con los correos de
-  `tests/fixtures`, panel) y crea un release `v1.0.N` con `…-arm64.dmg` / `…-x86_64.dmg` para
-  instalar y `….app.zip` para las actualizaciones. En cada PR se arma igual y queda como
-  artefacto del workflow, sin publicarse.
-- **Actualizaciones:** la app revisa el último release al abrirse y cada 6 horas, lo descarga
+- **Cómo se publica:** desde una Mac con Apple Silicon, `packaging/release_local.sh` (ver
+  abajo) arma lo que está en `main`, lo prueba (pruebas, OCR, scraper con los correos de
+  `tests/fixtures`, panel) y crea el release `v1.0.N` con `…-arm64.dmg` para instalar y
+  `….app.zip` para las actualizaciones. No gasta minutos de GitHub Actions. El workflow
+  `.github/workflows/mac-app.yml` hace lo mismo en GitHub, pero solo a mano (pestaña Actions ▸
+  *Run workflow*), porque los minutos de macOS cuentan 10 veces en el plan gratis.
+- **Actualizaciones:** la app revisa los releases al abrirse y cada media hora, lo descarga
   en segundo plano y lo instala la próxima vez que se abre o al salir (o al momento con
   *Actualizar ahora* en el panel). No actualiza a media corrida de escaneo.
   La v1.0.6 no podía conectarse por HTTPS (le faltaban los certificados); quien la tenga
@@ -202,8 +203,8 @@ barra de menú y abre el panel en el navegador. Los buzones se agregan desde el 
 
 ### Instalar en otra Mac
 
-1. En GitHub ▸ Releases, baja el `.dmg` de la versión más nueva: `arm64` para Macs con chip
-   Apple (M1, M2…), `x86_64` para Macs con Intel ( ▸ Acerca de esta Mac lo dice).
+1. En GitHub ▸ Releases, baja el `.dmg` de la versión más nueva (`arm64`, para Macs con chip
+   Apple: M1, M2…). Para una Mac con Intel hay que correr `release_local.sh` en una Mac Intel.
 2. Pásalo a la otra Mac (AirDrop, USB), ábrelo y arrastra la app a Aplicaciones.
 3. Abre la app. Como no está firmada con una cuenta de desarrollador de Apple (99 USD/año),
    macOS la bloquea la primera vez: Configuración del Sistema ▸ Privacidad y seguridad ▸
@@ -221,6 +222,20 @@ open dist/
 ```
 
 `python -m mail_contact_scraper.app` corre lo mismo desde el código, sin el ícono de la barra.
+
+### Publicar una versión desde una Mac (sin GitHub Actions)
+
+```bash
+git clone https://github.com/notmanrivera/mail-contact-scraper.git   # solo la primera vez
+cd mail-contact-scraper
+packaging/release_local.sh
+```
+
+Instala lo que falte con Homebrew, pide entrar a GitHub la primera vez (`gh auth login`),
+arma lo que está en `main`, lo prueba y publica el release `v1.0.N` siguiente (unos 5
+minutos). Las apps instaladas lo encuentran solas en menos de media hora. Arma para el
+procesador de esa Mac; correrlo en una Mac Intel sobre el mismo commit agrega esa versión
+al mismo release.
 
 ## Firmas en imagen
 
