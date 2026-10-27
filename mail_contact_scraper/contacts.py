@@ -9,6 +9,8 @@ from pathlib import Path
 import phonenumbers
 from phonenumbers import geocoder
 
+from .enrich import domain_of
+
 AUTOMATED_RE = re.compile(
     r"^(no[-_]?reply|do[-_]?not[-_]?reply|mailer-daemon|postmaster|notifications?|notificaciones|"
     r"bounce[s]?|alerts?|alertas|avisos?|newsletter|news|boletin|info-noreply|automated|system|"
@@ -66,9 +68,9 @@ def automated_rule(addr):
     return ""
 
 FIELDS = [
-    "email", "name", "title", "company", "location", "mobile_phones", "office_phones", "fax",
+    "email", "name", "title", "company", "sector", "location", "mobile_phones", "office_phones", "fax",
     "other_emails", "websites", "source", "messages", "first_seen", "last_seen", "sample_signature",
-    "mailboxes", "bounced",
+    "mailboxes", "bounced", "company_web",
 ]
 
 
@@ -199,7 +201,7 @@ def _find(addr, emails, domains):
 
 class ContactBook:
     def __init__(self, exclude=(), skip_automated=True, exclude_domains=(), skip_services=True, ignore=(),
-                 allow=(), services=((), ())):
+                 allow=(), services=((), ()), companies=None):
         self.exclude = {e.lower() for e in exclude if e}
         self.skip_automated = skip_automated
         self.exclude_domains = tuple(d.lower() for d in exclude_domains if d)
@@ -211,6 +213,7 @@ class ContactBook:
         self.rows = {}
         self.bounces = {}
         self.omitted = {}  # address -> reason, for the dashboard's count
+        self.companies = companies or {}  # domain -> (sector, site description), from enrich.py
         self.omitted_info = {}  # address -> rule, times seen, last date, name: the "Ignorados" list
 
     def _excluded_domain(self, addr):
@@ -345,17 +348,20 @@ class ContactBook:
         for addr, row in sorted(self.rows.items()):
             def by_label(*labels):
                 return "; ".join(p for p, l in row["phones"].items() if l in labels)
+            websites = "; ".join(row["websites"])
+            sector, about = self.companies.get(domain_of({"email": addr, "websites": websites}), ("", ""))
             out.append({
                 "email": addr,
                 "name": _top(row["names"]),
                 "title": _top(row["titles"]),
                 "company": _top(row["companies"]),
+                "sector": sector,
                 "location": _location(row["phones"]),
                 "mobile_phones": by_label("mobile"),
                 "office_phones": by_label("office", ""),
                 "fax": by_label("fax"),
                 "other_emails": "; ".join(row["other_emails"]),
-                "websites": "; ".join(row["websites"]),
+                "websites": websites,
                 "source": "+".join(sorted(row["sources"])),
                 "messages": row["messages"],
                 "first_seen": row["first_seen"] or "",
@@ -363,6 +369,7 @@ class ContactBook:
                 "sample_signature": row["signature"].replace("\n", " | "),
                 "mailboxes": "; ".join(row["mailboxes"]),
                 "bounced": self._bounced(addr, row),
+                "company_web": about,
             })
         return out
 

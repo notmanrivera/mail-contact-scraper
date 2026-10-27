@@ -306,6 +306,24 @@ se quedan con la lectura vieja. Configuración ▸ **Volver a leer todo**, o
 - Los ignorados, servicios y permitidos no lo necesitan: se aplican al momento a todo lo
   ya leído cada vez que se arma el CSV.
 
+## Giro de cada empresa
+
+Al terminar cada escaneo, la app visita una vez la página web de cada empresa nueva (el
+dominio de su correo; si es Gmail, Outlook, etc., la web de su firma) y lee el título, la
+descripción y, si dicen poco, la página "Nosotros". Con eso le pone un giro: Alimentos y
+bebidas, Farmacéutica, Automotriz, Construcción, Metalmecánica, Plásticos y hule, Empaque y
+embalaje, Logística y transporte, Maquinaria y equipo industrial, etc. Si no reconoce el
+giro, la columna queda vacía.
+
+- Sale en la columna `sector` del CSV y de Google Sheets, debajo de la empresa en el
+  dashboard, en el filtro **Todos los giros** de Contactos y Empresas, y en la columna `giro`
+  de la descarga para WhatsApp.
+- Las respuestas se guardan en `output/empresas.json`: cada sitio se visita una sola vez (se
+  revisa de nuevo a los 6 meses, o al mes si no abrió). Son 6 segundos máximo por sitio,
+  8 a la vez, hasta `ENRICH_MAX` (400) sitios nuevos por escaneo.
+- Solo se pide la página pública de la empresa; no se manda ningún dato de los contactos.
+- Para apagarlo: `ENRICH_DOMAINS=false` en `.env`.
+
 ## Contraseña según el proveedor
 
 El servidor se detecta con los registros MX de `dindustrimex.com`. Si la detección
@@ -319,8 +337,11 @@ falla, pon `IMAP_HOST` en `.env`.
 
 ## Columnas del CSV
 
-`email, name, title, company, location, mobile_phones, office_phones, fax, other_emails,
-websites, source, messages, first_seen, last_seen, sample_signature, mailboxes, bounced`
+`email, name, title, company, sector, location, mobile_phones, office_phones, fax, other_emails,
+websites, source, messages, first_seen, last_seen, sample_signature, mailboxes, bounced, company_web`
+
+- `sector`: el giro de la empresa según su página web (ver abajo); `company_web`, lo que
+  dice su página de sí misma.
 
 - `source`: `signature` (salió de una firma), `image` (de una firma en imagen vía OCR)
   o `header` (solo aparece en De/Para/CC).
