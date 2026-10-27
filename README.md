@@ -119,6 +119,11 @@ Se omiten solos:
   `Precedence: bulk`, `Auto-Submitted` o de plataformas de envío). Los grupos de Google
   como ventas@ no cuentan como masivos.
 - **Remitentes automáticos**: `no-reply@`, `notificaciones@`, `avisos@`, `marketing@`...
+  También `reply@` y `reply-…@` (la dirección de respuesta de una plataforma de mailing),
+  cualquier dirección que contenga `noreply` (`catalog-noreply@`), las que salen de un
+  subdominio de envío (`@mail.marca.com`, `@reply.marca.com`, `@e.marca.com`) y las que son
+  un código aleatorio (`c.1d48d1c7758e42e4…@`). Si alguna sí es un cliente, pulsa
+  **Permitir** en Ignorados ▸ Omitidos.
 
 Si se cuela alguno, ábrelo en la tabla y pulsa **Ignorar este correo** o **Ignorar todo
 @dominio**. Se guarda en `ignorados.txt` (junto a `.env`), se quita del CSV en ese momento y

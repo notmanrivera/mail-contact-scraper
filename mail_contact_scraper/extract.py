@@ -110,12 +110,18 @@ def _best_name(header_name, signature_name):
     return signature_name or header_name
 
 
+SENDING_LABELS = {"mail", "email", "e", "em", "reply", "news", "newsletter", "mailer", "mailing", "mkt", "smtp", "correo"}
+
+
 def company_from_domain(addr_or_url):
     host = addr_or_url.rsplit("@", 1)[-1].lower()
     host = re.sub(r"^(https?://)?(www\.)?", "", host).split("/")[0]
     if not host or host in FREE_MAIL:
         return ""
-    return host.split(".")[0].replace("-", " ").title()
+    labels = host.split(".")
+    while len(labels) > 2 and labels[0] in SENDING_LABELS:  # mail.pmmimediagroup.com -> Pmmimediagroup
+        labels = labels[1:]
+    return labels[0].replace("-", " ").title()
 
 
 def parse_signature(signature, from_name="", from_email="", region="MX"):

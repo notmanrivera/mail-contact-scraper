@@ -1609,10 +1609,17 @@
   const SUPP = { baja: "Pidió su baja", rebote: "Rebotó", rechazado: "Rechazado" };
   const domainOf = (e) => e.split("@").pop();
   const kindOf = (v) => v.includes("@") ? "Correo" : v.endsWith(".*") ? "Dominio, cualquier terminación" : "Dominio";
+  function autoWhy(rule) {
+    if (!rule) return "Nombre automático";
+    if (rule === "código") return "La dirección es un código aleatorio";
+    if (rule.startsWith("@")) return `Se envía desde un subdominio de mailing (${rule})`;
+    if (rule.startsWith("*")) return `Contiene ${rule.replace(/[*@]/g, "")}`;
+    return `Empieza con ${rule}`;
+  }
   function whyText(o) {
     if (o.reason === "service") return `Lista integrada: ${o.rule || domainOf(o.email)}`;
     if (o.reason === "bulk") return `Masivo: ${BULK_WHY[o.rule] || "encabezados de mailing"}`;
-    if (o.reason === "automated") return `Empieza con ${o.rule || "un nombre automático"}`;
+    if (o.reason === "automated") return autoWhy(o.rule);
     return `Tu lista: ${o.rule || o.email}`;
   }
   async function loadIgnored() {
