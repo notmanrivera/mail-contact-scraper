@@ -186,3 +186,33 @@ def test_full_ignored_window(tmp_path, monkeypatch):
     rows = {r["email"] for r in csv.DictReader(open(out / "contacts.csv", encoding="utf-8-sig"))}
     assert {"recibos@uber.com", "rafa@ruido.mx", "laura@aceroslaguna.com.mx"} <= rows
     assert dashboard.ignored_payload(out, env)["omitted"] == []
+
+
+def test_services_tab_adds_and_disables(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("IMAP_USER", "pedro@dindustrimex.com")
+    (tmp_path / "in").mkdir()
+    for i, m in enumerate([mail("Uber <recibos@uber.com>"), mail("Banorte <compras@banorte.com>"),
+                           mail("Estafeta <avisos2@estafeta.com>"), mail("Cinepolis <hola@cinepolis.com>")]):
+        (tmp_path / "in" / f"{i}.eml").write_bytes(m.as_bytes())
+    cli.main(["--local", "in", "--output", "out", "--no-ocr"])
+    out, env = tmp_path / "out", tmp_path / ".env"
+    rows = lambda: {r["email"] for r in csv.DictReader(open(out / "contacts.csv", encoding="utf-8-sig"))}
+    assert "hola@cinepolis.com" in rows() and "compras@banorte.com" not in rows()
+
+    lists = dashboard.ignored_payload(out, env)
+    uber = next(v for v in lists["services"] if v["entry"] == "uber.*")
+    assert uber == {"entry": "uber.*", "category": "Apps de transporte y comida", "builtin": True,
+                    "disabled": False, "hides": 1}
+
+    code, data = dashboard.settings_action("/settings/services", {"add": "cinepolis.*, uber.*"}, out, env)
+    assert code == 200 and "hola@cinepolis.com" not in rows()
+    mine = [v for v in data["lists"]["services"] if not v["builtin"]]
+    assert mine == [{"entry": "cinepolis.*", "category": "Agregados por ti", "builtin": False, "disabled": False, "hides": 1}]
+    assert dashboard.settings_action("/settings/services", {"add": "juan@x.mx"}, out, env)[0] == 400
+
+    dashboard.settings_action("/settings/services", {"disable": "banorte.*"}, out, env)
+    assert "compras@banorte.com" in rows()
+    assert (tmp_path / "servicios.txt").read_text().splitlines()[-2:] == ["cinepolis.*", "-banorte.*"]
+    dashboard.settings_action("/settings/services", {"enable": "banorte.*", "remove": "cinepolis.*"}, out, env)
+    assert "compras@banorte.com" not in rows() and "hola@cinepolis.com" in rows()

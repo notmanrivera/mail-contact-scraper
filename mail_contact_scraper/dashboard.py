@@ -153,16 +153,23 @@ def ignored_payload(out_dir, env_path):
     """GET /ignored: the user's two lists, everyone left out and why, and the mailing's
     unsubscribes and bounces (read only: those are the mailing's to keep)."""
     from .config import load_settings
-    from .contacts import read_ignore_file
+    from .contacts import read_ignore_file, read_services_file, service_catalog
 
     settings = load_settings(env_path)
     omitted = _read_json_list(Path(out_dir) / "omitted.json")
-    hides = {}
+    hides = {"ignored": {}, "service": {}}
     for o in omitted:
-        if o.get("reason") == "ignored" and o.get("rule"):
-            hides[o["rule"]] = hides.get(o["rule"], 0) + 1
+        if o.get("reason") in hides and o.get("rule"):
+            hides[o["reason"]][o["rule"]] = hides[o["reason"]].get(o["rule"], 0) + 1
+    added, disabled = read_services_file(settings.services_file)
+    services = [{"entry": e, "category": "Agregados por ti", "builtin": False, "disabled": False,
+                 "hides": hides["service"].get(e, 0)} for e in added]
+    services += [{"entry": e, "category": c, "builtin": True, "disabled": e in disabled,
+                  "hides": hides["service"].get(e, 0)} for c, e in service_catalog()]
     return {
-        "ignored": [{"value": v, "hides": hides.get(v, 0)} for v in read_ignore_file(settings.ignore_file)],
+        "services": services,
+        "services_on": settings.skip_services,
+        "ignored": [{"value": v, "hides": hides["ignored"].get(v, 0)} for v in read_ignore_file(settings.ignore_file)],
         "allowed": read_ignore_file(settings.allow_file),
         "omitted": omitted,
         "suppression": _read_suppression(Path(out_dir) / "suppression.txt"),
@@ -226,6 +233,16 @@ def settings_action(path, body, out_dir, env_path, control=None):
     from . import accounts, schedule, sheets
 
     try:
+        if path == "/settings/services":
+            from . import cli
+            from .config import load_settings
+            from .contacts import update_services_file
+
+            settings = load_settings(env_path)
+            update_services_file(settings.services_file, **{k: body.get(k) for k in ("add", "remove", "disable", "enable")})
+            if not (control and control.alive(_read_json(Path(out_dir) / "status.json"))):
+                cli.rebuild(out_dir, settings)
+            return 200, {"ok": True, **settings_payload(out_dir, env_path), "lists": ignored_payload(out_dir, env_path)}
         if path in ("/settings/ignore", "/settings/allow"):
             from . import cli
             from .config import load_settings

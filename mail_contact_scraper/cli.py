@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .config import load_settings
-from .contacts import ContactBook, read_ignore_file
+from .contacts import ContactBook, read_ignore_file, read_services_file
 from .extract import parse_signature
 from .parse import parse_message
 from .signature import IMG_TOKEN_RE, extract_signature
@@ -118,6 +118,7 @@ def build_contacts(records, settings, out_dir):
         # Read every time: the dashboard's "Ignorar" button edits it while a scan runs.
         ignore=read_ignore_file(settings.ignore_file),
         allow=read_ignore_file(settings.allow_file),
+        services=read_services_file(settings.services_file),
     )
     for rec in records:
         book.add_sender(rec)
