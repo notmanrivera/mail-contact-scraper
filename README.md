@@ -344,9 +344,13 @@ estén en `output/suppression.txt` (uno por línea; ahí van las bajas).
       y manda un solo correo con [PRUEBA] desde el buzón que elijas. No toca `envios.csv`.
   - Cada envío queda en `output/mailing/<campaña>/envios.csv` (fecha, correo, estado). Al
     volver a correrlo sigue con los pendientes y nunca repite a nadie.
-  - Límites: 1,500 al día por buzón (`--daily-limit`), con ~4 s entre correos (`--pause`);
-    `--limit` corta la corrida antes. Google Workspace permite 2,000 al día por usuario. Si
-    Google frena un buzón, ese buzón se detiene y los demás siguen.
+  - Límites: 1,500 al día por buzón (`--daily-limit`), con 3 a 6 s entre correos (`--pause`)
+    y una pausa de 30 a 90 s cada ~50; `--limit` corta la corrida antes. Google Workspace
+    permite 2,000 al día por usuario, pero para correo en frío conviene 300–500 por buzón y
+    repartir en varios buzones. Si Google frena un buzón, ese buzón se detiene y los demás siguen.
+  - Conexión: abre una sesión SMTP nueva cada 50 correos (Gmail corta las largas con
+    `421 4.7.0 Connection expired`). Si se corta o responde 4xx, reconecta y reintenta el mismo
+    correo tras 10, 30 y 60 s; nadie queda marcado como fallido por eso.
   - **Más volumen con varios buzones:** `--from` se repite y los buzones se turnan; cada uno
     lleva su propio cupo diario y su contraseña de aplicación en `.env` (`IMAP_USER_2`...):
     ```bash
