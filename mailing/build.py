@@ -176,7 +176,7 @@ def render_text(campaign, greeting_text, unsubscribe_url):
         lines += [f"  ✓ {check}" for check in b["checks"]]
         lines += [f"{b['cta_label'].rstrip(' →')}: {b['cta_url']}", ""]
     lines += [plain(c["closing"]["question"]), c["closing"].get("intro", "")]
-    lines += [f"  {ch['label']}: va {ch['pick']}" for ch in c["closing"].get("choices", [])]
+    lines += [f"  {ch['label']} → {ch['pick']}" for ch in c["closing"].get("choices", [])]
     lines += [*c["closing"]["body"], c["closing"]["contact"], ""]
     s = c["signature"]
     lines += [s["name"], s["title"], s["address"], c["footer"]["site"], "",

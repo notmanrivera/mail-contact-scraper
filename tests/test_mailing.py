@@ -495,3 +495,20 @@ def test_send_test_html_greets_by_name(tmp_path, monkeypatch):
     nobody = send.send_test_html(html, "A", "otro@x.com", "pedro@dindustrimex.com", contacts_csv=contacts)
     assert [found["greeting"], typed["greeting"], nobody["greeting"]] == ["Hola Peter,", "Hola Rubén,", "Hola,"]
     assert "<p>Hola Peter,</p>" in smtp.sent[0].get_body(("html",)).get_content()
+
+
+def test_dashboard_fills_greeting_name(tmp_path):
+    import json
+    import threading
+    import urllib.request
+    from mail_contact_scraper import dashboard
+
+    write_contacts(tmp_path / "contacts.csv", [{"email": "peter@zlm.agency", "name": "Ing. PETER Zamora", "source": "signature"}])
+    server, url = dashboard.serve(tmp_path, port=18995, open_browser=False, env_path=tmp_path / ".env")
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        get = lambda q: json.loads(urllib.request.urlopen(url + "mailing/name?email=" + q).read())
+        assert get("Peter%40zlm.agency") == {"name": "Ing. PETER Zamora", "first": "Peter"}
+        assert get("otro%40x.com") == {"name": "", "first": ""}
+    finally:
+        server.shutdown()

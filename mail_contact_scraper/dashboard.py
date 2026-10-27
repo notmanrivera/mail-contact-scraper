@@ -347,6 +347,12 @@ def make_handler(out_dir, control, env_path=".env", updater=None):
                 self._json(settings_payload(out_dir, env_path))
             elif url.path == "/mailing":
                 self._json(mailing_payload(env_path))
+            elif url.path == "/mailing/name":
+                send = _mailing_send()
+                address = parse_qs(url.query).get("email", [""])[0].strip()
+                name = send.contact_name(csv_path, address) if send and address else ""
+                first = send.split_name(name)[0] if name else ""
+                self._json({"name": name, "first": first})
             elif url.path == "/mailing/campaign":
                 code, payload = mailing_overview(parse_qs(url.query), out_dir, env_path, send_run)
                 self._json(payload, code)
