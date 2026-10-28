@@ -454,7 +454,7 @@ class SendRun:
         progress = lambda text: self._set(checking=text)
         try:
             unsub, bounced = self._check(out_dir, env_path, path.stem, progress, self._stop.is_set)
-            note = f"Bajas nuevas: {len(unsub)} · rebotes nuevos: {len(bounced)}."
+            note = f"Bajas nuevas: {len(unsub)} · rebotes o bloqueos nuevos: {len(bounced)}."
         except ValueError as exc:
             note = f"{exc} Sigo con la lista que ya había."
         try:

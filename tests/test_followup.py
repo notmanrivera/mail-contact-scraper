@@ -56,6 +56,9 @@ def test_classify_replies():
     assert replies.classify(away, TODAY) == ("fuera-de-oficina", date(2026, 11, 17), ["pedro.lopez@cliente.mx"])
     gone = _msg("beto@cliente.mx", "RE: Bombeo", "Beto ya no labora en la empresa, favor de escribir a compras@cliente.mx")
     assert replies.classify(gone, TODAY) == ("ya-no-labora", None, ["compras@cliente.mx"])
+    left = _msg("maricela@cliente.mx", "Respuesta automática: Bombeo", "Thank you for your message. Please note that "
+                "Maricela Cardenas has left our company.", Auto_Submitted="auto-replied")
+    assert replies.classify(left, TODAY)[0] == "ya-no-labora"
     lead = _msg("caro@cliente.mx", "RE: Bombeo", "Me interesa, mándame precio de la QC.\n\n"
                 "El lun, 2 nov 2026 a las 10:00, Pedro <pedro@dindustrimex.com> escribió:\n> ya no labora")
     assert replies.classify(lead, TODAY) == ("respondió", None, [])

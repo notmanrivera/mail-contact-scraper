@@ -297,15 +297,17 @@ class Seen:
 
 def sync_suppression(mailboxes, suppression_path, connect, own_domains=(), days=90, seen_path=None,
                      progress=None, stop=None):
-    """Add 'Baja de correos' requests and bounced recipients from the inboxes to the list.
+    """Add 'Baja de correos' requests, bounced and blocked recipients from the inboxes to the list.
+
+    Returns (new opt-outs, new bounced + blocked): both count as failures for the breaker.
 
     Reads only (BODY.PEEK), nothing is marked as read. With seen_path, skips what an earlier
     check already read. progress(text) tells how far it is; stop() ends it early (Stopped).
     """
-    from mail_contact_scraper.parse import bounced_addresses
+    from mail_contact_scraper.parse import delivery_failures
 
     since = (date.today() - timedelta(days=days)).strftime("%d-%b-%Y")
-    unsubscribed, bounced = set(), set()
+    unsubscribed, bounced, blocked = set(), set(), set()
     seen = Seen(seen_path)
     for box in mailboxes:
         if progress:
@@ -330,7 +332,8 @@ def sync_suppression(mailboxes, suppression_path, connect, own_domains=(), days=
                 raw = next((p[1] for p in parts if isinstance(p, tuple)), b"")
                 msg = email.message_from_bytes(raw)
                 if bucket is bounced:
-                    bucket.update(bounced_addresses(msg))
+                    for addr, kind in delivery_failures(msg):
+                        (blocked if kind == "bloqueado" else bounced).add(addr)
                     continue
                 bucket.add(parseaddr(msg.get("From", ""))[1].lower())
                 # the unsubscribe link puts the address that got the mailing in the body
@@ -346,8 +349,11 @@ def sync_suppression(mailboxes, suppression_path, connect, own_domains=(), days=
                 pass
     own = {d.lower() for d in own_domains}
     keep = lambda addrs: {a for a in addrs if EMAIL_RE.match(a) and a.split("@")[-1] not in own}
+    # Blocked ones go to the list too, under their own reason: sending again before the
+    # domain's SPF/DKIM is fixed only gets blocked again and hurts the mailbox.
     found = (add_suppression(suppression_path, keep(unsubscribed), "baja"),
-             add_suppression(suppression_path, keep(bounced), "rebote"))
+             add_suppression(suppression_path, keep(bounced), "rebote")
+             + add_suppression(suppression_path, keep(blocked - bounced), "bloqueado"))
     seen.save()
     return found
 
