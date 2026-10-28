@@ -285,9 +285,9 @@ def _emails_in_file(filename, data):
 def keep_only(out_dir, env_path, slug, filename, data, apply=False):
     """Pending prospects of the campaign that are NOT in the uploaded list (the person cleaned
     it up: the rest are competitors). apply=True adds them to the suppression list and to the
-    scraper's ignore list (a whole domain when every contact of it is in this group)."""
+    scraper's competitors list (a whole domain when every contact of it is in this group)."""
     from mail_contact_scraper.config import load_settings
-    from mail_contact_scraper.contacts import update_ignore_file
+    from mail_contact_scraper.contacts import COMPETITORS_HEADER, update_ignore_file
 
     keep = _emails_in_file(filename, data)
     if not keep:
@@ -322,7 +322,7 @@ def keep_only(out_dir, env_path, slug, filename, data, apply=False):
               "entries": entries, "csv": "\ufeff" + out.getvalue(), "applied": False}
     if apply and extra:
         send.add_suppression(where["suppression"], extra_emails, "competencia")
-        update_ignore_file(load_settings(env_path).ignore_file, add=" ".join(entries))
+        update_ignore_file(load_settings(env_path).competitors_file, add=" ".join(entries), header=COMPETITORS_HEADER)
         result["applied"] = True
     return result
 

@@ -169,7 +169,7 @@ def ignored_payload(out_dir, env_path):
 
     settings = load_settings(env_path)
     omitted = _read_json_list(Path(out_dir) / "omitted.json")
-    hides = {"ignored": {}, "service": {}}
+    hides = {"ignored": {}, "service": {}, "competitor": {}}
     for o in omitted:
         if o.get("reason") in hides and o.get("rule"):
             hides[o["reason"]][o["rule"]] = hides[o["reason"]].get(o["rule"], 0) + 1
@@ -183,6 +183,8 @@ def ignored_payload(out_dir, env_path):
         "services_on": settings.skip_services,
         "ignored": [{"value": v, "hides": hides["ignored"].get(v, 0)} for v in read_ignore_file(settings.ignore_file)],
         "allowed": read_ignore_file(settings.allow_file),
+        "competitors": [{"value": v, "hides": hides["competitor"].get(v, 0)}
+                        for v in read_ignore_file(settings.competitors_file)],
         "omitted": omitted,
         "suppression": _read_suppression(Path(out_dir) / "suppression.txt"),
     }
@@ -304,6 +306,19 @@ def settings_action(path, body, out_dir, env_path, control=None):
             if not (control and control.alive(_read_json(Path(out_dir) / "status.json"))):
                 cli.rebuild(out_dir, settings)
             return 200, {"ok": True, **settings_payload(out_dir, env_path), "lists": ignored_payload(out_dir, env_path)}
+        if path == "/settings/competitor":
+            from . import cli
+            from .config import load_settings
+            from .contacts import COMPETITORS_HEADER, split_entries, update_ignore_file
+
+            settings = load_settings(env_path)
+            added = split_entries(body.get("add"))
+            update_ignore_file(settings.competitors_file, add=" ".join(added), remove=body.get("remove"),
+                               header=COMPETITORS_HEADER)
+            if not (control and control.alive(_read_json(Path(out_dir) / "status.json"))):
+                cli.rebuild(out_dir, settings)
+            return 200, {"ok": True, "added": added, **settings_payload(out_dir, env_path),
+                         "lists": ignored_payload(out_dir, env_path)}
         if path in ("/settings/ignore", "/settings/allow"):
             from . import cli
             from .config import load_settings

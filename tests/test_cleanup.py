@@ -294,3 +294,29 @@ def test_company_skips_mailing_subdomain():
     from mail_contact_scraper.extract import company_from_domain
     assert company_from_domain("x@mail.pmmimediagroup.com") == "Pmmimediagroup"
     assert company_from_domain("x@mail.ru") == "Mail"
+
+
+def test_competitors_tab_hides_them_before_allowed(tmp_path, monkeypatch):
+    book = ContactBook(competitors=["rival.mx", "ana@otra.mx"], allow=["rival.mx"])
+    for addr in ("ventas@rival.mx", "ana@otra.mx", "laura@aceroslaguna.com.mx"):
+        book.add_sender(_record(addr))
+    by = {o["email"]: o for o in book.omitted_list()}
+    assert (by["ventas@rival.mx"]["reason"], by["ventas@rival.mx"]["rule"]) == ("competitor", "rival.mx")
+    assert [r["email"] for r in book.to_rows()] == ["laura@aceroslaguna.com.mx"]
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("IMAP_USER", "pedro@dindustrimex.com")
+    (tmp_path / "in").mkdir()
+    for i, m in enumerate([mail("Laura <laura@aceroslaguna.com.mx>"), mail("Rafa <rafa@rival.mx>")]):
+        (tmp_path / "in" / f"{i}.eml").write_bytes(m.as_bytes())
+    cli.main(["--local", "in", "--output", "out", "--no-ocr"])
+    out, env = tmp_path / "out", tmp_path / ".env"
+    code, data = dashboard.settings_action("/settings/competitor", {"add": "rival.mx"}, out, env)
+    assert code == 200 and data["added"] == ["rival.mx"]
+    assert data["lists"]["competitors"] == [{"value": "rival.mx", "hides": 1}]
+    assert (tmp_path / "competencia.txt").read_text().startswith("#")
+    rows = {r["email"] for r in csv.DictReader(open(out / "contacts.csv", encoding="utf-8-sig"))}
+    assert rows == {"laura@aceroslaguna.com.mx"}
+    data = dashboard.settings_action("/settings/competitor", {"remove": "rival.mx"}, out, env)[1]
+    assert data["lists"]["competitors"] == []
+    assert "rafa@rival.mx" in {r["email"] for r in csv.DictReader(open(out / "contacts.csv", encoding="utf-8-sig"))}

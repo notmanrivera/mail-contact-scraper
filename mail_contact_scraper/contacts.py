@@ -145,6 +145,8 @@ def _domain_pattern(entry):
 
 IGNORE_HEADER = ("# Correos o dominios que no son prospectos, uno por línea (uber.com, juan@empresa.mx).\n"
                  "# El dashboard agrega aquí lo que ignoras con el botón \"Ignorar\".\n")
+COMPETITORS_HEADER = ("# Competencia de D-Industrimex: correos o dominios que nunca son prospectos ni reciben\n"
+                      "# los mailings. Uno por línea (empresa.com, juan@empresa.mx).\n")
 ALLOW_HEADER = ("# Correos o dominios que siempre son contactos, aunque parezcan servicio, aviso automático\n"
                 "# o correo masivo (por ejemplo un cliente que también es banco). Uno por línea.\n")
 
@@ -201,7 +203,7 @@ def _find(addr, emails, domains):
 
 class ContactBook:
     def __init__(self, exclude=(), skip_automated=True, exclude_domains=(), skip_services=True, ignore=(),
-                 allow=(), services=((), ()), companies=None):
+                 allow=(), services=((), ()), companies=None, competitors=()):
         self.exclude = {e.lower() for e in exclude if e}
         self.skip_automated = skip_automated
         self.exclude_domains = tuple(d.lower() for d in exclude_domains if d)
@@ -210,6 +212,7 @@ class ContactBook:
         self.services += tuple((e, _domain_pattern(e)) for e in added)
         self.ignore_emails, self.ignore_domains = _rules(ignore)
         self.allow_emails, self.allow_domains = _rules(allow)
+        self.competitor_emails, self.competitor_domains = _rules(competitors)
         self.rows = {}
         self.bounces = {}
         self.omitted = {}  # address -> reason, for the dashboard's count
@@ -230,6 +233,9 @@ class ContactBook:
         """(reason, rule): why addr is left out and which entry or pattern decided it."""
         if not addr or addr in self.exclude or self._excluded_domain(addr):
             return "own", ""
+        rule = _find(addr, self.competitor_emails, self.competitor_domains)
+        if rule:  # a competitor stays out even if it looks like an allowed address
+            return "competitor", rule
         if self.allowed(addr):
             return "", ""
         rule = _find(addr, self.ignore_emails, self.ignore_domains)

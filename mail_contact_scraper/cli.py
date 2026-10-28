@@ -158,6 +158,7 @@ def build_contacts(records, settings, out_dir):
         # Read every time: the dashboard's "Ignorar" button edits it while a scan runs.
         ignore=read_ignore_file(settings.ignore_file),
         allow=read_ignore_file(settings.allow_file),
+        competitors=read_ignore_file(settings.competitors_file),
         services=read_services_file(settings.services_file),
         companies=enrich.lookup(enrich.load(out_dir)) if settings.enrich_domains else None,
     )
