@@ -133,12 +133,14 @@ def waiting_until(row):
         return None
 
 
-def sync_replies(mailboxes, connect, out_dir, sent, suppression_path, own_domains=(), today=None, since_days=60):
+def sync_replies(mailboxes, connect, out_dir, sent, suppression_path, own_domains=(), today=None, since_days=60,
+                 seen_path=None, progress=None, stop=None):
     """Read the inboxes for answers to what we sent: `sent` is (email, Message-ID) pairs.
 
     Writes the new ones to respuestas.csv, puts 'ya no labora' addresses in the suppression
-    list and their replacements in referidos.csv. Returns {tipo: [emails]} of what is new."""
-    from .send import add_suppression
+    list and their replacements in referidos.csv. Returns {tipo: [emails]} of what is new.
+    seen_path, progress and stop work as in send.sync_suppression."""
+    from .send import Seen, Stopped, add_suppression
 
     today = today or date.today()
     out = Path(out_dir)
@@ -148,14 +150,21 @@ def sync_replies(mailboxes, connect, out_dir, sent, suppression_path, own_domain
     sent = {addr.lower() for addr, _ in sent}
     own = {d.lower() for d in own_domains}
     since = (today - timedelta(days=since_days)).strftime("%d-%b-%Y")
-    found = []
+    found, seen = [], Seen(seen_path)
     for box in mailboxes:
+        if progress:
+            progress(f"Conectando con {box.email}…")
         conn = connect(box)
         try:
             conn.select("INBOX", readonly=True)
+            validity = seen.validity(conn)
             typ, data = conn.uid("SEARCH", None, f"(SINCE {since})")
-            uids = data[0].split() if data and data[0] else []
+            uids = seen.new(f"{box.email}|{validity}|respuestas", data[0].split() if data and data[0] else [])
             for chunk in range(0, len(uids), 200):
+                if stop and stop():
+                    raise Stopped("Detenido.")
+                if progress:
+                    progress(f"Respuestas en {box.email}: {min(chunk + 200, len(uids))} de {len(uids)} correos nuevos")
                 batch = b",".join(uids[chunk:chunk + 200])
                 typ, parts = conn.uid("FETCH", batch, "(BODY.PEEK[HEADER.FIELDS (FROM IN-REPLY-TO REFERENCES)])")
                 for uid, head in _uid_parts(parts):
@@ -199,6 +208,7 @@ def sync_replies(mailboxes, connect, out_dir, sent, suppression_path, own_domain
         _append(out / REFERRALS_NAME, REFERRAL_FIELDS, [r for r in referrals if r["email"] not in have])
     if gone:
         add_suppression(suppression_path, gone, GONE)
+    seen.save()
     return new
 
 

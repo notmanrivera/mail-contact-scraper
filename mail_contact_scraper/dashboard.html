@@ -828,6 +828,10 @@
         <div class="field"><label for="cp-limit">Máximo en este envío</label><input class="input" id="cp-limit" type="number" min="0" placeholder="Todo el cupo de hoy"></div>
       </div>
       <div class="field"><label for="cp-company">Máximo por empresa al día (0 = sin tope)</label><input class="input" id="cp-company" type="number" min="0" placeholder="3"></div>
+      <div class="field">
+        <label class="switch"><input type="checkbox" id="cp-check" checked> Revisar bajas, rebotes y respuestas antes de enviar</label>
+        <p class="hint" id="cp-check-hint" hidden>Arranca más rápido, pero no ve las bajas ni los rebotes que llegaron desde la última revisión: a esas personas sí les llega este correo. Las bajas y rebotes que ya estaban registrados se respetan igual. Úsalo solo si acabas de revisar.</p>
+      </div>
       <div class="send-box">
         <p class="plan-line" id="cp-plan"></p>
         <div class="field"><label for="cp-confirm">Para enviar a los prospectos escribe ENVIAR</label><input class="input" id="cp-confirm" type="text" autocomplete="off" placeholder="ENVIAR"></div>
@@ -1777,7 +1781,7 @@
     if (run.phase) {
       const pctDone = run.total ? Math.round((run.sent / run.total) * 100) : 0;
       $("cp-run-bar").style.width = `${run.running ? pctDone : 100}%`;
-      const phase = run.phase === "bajas" ? "Revisando bajas y rebotes antes de enviar…"
+      const phase = run.phase === "bajas" ? `Revisando bajas, rebotes y respuestas antes de enviar…${run.checking ? `<br><span class="muted">${esc(run.checking)}</span>` : ""}`
         : run.phase === "enviando" ? `${run.mode === "seguimiento" ? "Enviando seguimiento" : "Enviando"}: <b>${fmt.format(run.sent)}</b> de ${fmt.format(run.total)}${run.last ? ` · último: ${esc(run.last)}` : ""}`
         : run.phase === "deteniendo" ? "Deteniendo…"
         : `Terminó: <b>${fmt.format(run.sent || 0)}</b> enviados${run.rejected ? `, ${run.rejected} rechazados` : ""}${run.errors ? `, ${run.errors} con error` : ""}.`;
@@ -1856,12 +1860,13 @@
     clearTimeout(campInputTimer); campInputTimer = setTimeout(refreshCampaign, 400);
   }));
   $("cp-confirm").addEventListener("input", () => { if (camp) renderCampaign(camp); });
+  $("cp-check").addEventListener("change", () => { $("cp-check-hint").hidden = $("cp-check").checked; });
   $("cp-start").addEventListener("click", async () => {
     const btn = $("cp-start"); btn.disabled = true; showMsg("cp-msg", "");
     const r = await settingsCall("/mailing/campaign/start", {
       campaign: $("ml-campaign").value, from: chosenBoxes || (camp.senders || []).map((s) => s.email),
       daily_limit: $("cp-daily").value, limit: $("cp-limit").value, per_company: $("cp-company").value,
-      confirm: $("cp-confirm").value.trim(),
+      skip_check: !$("cp-check").checked, confirm: $("cp-confirm").value.trim(),
     }).catch(() => ({ ok: false, error: "No se pudo iniciar el envío." }));
     $("cp-confirm").value = "";
     if (!r.ok) showMsg("cp-msg", r.error, false);

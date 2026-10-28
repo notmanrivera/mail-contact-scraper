@@ -189,7 +189,7 @@ def export_csv(out_dir, slug, which):
     return "\ufeff" + out.getvalue(), f"{path.stem}-{which}.csv"
 
 
-def check_unsubscribes(out_dir, env_path, slug=""):
+def check_unsubscribes(out_dir, env_path, slug="", progress=None, stop=None):
     """Read the inboxes for 'Baja de correos' replies and bounces. Returns (new unsubs, new bounces)."""
     from mail_contact_scraper.config import load_settings
     from mail_contact_scraper.imap_source import connect as imap_connect
@@ -200,12 +200,16 @@ def check_unsubscribes(out_dir, env_path, slug=""):
         raise ValueError("No hay buzones con contraseña para revisar.")
     own = campaign["sender"]["email"].split("@")[-1]
     try:
-        return send.sync_suppression(boxes, paths(out_dir, campaign)["suppression"], imap_connect, own_domains=[own])
+        where = paths(out_dir, campaign)
+        return send.sync_suppression(boxes, where["suppression"], imap_connect, own_domains=[own],
+                                     seen_path=where["suppression"].parent / send.SEEN_NAME, progress=progress, stop=stop)
+    except send.Stopped:
+        raise
     except Exception as exc:  # IMAP errors come in many shapes
         raise ValueError(f"No pude revisar bajas y rebotes: {exc}") from None
 
 
-def check_replies(out_dir, env_path, slug=""):
+def check_replies(out_dir, env_path, slug="", progress=None, stop=None):
     """Read the inboxes for answers to the campaign and its follow-up. Returns {tipo: [emails]}."""
     from mail_contact_scraper.config import load_settings
     from mail_contact_scraper.imap_source import connect as imap_connect
@@ -221,7 +225,10 @@ def check_replies(out_dir, env_path, slug=""):
         return {}
     own = campaign["sender"]["email"].split("@")[-1]
     try:
-        return replies.sync_replies(boxes, imap_connect, where["out"], sent, where["suppression"], own_domains=[own])
+        return replies.sync_replies(boxes, imap_connect, where["out"], sent, where["suppression"], own_domains=[own],
+                                    seen_path=where["out"] / send.SEEN_NAME, progress=progress, stop=stop)
+    except send.Stopped:
+        raise
     except Exception as exc:  # IMAP errors come in many shapes
         raise ValueError(f"No pude revisar las respuestas: {exc}") from None
 
@@ -389,36 +396,36 @@ class SendRun:
         limit = _limit(body.get("limit"), "El máximo de esta corrida")
         options = {"limit": limit, "pause": pause, "followup": followup,
                    "per_company": _per_company(body.get("per_company"))}
+        # Skipping the inbox check only skips reading new opt-outs and bounces; the ones already
+        # in the suppression list still apply. A follow-up always checks: it must know who answered.
+        check_first = followup or not body.get("skip_check")
         self._stop.clear()
         with self._lock:
-            self.state = {"running": True, "phase": "bajas", "campaign": path.stem, "mode": body.get("mode") or "",
+            self.state = {"running": True, "phase": "bajas" if check_first else "enviando", "campaign": path.stem, "mode": body.get("mode") or "",
                           "senders": [s["email"] for s in senders], "started_at": _now(),
                           "sent": 0, "total": 0, "last": "", "note": ""}
         self._thread = threading.Thread(target=self._run, daemon=True,
-                                        args=(out_dir, env_path, path, where, senders, options))
+                                        args=(out_dir, env_path, path, where, senders, options, check_first))
         self._thread.start()
         return self.status()
 
-    def _run(self, out_dir, env_path, path, where, senders, options):
+    def _run(self, out_dir, env_path, path, where, senders, options, check_first=True):
         note, awake = "", _keep_awake()
         try:
-            try:
-                unsub, bounced = self._check(out_dir, env_path, path.stem)
-                note = f"Bajas nuevas: {len(unsub)} · rebotes nuevos: {len(bounced)}."
-            except ValueError as exc:
-                note = f"{exc} Sigo con la lista que ya había."
-            try:
-                found = self._answers(out_dir, env_path, path.stem)
-                note += " " + _answers_note(found)
-            except ValueError as exc:
-                if options["followup"]:  # without the replies we could write to someone who answered
-                    self._set(note=note, error=f"{exc} No mandé el seguimiento.")
+            if not check_first:
+                note = "No revisé bajas ni rebotes antes de enviar; usé la lista que ya había."
+            else:
+                try:
+                    note = self._check_first(out_dir, env_path, path, options)
+                except send.Stopped:
+                    self._set(note="Detenido mientras revisaba los buzones. No se envió nada.")
                     return
-                note += f" {exc}"
+                if note is None:
+                    return
             if self._stop.is_set():
                 self._set(note=note)
                 return
-            self._set(phase="enviando", note=note)
+            self._set(phase="enviando", note=note, checking="")
 
             def progress(summary, email_addr, who):
                 self._set(sent=summary["sent"], total=summary["this_run"], last=f"{email_addr} ({who})")
@@ -441,6 +448,23 @@ class SendRun:
             if awake:
                 awake.terminate()
             self._set(running=False, phase="terminado", finished_at=_now())
+
+    def _check_first(self, out_dir, env_path, path, options):
+        """Read new opt-outs, bounces and replies. Returns the note, or None when the run must not go on."""
+        progress = lambda text: self._set(checking=text)
+        try:
+            unsub, bounced = self._check(out_dir, env_path, path.stem, progress, self._stop.is_set)
+            note = f"Bajas nuevas: {len(unsub)} · rebotes nuevos: {len(bounced)}."
+        except ValueError as exc:
+            note = f"{exc} Sigo con la lista que ya había."
+        try:
+            note += " " + _answers_note(self._answers(out_dir, env_path, path.stem, progress, self._stop.is_set))
+        except ValueError as exc:
+            if options["followup"]:  # without the replies we could write to someone who answered
+                self._set(note=note, error=f"{exc} No mandé el seguimiento.")
+                return None
+            note += f" {exc}"
+        return note
 
 
 def _answers_note(found):
