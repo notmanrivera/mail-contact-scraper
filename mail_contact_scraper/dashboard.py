@@ -169,7 +169,7 @@ def ignored_payload(out_dir, env_path):
 
     settings = load_settings(env_path)
     omitted = _read_json_list(Path(out_dir) / "omitted.json")
-    hides = {"ignored": {}, "service": {}}
+    hides = {"ignored": {}, "service": {}, "competitor": {}}
     for o in omitted:
         if o.get("reason") in hides and o.get("rule"):
             hides[o["reason"]][o["rule"]] = hides[o["reason"]].get(o["rule"], 0) + 1
@@ -183,6 +183,8 @@ def ignored_payload(out_dir, env_path):
         "services_on": settings.skip_services,
         "ignored": [{"value": v, "hides": hides["ignored"].get(v, 0)} for v in read_ignore_file(settings.ignore_file)],
         "allowed": read_ignore_file(settings.allow_file),
+        "competitors": [{"value": v, "hides": hides["competitor"].get(v, 0)}
+                        for v in read_ignore_file(settings.competitors_file)],
         "omitted": omitted,
         "suppression": _read_suppression(Path(out_dir) / "suppression.txt"),
     }
@@ -304,6 +306,19 @@ def settings_action(path, body, out_dir, env_path, control=None):
             if not (control and control.alive(_read_json(Path(out_dir) / "status.json"))):
                 cli.rebuild(out_dir, settings)
             return 200, {"ok": True, **settings_payload(out_dir, env_path), "lists": ignored_payload(out_dir, env_path)}
+        if path == "/settings/competitor":
+            from . import cli
+            from .config import load_settings
+            from .contacts import COMPETITORS_HEADER, split_entries, update_ignore_file
+
+            settings = load_settings(env_path)
+            added = split_entries(body.get("add"))
+            update_ignore_file(settings.competitors_file, add=" ".join(added), remove=body.get("remove"),
+                               header=COMPETITORS_HEADER)
+            if not (control and control.alive(_read_json(Path(out_dir) / "status.json"))):
+                cli.rebuild(out_dir, settings)
+            return 200, {"ok": True, "added": added, **settings_payload(out_dir, env_path),
+                         "lists": ignored_payload(out_dir, env_path)}
         if path in ("/settings/ignore", "/settings/allow"):
             from . import cli
             from .config import load_settings
@@ -430,7 +445,7 @@ def library_action(path, body, out_dir, run):
     return {"ok": True, "slug": slug, "campaigns": found, "active": active, "campaign": library.details(out_dir, slug)}
 
 
-def mailing_action(path, body, out_dir, env_path, run):
+def mailing_action(path, body, out_dir, env_path, run, busy=None):
     """POST /mailing/<action>: a test, the campaign run, the unsubscribe check, the list
     cleaning (MX and typos) or the SPF/DKIM/DMARC light of the sending domains.
     Returns (status code, payload)."""
@@ -460,6 +475,14 @@ def mailing_action(path, body, out_dir, env_path, run):
         if path == "/mailing/replies":
             found = mailing_app.check_replies(out_dir, env_path, slug)
             return 200, {"ok": True, **{k: len(v) for k, v in found.items()}}
+        if path == "/mailing/keep":
+            found = mailing_app.keep_only(out_dir, env_path, slug, body.get("filename"), _upload(body),
+                                          apply=body.get("apply") is True)
+            if found["applied"] and not (busy and busy()):
+                from . import cli
+                from .config import load_settings
+                cli.rebuild(out_dir, load_settings(env_path))  # hide them from the contacts now
+            return 200, {"ok": True, **found}
         if path == "/mailing/clean":
             return 200, {"ok": True, **mailing_app.clean_list(out_dir, slug, apply=body.get("apply") is True)}
         if path == "/mailing/health":
@@ -645,7 +668,7 @@ def make_handler(out_dir, control, env_path=".env", updater=None):
                 self._json({"ok": stopped}, 200 if stopped else 409)
             elif self.path.startswith(("/settings/", "/mailing/")) or (self.path == "/update" and updater):
                 length = int(self.headers.get("Content-Length") or 0)
-                big = self.path == "/mailing/test" or self.path.startswith("/mailing/library/")
+                big = self.path in ("/mailing/test", "/mailing/keep") or self.path.startswith("/mailing/library/")
                 if length > (MAX_UPLOAD if big else 65536):
                     return self._send(b"too large", "text/plain", 413)
                 try:
@@ -656,7 +679,7 @@ def make_handler(out_dir, control, env_path=".env", updater=None):
                 if self.path == "/update":
                     code, payload = update_action(updater, body, control, out_dir)
                 elif self.path.startswith("/mailing/"):
-                    code, payload = mailing_action(self.path, body, out_dir, env_path, send_run)
+                    code, payload = mailing_action(self.path, body, out_dir, env_path, send_run, control.busy)
                 else:
                     code, payload = settings_action(self.path, body, out_dir, env_path, control)
                 self._json(payload, code)

@@ -238,3 +238,31 @@ def test_followup_text_is_edited_from_the_app(tmp_path, monkeypatch):
     library.save(tmp_path, "qc-aro", {"followup": {"days": 5, "body": ""}})  # turns it off
     info = mailing_app.overview(tmp_path, env, mailing_app.SendRun(), "qc-aro")
     assert info["followup"] is None and info["followup_text"]["preview"] == ""
+
+
+def test_keep_only_the_uploaded_list(tmp_path, monkeypatch):
+    import io
+    import openpyxl
+    import pytest
+    from mailing import app as mailing_app
+    _, env = _app_setup(tmp_path, monkeypatch, FakeSMTP())
+    env.write_text(env.read_text() + f"COMPETITORS_FILE={tmp_path / 'competencia.txt'}\n")
+    write_contacts(tmp_path / "contacts.csv", [{"email": e, "name": f"{e[0]}na X", "source": "signature"} for e in (
+        "a@cliente.mx", "b@rival.mx", "c@rival.mx", "d@mix.mx", "e@mix.mx", "f@gmail.com", "g@hecho.mx")])
+    _log(tmp_path / "mailing" / "qc-aro", [("2026-10-27 10:00:00", "g@hecho.mx", "enviado", "<x@d>", "pedro@dindustrimex.com")])
+    wb = openpyxl.Workbook()
+    for row in (["email", "nombre"], ["A@cliente.mx", "Ana"], ["d@mix.mx", "Dan"]):
+        wb.active.append(row)
+    data = io.BytesIO()
+    wb.save(data)
+    found = mailing_app.keep_only(tmp_path, env, "qc-aro", "lista.xlsx", data.getvalue())
+    assert (found["pending"], found["in_file"], found["extra"]) == (6, 2, 4)
+    assert found["entries"] == ["rival.mx", "e@mix.mx", "f@gmail.com"] and not found["applied"]
+    assert not (tmp_path / "competencia.txt").exists()
+    applied = mailing_app.keep_only(tmp_path, env, "qc-aro", "lista.xlsx", data.getvalue(), apply=True)
+    assert applied["applied"] and send.suppression_counts(tmp_path / "suppression.txt") == {"competencia": 4}
+    assert (tmp_path / "competencia.txt").read_text().splitlines()[-3:] == ["rival.mx", "e@mix.mx", "f@gmail.com"]
+    plan = mailing_app.overview(tmp_path, env, mailing_app.SendRun(), "qc-aro")["plan"]
+    assert plan["pending"] == 2
+    with pytest.raises(ValueError, match="lista correcta"):
+        mailing_app.keep_only(tmp_path, env, "qc-aro", "otra.csv", b"email\nnadie@x.mx\n")

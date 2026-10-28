@@ -694,6 +694,7 @@
     <div class="tabs" role="tablist" id="ig-tabs">
       <button type="button" role="tab" data-igtab="mine" aria-selected="true">Tu lista</button>
       <button type="button" role="tab" data-igtab="services" aria-selected="false">Servicios</button>
+      <button type="button" role="tab" data-igtab="competitors" aria-selected="false">Competencia</button>
       <button type="button" role="tab" data-igtab="omitted" aria-selected="false">Omitidos</button>
       <button type="button" role="tab" data-igtab="allowed" aria-selected="false">Permitidos</button>
       <button type="button" role="tab" data-igtab="supp" aria-selected="false">Bajas y rebotes</button>
@@ -729,6 +730,19 @@
       <div class="ig-tools"><input class="input" id="igv-search" type="search" placeholder="Buscar servicio"></div>
       <div class="ig-scroll">
         <table class="log-table ig-table"><thead><tr><th>Dominio</th><th>Categoría</th><th class="num">Contactos que oculta</th><th></th></tr></thead><tbody id="igv-rows"></tbody></table>
+      </div>
+    </section>
+    <section class="set" id="ig-pane-competitors" hidden>
+      <h3>Competencia</h3>
+      <p class="hint">Empresas o personas de la competencia: nunca entran a contactos ni reciben el mailing. "Quedarse solo con tu lista" en Envíos las agrega aquí solas. Un dominio (netzsch.com) tapa todos sus correos; puedes pegar varios separados por coma o en renglones.</p>
+      <form class="ig-tools" id="igc-form" autocomplete="off">
+        <textarea class="input ig-paste" id="igc-value" rows="2" placeholder="netzsch.com, ventas@competidor.mx"></textarea>
+        <button class="btn btn-primary" type="submit">Agregar a competencia</button>
+        <input class="input" id="igc-search" type="search" placeholder="Buscar en competencia" style="flex:0 1 220px">
+      </form>
+      <div class="msg" id="igc-msg" hidden></div>
+      <div class="ig-scroll">
+        <table class="log-table ig-table"><thead><tr><th>Correo o dominio</th><th>Tipo</th><th class="num">Contactos que oculta</th><th></th></tr></thead><tbody id="igc-rows"></tbody></table>
       </div>
     </section>
     <section class="set" id="ig-pane-omitted" hidden>
@@ -788,6 +802,15 @@
         <a class="btn btn-outline" id="cp-clean-csv" href="#" download="correos-a-revisar.csv" hidden>Ver cuáles (CSV)</a>
       </div>
       <div class="msg" id="cp-clean-msg" hidden></div>
+      <h3 style="margin-top:18px">Quedarse solo con tu lista</h3>
+      <p class="hint">Sube el Excel o CSV de pendientes que limpiaste (por ejemplo, el de "Descargar pendientes" sin los que no quieres). Los pendientes que no estén en tu archivo se van a Ignorados ▸ Competencia y nunca se les envía.</p>
+      <div class="actions-row">
+        <button class="btn btn-outline" id="cp-keep" type="button">Subir mi lista</button>
+        <input type="file" id="cp-keep-file" accept=".xlsx,.csv,.txt" hidden>
+        <button class="btn btn-primary" id="cp-keep-apply" type="button" hidden></button>
+        <a class="btn btn-outline" id="cp-keep-csv" href="#" download="pendientes-fuera-de-tu-lista.csv" hidden>Ver cuáles (CSV)</a>
+      </div>
+      <div class="msg" id="cp-keep-msg" hidden></div>
     </section>
     <section class="set">
       <h3>Enviar la campaña</h3>
@@ -1447,7 +1470,7 @@
     if (data.mailboxes) renderSettings(data);
     return data;
   }
-  const OMIT = { service: "de servicios y apps", bulk: "de correos masivos", automated: "automáticos", ignored: "ignorados por ti" };
+  const OMIT = { competitor: "de la competencia", service: "de servicios y apps", bulk: "de correos masivos", automated: "automáticos", ignored: "ignorados por ti" };
   function renderSettings(cfg) {
     $("ig-list").innerHTML = (cfg.ignored || []).map((v) => `<div class="mb"><span class="e">${esc(v)}</span>
         <button type="button" data-unignore="${esc(v)}" title="Dejar de ignorar" aria-label="Dejar de ignorar">×</button></div>`).join("");
@@ -1892,6 +1915,35 @@
       : `Revisé ${fmt.format(r.checked_domains)} dominios y no encontré correos malos.${unknown}`, true);
     if (apply) refreshCampaign();
   }
+  let keepUpload = null;
+  async function keepList(apply) {
+    showMsg("cp-keep-msg", apply ? "Mandándolos a competencia…" : "Comparando con los pendientes…", true);
+    const r = await settingsCall("/mailing/keep", { campaign: $("ml-campaign").value, apply, ...keepUpload })
+      .catch(() => ({ ok: false, error: "No se pudo revisar el archivo." }));
+    if (!r.ok) { showMsg("cp-keep-msg", r.error, false); $("cp-keep-apply").hidden = true; return; }
+    $("cp-keep-csv").href = URL.createObjectURL(new Blob([r.csv], { type: "text/csv" }));
+    $("cp-keep-csv").hidden = !r.extra;
+    $("cp-keep-apply").hidden = r.applied || !r.extra;
+    $("cp-keep-apply").textContent = `Mandar ${fmt.format(r.extra)} a competencia`;
+    showMsg("cp-keep-msg", r.applied
+      ? `Listo: ${fmt.format(r.extra)} contactos quedaron en Ignorados ▸ Competencia (${fmt.format(r.entries.length)} renglones: un dominio tapa a toda la empresa). Quedan ${fmt.format(r.in_file)} pendientes.`
+      : r.extra ? `De ${fmt.format(r.pending)} pendientes, ${fmt.format(r.in_file)} están en tu archivo y ${fmt.format(r.extra)} no. Revísalos en el CSV antes de mandarlos a ignorados.`
+      : `Los ${fmt.format(r.pending)} pendientes están en tu archivo; no hay nada que quitar.`, true);
+    if (r.applied) refreshCampaign();
+  }
+  $("cp-keep").addEventListener("click", () => $("cp-keep-file").click());
+  $("cp-keep-file").addEventListener("change", () => {
+    const f = $("cp-keep-file").files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      keepUpload = { filename: f.name, data: String(reader.result).split(",")[1] || "" };
+      $("cp-keep-file").value = "";
+      keepList(false);
+    };
+    reader.readAsDataURL(f);
+  });
+  $("cp-keep-apply").addEventListener("click", () => keepList(true));
   $("cp-clean").addEventListener("click", () => cleanList(false));
   $("cp-clean-apply").addEventListener("click", () => cleanList(true));
   $("open-mailer").addEventListener("click", openMailer);
@@ -2030,7 +2082,7 @@
 
   /* ---------- Ignorados: lista completa ---------- */
   let igData = null, igTab = "mine", igReason = "all", igCat = "all", igLimit = 200;
-  const REASON = { service: "Servicio o app", bulk: "Correo masivo", automated: "Aviso automático", ignored: "Ignorado por ti" };
+  const REASON = { competitor: "Competencia", service: "Servicio o app", bulk: "Correo masivo", automated: "Aviso automático", ignored: "Ignorado por ti" };
   const BULK_WHY = { "list-unsubscribe": "trae botón de baja de un clic", precedence: "viene marcado como masivo",
                      "auto-submitted": "es una respuesta automática", esp: "lo mandó una plataforma de mailing" };
   const SUPP = { baja: "Pidió su baja", rebote: "Rebotó", rechazado: "Rechazado" };
@@ -2047,6 +2099,7 @@
     if (o.reason === "service") return `Lista integrada: ${o.rule || domainOf(o.email)}`;
     if (o.reason === "bulk") return `Masivo: ${BULK_WHY[o.rule] || "encabezados de mailing"}`;
     if (o.reason === "automated") return autoWhy(o.rule);
+    if (o.reason === "competitor") return `Competencia: ${o.rule || o.email}`;
     return `Tu lista: ${o.rule || o.email}`;
   }
   async function loadIgnored() {
@@ -2056,14 +2109,15 @@
   function setIgTab(tab) {
     igTab = tab;
     document.querySelectorAll("#ig-tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.igtab === tab));
-    ["mine", "services", "omitted", "allowed", "supp"].forEach((t) => { $(`ig-pane-${t}`).hidden = t !== tab; });
+    ["mine", "services", "competitors", "omitted", "allowed", "supp"].forEach((t) => { $(`ig-pane-${t}`).hidden = t !== tab; });
   }
   const has = (q, ...fields) => !q || fields.some((f) => String(f || "").toLowerCase().includes(q));
   function renderIgnored() {
-    const d = igData || { ignored: [], allowed: [], omitted: [], suppression: [], services: [] };
-    const tabs = { mine: d.ignored.length, services: d.services.filter((v) => !v.disabled).length, omitted: d.omitted.length,
+    const d = igData || { ignored: [], allowed: [], omitted: [], suppression: [], services: [], competitors: [] };
+    d.competitors = d.competitors || [];
+    const tabs = { mine: d.ignored.length, services: d.services.filter((v) => !v.disabled).length, competitors: d.competitors.length, omitted: d.omitted.length,
                    allowed: d.allowed.length, supp: d.suppression.length };
-    const labels = { mine: "Tu lista", services: "Servicios", omitted: "Omitidos", allowed: "Permitidos", supp: "Bajas y rebotes" };
+    const labels = { mine: "Tu lista", services: "Servicios", competitors: "Competencia", omitted: "Omitidos", allowed: "Permitidos", supp: "Bajas y rebotes" };
     document.querySelectorAll("#ig-tabs button").forEach((b) => { b.textContent = `${labels[b.dataset.igtab]} · ${fmt.format(tabs[b.dataset.igtab])}`; });
 
     const qm = $("igm-search").value.trim().toLowerCase();
@@ -2071,6 +2125,12 @@
         <td class="who">${esc(i.value)}</td><td>${kindOf(i.value)}</td><td class="num">${fmt.format(i.hides)}</td>
         <td class="act"><button class="link-btn" data-unignore-full="${esc(i.value)}">Dejar de ignorar</button></td></tr>`).join("")
       || `<tr><td colspan="4" class="muted">${d.ignored.length ? "Nada coincide con la búsqueda." : "Todavía no ignoras nada. Escribe arriba un correo o dominio."}</td></tr>`;
+
+    const qc = $("igc-search").value.trim().toLowerCase();
+    $("igc-rows").innerHTML = d.competitors.filter((i) => has(qc, i.value)).map((i) => `<tr>
+        <td class="who">${esc(i.value)}</td><td>${kindOf(i.value)}</td><td class="num">${fmt.format(i.hides)}</td>
+        <td class="act"><button class="link-btn" data-uncompete="${esc(i.value)}">Quitar</button></td></tr>`).join("")
+      || `<tr><td colspan="4" class="muted">${d.competitors.length ? "Nada coincide con la búsqueda." : "Todavía no hay competencia. Escribe arriba un correo o dominio, o usa \"Quedarse solo con tu lista\" en Envíos."}</td></tr>`;
 
     $("igv-off").hidden = d.services_on !== false;
     const cats = [...new Set(d.services.map((v) => v.category))];
@@ -2094,6 +2154,7 @@
     const list = d.omitted.filter((o) => (igReason === "all" || o.reason === igReason) && has(qo, o.email, o.name, o.rule));
     $("igo-rows").innerHTML = list.slice(0, igLimit).map((o) => {
       const acts = [];
+      if (o.reason === "competitor" && o.rule) acts.push(`<button class="link-btn" data-uncompete="${esc(o.rule)}" title="Quitar ${esc(o.rule)} de la competencia">No es competencia</button>`);
       if (o.reason === "ignored" && o.rule) acts.push(`<button class="link-btn" data-unignore-full="${esc(o.rule)}" title="Quitar ${esc(o.rule)} de tu lista">Dejar de ignorar</button>`);
       acts.push(`<button class="link-btn" data-allow="${esc(o.email)}" title="Siempre tomarlo como contacto">Permitir</button>`);
       return `<tr><td class="who">${esc(o.email)}${o.name ? `<span class="n">${esc(o.name)}</span>` : ""}</td>
@@ -2142,7 +2203,7 @@
     const r = await listCall("/settings/services", { add: $("igv-value").value }, "igv-msg");
     if (r.ok) { $("igv-value").value = ""; igCat = "all"; renderIgnored(); flash("Listo: agregado a los servicios. Sus correos ya no aparecen en contactos."); }
   });
-  ["igm-search", "igv-search", "igo-search", "igs-search"].forEach((id) => $(id).addEventListener("input", () => { igLimit = 200; renderIgnored(); }));
+  ["igm-search", "igc-search", "igv-search", "igo-search", "igs-search"].forEach((id) => $(id).addEventListener("input", () => { igLimit = 200; renderIgnored(); }));
   $("igo-chips").addEventListener("click", (e) => {
     const b = e.target.closest("[data-reason]");
     if (b) { igReason = b.dataset.reason; igLimit = 200; renderIgnored(); }
@@ -2156,16 +2217,25 @@
     const r = await listCall("/settings/ignore", { add: $("igm-value").value }, "igm-msg");
     if (r.ok) { $("igm-value").value = ""; flash(r.added.length === 1 ? `Listo: ${r.added[0]} ya no aparece en los contactos.` : `Listo: ${r.added.length} agregados a tu lista.`); }
   });
+  $("igc-value").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("igc-form").requestSubmit(); }
+  });
+  $("igc-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const r = await listCall("/settings/competitor", { add: $("igc-value").value }, "igc-msg");
+    if (r.ok) { $("igc-value").value = ""; flash(r.added.length === 1 ? `Listo: ${r.added[0]} es competencia y ya no recibe el mailing.` : `Listo: ${r.added.length} agregados a competencia.`); }
+  });
   $("iga-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const r = await listCall("/settings/allow", { add: $("iga-value").value }, "iga-msg");
     if (r.ok) { $("iga-value").value = ""; flash("Listo: vuelve a aparecer en los contactos."); }
   });
   $("ignored").addEventListener("click", async (e) => {
-    const b = e.target.closest("[data-unignore-full], [data-allow], [data-unallow], [data-svc-remove], [data-svc-disable], [data-svc-enable]");
+    const b = e.target.closest("[data-uncompete], [data-unignore-full], [data-allow], [data-unallow], [data-svc-remove], [data-svc-disable], [data-svc-enable]");
     if (!b) return;
     b.disabled = true;
-    const { unignoreFull, allow, unallow, svcRemove, svcDisable, svcEnable } = b.dataset;
+    const { uncompete, unignoreFull, allow, unallow, svcRemove, svcDisable, svcEnable } = b.dataset;
+    if (uncompete) { const r = await listCall("/settings/competitor", { remove: uncompete }); if (r.ok) flash(`${uncompete} ya no es competencia.`); }
     if (svcRemove) { const r = await listCall("/settings/services", { remove: svcRemove }); if (r.ok) flash(`${svcRemove} ya no es servicio.`); }
     if (svcDisable) { const r = await listCall("/settings/services", { disable: svcDisable }); if (r.ok) flash(`${svcDisable} desactivado: sus correos vuelven a contactos.`); }
     if (svcEnable) { const r = await listCall("/settings/services", { enable: svcEnable }); if (r.ok) flash(`${svcEnable} se vuelve a omitir.`); }
