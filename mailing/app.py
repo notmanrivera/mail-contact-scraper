@@ -6,6 +6,7 @@ Nothing goes out unless the request carries confirm="ENVIAR", typed by the perso
 """
 import csv
 import io
+import re
 import subprocess
 import sys
 import threading
@@ -259,6 +260,71 @@ def clean_list(out_dir, slug="", apply=False):
         w.writerow([b["email"], b["motivo"], b["sugerencia"]])
     found["csv"] = "\ufeff" + out.getvalue()
     return found
+
+
+def _emails_in_file(filename, data):
+    """Every address in an uploaded Excel or CSV, whatever column it is in."""
+    name = (filename or "").lower()
+    cells = []
+    if name.endswith((".xlsx", ".xlsm")):
+        from openpyxl import load_workbook
+        try:
+            wb = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+        except Exception:
+            raise ValueError("No pude abrir el Excel.") from None
+        for ws in wb.worksheets:
+            for row in ws.iter_rows(values_only=True):
+                cells += [str(v) for v in row if v]
+    elif name.endswith((".csv", ".txt")):
+        cells = [data.decode("utf-8-sig", errors="replace")]
+    else:
+        raise ValueError("Sube un Excel (.xlsx) o un CSV.")
+    return {m.lower() for c in cells for m in re.findall(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+", c)}
+
+
+def keep_only(out_dir, env_path, slug, filename, data, apply=False):
+    """Pending prospects of the campaign that are NOT in the uploaded list (the person cleaned
+    it up: the rest are competitors). apply=True adds them to the suppression list and to the
+    scraper's ignore list (a whole domain when every contact of it is in this group)."""
+    from mail_contact_scraper.config import load_settings
+    from mail_contact_scraper.contacts import update_ignore_file
+
+    keep = _emails_in_file(filename, data)
+    if not keep:
+        raise ValueError("No encontré correos en el archivo.")
+    campaign = load_campaign(campaign_path(out_dir, slug))
+    where = paths(out_dir, campaign)
+    if not where["contacts"].exists():
+        raise ValueError("Todavía no hay contactos. Corre un escaneo primero.")
+    people, _ = send.load_people(where["contacts"], where["out"], campaign, where["suppression"])
+    sent = {r["email"].lower() for r in send.read_log(where["out"] / send.LOG_NAME) if r["estado"] == send.SENT}
+    pending = [p for p in people if p["email"] not in sent]
+    extra = [p for p in pending if p["email"] not in keep]
+    if len(extra) == len(pending):
+        raise ValueError("Ningún correo del archivo está en los pendientes de esta campaña; revisa que sea la lista correcta.")
+    with open(where["contacts"], newline="", encoding="utf-8-sig") as fh:
+        everyone = [(r.get("email") or "").strip().lower() for r in csv.DictReader(fh)]
+    extra_emails = {p["email"] for p in extra}
+    entries = []
+    for p in extra:
+        domain = p["email"].rsplit("@", 1)[-1]
+        whole = domain not in deliverability.KNOWN_DOMAINS and all(
+            e in extra_emails for e in everyone if e.rsplit("@", 1)[-1] == domain)
+        entry = domain if whole else p["email"]
+        if entry not in entries:
+            entries.append(entry)
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow(["email", "nombre", "empresa", "puesto"])
+    for p in extra:
+        w.writerow([p["email"], p["name"], p["company"], p["title"]])
+    result = {"pending": len(pending), "in_file": len(pending) - len(extra), "extra": len(extra),
+              "entries": entries, "csv": "\ufeff" + out.getvalue(), "applied": False}
+    if apply and extra:
+        send.add_suppression(where["suppression"], extra_emails, "competencia")
+        update_ignore_file(load_settings(env_path).ignore_file, add=" ".join(entries))
+        result["applied"] = True
+    return result
 
 
 def bounce_checkpoint(check, out_dir, env_path, slug):

@@ -430,7 +430,7 @@ def library_action(path, body, out_dir, run):
     return {"ok": True, "slug": slug, "campaigns": found, "active": active, "campaign": library.details(out_dir, slug)}
 
 
-def mailing_action(path, body, out_dir, env_path, run):
+def mailing_action(path, body, out_dir, env_path, run, busy=None):
     """POST /mailing/<action>: a test, the campaign run, the unsubscribe check, the list
     cleaning (MX and typos) or the SPF/DKIM/DMARC light of the sending domains.
     Returns (status code, payload)."""
@@ -460,6 +460,14 @@ def mailing_action(path, body, out_dir, env_path, run):
         if path == "/mailing/replies":
             found = mailing_app.check_replies(out_dir, env_path, slug)
             return 200, {"ok": True, **{k: len(v) for k, v in found.items()}}
+        if path == "/mailing/keep":
+            found = mailing_app.keep_only(out_dir, env_path, slug, body.get("filename"), _upload(body),
+                                          apply=body.get("apply") is True)
+            if found["applied"] and not (busy and busy()):
+                from . import cli
+                from .config import load_settings
+                cli.rebuild(out_dir, load_settings(env_path))  # hide them from the contacts now
+            return 200, {"ok": True, **found}
         if path == "/mailing/clean":
             return 200, {"ok": True, **mailing_app.clean_list(out_dir, slug, apply=body.get("apply") is True)}
         if path == "/mailing/health":
@@ -645,7 +653,7 @@ def make_handler(out_dir, control, env_path=".env", updater=None):
                 self._json({"ok": stopped}, 200 if stopped else 409)
             elif self.path.startswith(("/settings/", "/mailing/")) or (self.path == "/update" and updater):
                 length = int(self.headers.get("Content-Length") or 0)
-                big = self.path == "/mailing/test" or self.path.startswith("/mailing/library/")
+                big = self.path in ("/mailing/test", "/mailing/keep") or self.path.startswith("/mailing/library/")
                 if length > (MAX_UPLOAD if big else 65536):
                     return self._send(b"too large", "text/plain", 413)
                 try:
@@ -656,7 +664,7 @@ def make_handler(out_dir, control, env_path=".env", updater=None):
                 if self.path == "/update":
                     code, payload = update_action(updater, body, control, out_dir)
                 elif self.path.startswith("/mailing/"):
-                    code, payload = mailing_action(self.path, body, out_dir, env_path, send_run)
+                    code, payload = mailing_action(self.path, body, out_dir, env_path, send_run, control.busy)
                 else:
                     code, payload = settings_action(self.path, body, out_dir, env_path, control)
                 self._json(payload, code)

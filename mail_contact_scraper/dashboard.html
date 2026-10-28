@@ -788,6 +788,15 @@
         <a class="btn btn-outline" id="cp-clean-csv" href="#" download="correos-a-revisar.csv" hidden>Ver cuáles (CSV)</a>
       </div>
       <div class="msg" id="cp-clean-msg" hidden></div>
+      <h3 style="margin-top:18px">Quedarse solo con tu lista</h3>
+      <p class="hint">Sube el Excel o CSV de pendientes que limpiaste (por ejemplo, el de "Descargar pendientes" sin los que no quieres). Los pendientes que no estén en tu archivo se van a ignorados como competencia y nunca se les envía.</p>
+      <div class="actions-row">
+        <button class="btn btn-outline" id="cp-keep" type="button">Subir mi lista</button>
+        <input type="file" id="cp-keep-file" accept=".xlsx,.csv,.txt" hidden>
+        <button class="btn btn-primary" id="cp-keep-apply" type="button" hidden></button>
+        <a class="btn btn-outline" id="cp-keep-csv" href="#" download="pendientes-fuera-de-tu-lista.csv" hidden>Ver cuáles (CSV)</a>
+      </div>
+      <div class="msg" id="cp-keep-msg" hidden></div>
     </section>
     <section class="set">
       <h3>Enviar la campaña</h3>
@@ -1892,6 +1901,35 @@
       : `Revisé ${fmt.format(r.checked_domains)} dominios y no encontré correos malos.${unknown}`, true);
     if (apply) refreshCampaign();
   }
+  let keepUpload = null;
+  async function keepList(apply) {
+    showMsg("cp-keep-msg", apply ? "Mandándolos a ignorados…" : "Comparando con los pendientes…", true);
+    const r = await settingsCall("/mailing/keep", { campaign: $("ml-campaign").value, apply, ...keepUpload })
+      .catch(() => ({ ok: false, error: "No se pudo revisar el archivo." }));
+    if (!r.ok) { showMsg("cp-keep-msg", r.error, false); $("cp-keep-apply").hidden = true; return; }
+    $("cp-keep-csv").href = URL.createObjectURL(new Blob([r.csv], { type: "text/csv" }));
+    $("cp-keep-csv").hidden = !r.extra;
+    $("cp-keep-apply").hidden = r.applied || !r.extra;
+    $("cp-keep-apply").textContent = `Mandar ${fmt.format(r.extra)} a ignorados`;
+    showMsg("cp-keep-msg", r.applied
+      ? `Listo: ${fmt.format(r.extra)} contactos quedaron en ignorados como competencia (${fmt.format(r.entries.length)} renglones en tu lista: un dominio tapa a toda la empresa). Quedan ${fmt.format(r.in_file)} pendientes.`
+      : r.extra ? `De ${fmt.format(r.pending)} pendientes, ${fmt.format(r.in_file)} están en tu archivo y ${fmt.format(r.extra)} no. Revísalos en el CSV antes de mandarlos a ignorados.`
+      : `Los ${fmt.format(r.pending)} pendientes están en tu archivo; no hay nada que quitar.`, true);
+    if (r.applied) refreshCampaign();
+  }
+  $("cp-keep").addEventListener("click", () => $("cp-keep-file").click());
+  $("cp-keep-file").addEventListener("change", () => {
+    const f = $("cp-keep-file").files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      keepUpload = { filename: f.name, data: String(reader.result).split(",")[1] || "" };
+      $("cp-keep-file").value = "";
+      keepList(false);
+    };
+    reader.readAsDataURL(f);
+  });
+  $("cp-keep-apply").addEventListener("click", () => keepList(true));
   $("cp-clean").addEventListener("click", () => cleanList(false));
   $("cp-clean-apply").addEventListener("click", () => cleanList(true));
   $("open-mailer").addEventListener("click", openMailer);
