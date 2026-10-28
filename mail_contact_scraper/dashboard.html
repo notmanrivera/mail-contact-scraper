@@ -1772,7 +1772,7 @@
   /* Campaña: lista, buzones, envío real con confirmación, registro */
   let camp = null, campTimer = null, chosenBoxes = null;
   const ESTADO = { enviado: "Enviados", seguimiento: "Seguimientos", rechazado: "Rechazados", error: "Con error" };
-  const BAJA = { baja: "bajas", rebote: "rebotes", rechazado: "rechazados", "ya-no-labora": "ya no laboran ahí",
+  const BAJA = { baja: "bajas", rebote: "rebotes", bloqueado: "bloqueados por el servidor (spam)", rechazado: "rechazados", "ya-no-labora": "ya no laboran ahí",
     "error-de-dedo": "errores de dedo", "dominio-sin-correo": "dominios sin correo" };
   const RESP = { "respondió": "Contestaron", "fuera-de-oficina": "Fuera de oficina", "ya-no-labora": "Ya no laboran ahí" };
   async function refreshCampaign() {
@@ -1928,7 +1928,7 @@
     const a = r.ok ? await settingsCall("/mailing/replies", { campaign: $("ml-campaign").value })
       .catch(() => ({ ok: false, error: "No se pudieron revisar las respuestas." })) : null;
     const answers = !a ? "" : a.ok ? ` Respuestas nuevas: ${a["respondió"] || 0}; fuera de oficina: ${a["fuera-de-oficina"] || 0}; ya no laboran ahí: ${a["ya-no-labora"] || 0}.` : ` ${a.error}`;
-    showMsg("cp-msg", r.ok ? `Listo: ${r.unsubscribed} bajas y ${r.bounced} rebotes nuevos quedaron fuera de la lista.${answers}` : r.error, r.ok && (!a || a.ok));
+    showMsg("cp-msg", r.ok ? `Listo: ${r.unsubscribed} bajas y ${r.bounced} rebotes o bloqueos nuevos quedaron fuera de la lista.${answers}` : r.error, r.ok && (!a || a.ok));
     btn.disabled = false; btn.textContent = "Revisar bajas, rebotes y respuestas";
     refreshCampaign();
   });
@@ -2139,7 +2139,7 @@
   const REASON = { competitor: "Competencia", service: "Servicio o app", bulk: "Correo masivo", automated: "Aviso automático", ignored: "Ignorado por ti" };
   const BULK_WHY = { "list-unsubscribe": "trae botón de baja de un clic", precedence: "viene marcado como masivo",
                      "auto-submitted": "es una respuesta automática", esp: "lo mandó una plataforma de mailing" };
-  const SUPP = { baja: "Pidió su baja", rebote: "Rebotó", rechazado: "Rechazado" };
+  const SUPP = { baja: "Pidió su baja", rebote: "Rebotó", bloqueado: "Bloqueado como spam", rechazado: "Rechazado" };
   const domainOf = (e) => e.split("@").pop();
   const kindOf = (v) => v.includes("@") ? "Correo" : v.endsWith(".*") ? "Dominio, cualquier terminación" : "Dominio";
   function autoWhy(rule) {

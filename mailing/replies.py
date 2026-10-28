@@ -26,7 +26,8 @@ AUTO_SUBJECT = re.compile(r"fuera de (la )?oficina|respuesta autom|autorespuesta
 GONE_TEXT = re.compile(
     r"ya no (labora|trabaja|colabora|forma parte|pertenece|se encuentra (laborando|en la empresa|con nosotros)|"
     r"est[aá] (laborando|en la empresa|con nosotros))|dej[oó] de (laborar|trabajar|colaborar)|"
-    r"ha dejado (la empresa|de (laborar|trabajar|colaborar))|no longer (with|works|employed)|has left the company",
+    r"ha dejado (la empresa|de (laborar|trabajar|colaborar))|no longer (with|works|employed)|"
+    r"(has )?left (the|our) (company|organi[sz]ation)",
     re.I)
 NOT_PEOPLE = re.compile(r"mailer-daemon|postmaster|no-?reply|noreply", re.I)
 ADDRESS = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[a-z]{2,}", re.I)

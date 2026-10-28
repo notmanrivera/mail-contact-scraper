@@ -1,3 +1,4 @@
+import email
 """Leaving out what is not a prospect: services, mass mailings, ignored senders, bounces."""
 import csv
 import json
@@ -320,3 +321,34 @@ def test_competitors_tab_hides_them_before_allowed(tmp_path, monkeypatch):
     data = dashboard.settings_action("/settings/competitor", {"remove": "rival.mx"}, out, env)[1]
     assert data["lists"]["competitors"] == []
     assert "rafa@rival.mx" in {r["email"] for r in csv.DictReader(open(out / "contacts.csv", encoding="utf-8-sig"))}
+
+
+def test_delivery_reports_tell_bounce_block_and_delay_apart():
+    from email import message_from_string
+    from email.mime.base import MIMEBase
+    from mail_contact_scraper.parse import delivery_failures
+
+    def report(addr, action, status, diag="", subject="Delivery Status Notification (Failure)"):
+        msg = EmailMessage()
+        msg["From"], msg["Subject"] = "Mail Delivery Subsystem <mailer-daemon@googlemail.com>", subject
+        msg.set_content("x")
+        msg.make_mixed()
+        part = MIMEBase("message", "delivery-status")
+        part.set_payload([message_from_string("Reporting-MTA: dns; googlemail.com\n"), message_from_string(
+            f"Final-Recipient: rfc822; {addr}\nAction: {action}\nStatus: {status}\nDiagnostic-Code: smtp; {diag}\n")])
+        msg.attach(part)
+        return msg
+
+    assert delivery_failures(report("luis@hotmail.com", "failed", "5.1.1", "550 5.1.1 User unknown")) == [
+        ("luis@hotmail.com", "rebote")]
+    assert delivery_failures(report("pablo@aditivospq.com", "failed", "5.7.1",
+                                    "550 5.7.1 Message rejected as spam")) == [("pablo@aditivospq.com", "bloqueado")]
+    assert delivery_failures(report("x@ocetif.org", "failed", "5.0.0", "554 Your message was blocked")) == [
+        ("x@ocetif.org", "bloqueado")]
+    delay = report("erik@diageo.com", "delayed", "4.4.1", "connection timed out",
+                   subject="Delivery Status Notification (Delay)")
+    delay["X-Failed-Recipients"] = "erik@diageo.com"
+    assert delivery_failures(delay) == []
+    raw = (b"From: mailer-daemon@googlemail.com\r\nSubject: =?UTF-8?Q?El_mensaje_se_bloque=C3=B3?=\r\n"
+           b"X-Failed-Recipients: pablo@aditivospq.com\r\n\r\nx")
+    assert delivery_failures(email.message_from_bytes(raw)) == [("pablo@aditivospq.com", "bloqueado")]

@@ -147,9 +147,18 @@ def bulk_reason(msg):
     return ""
 
 
-def bounced_addresses(msg):
-    """Recipients a delivery-failure report (DSN) says could not be reached."""
-    failed = []
+BLOCKED = re.compile(r"spam|blocked|bloque|blacklist|block ?list|reputation|policy|rejected for policy|"
+                     r"not accepted|unsolicited|5\.7\.\d", re.I)
+
+
+def delivery_failures(msg):
+    """[(address, "rebote" | "bloqueado")] that a delivery report (DSN) says failed for good.
+
+    "rebote": the address does not exist or cannot receive mail. "bloqueado": the recipient's
+    server refused the message itself (spam filter, policy, reputation): the address may be fine.
+    Delay reports ("problema temporal", Action: delayed, Status 4.x.x) are not failures: the
+    sending server keeps trying and sends a failure report later if it gives up."""
+    failed = {}
     for part in msg.walk():
         if part.get_content_type() != "message/delivery-status":
             continue
@@ -161,13 +170,23 @@ def bounced_addresses(msg):
             recipient = block.get("Final-Recipient") or block.get("Original-Recipient") or ""
             addr = recipient.split(";", 1)[-1].strip().strip("<>").lower()
             if "@" in addr and (action == "failed" or status.startswith("5")) and addr not in failed:
-                failed.append(addr)
+                why = f"{status} {block.get('Diagnostic-Code') or ''}"
+                blocked = not status.startswith(("5.1", "5.2")) and (status.startswith("5.7") or BLOCKED.search(why))
+                failed[addr] = "bloqueado" if blocked else "rebote"
+    subject = decode_str(str(msg.get("Subject") or ""))
+    if not failed and "delay" in subject.lower():
+        return []
     for value in msg.get_all("X-Failed-Recipients") or []:
         for _, addr in getaddresses([value]):
             addr = addr.lower()
             if "@" in addr and addr not in failed:
-                failed.append(addr)
-    return failed
+                failed[addr] = "bloqueado" if re.search(r"bloque|blocked", subject, re.I) else "rebote"
+    return list(failed.items())
+
+
+def bounced_addresses(msg):
+    """Recipients a delivery-failure report (DSN) says could not be reached."""
+    return [addr for addr, _ in delivery_failures(msg)]
 
 
 def _raw_headers(msg, name):
