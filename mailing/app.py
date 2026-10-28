@@ -91,6 +91,7 @@ def overview(out_dir, env_path, run, slug="", chosen=(), daily_limit=0, per_comp
         "run": run.status(),
         "replies": _reply_counts(where["out"]),
         "followup": None,
+        "followup_text": _followup_text(campaign),
         "per_company": send.PER_COMPANY_DAILY,
     }
     try:
@@ -115,6 +116,23 @@ def overview(out_dir, env_path, run, slug="", chosen=(), daily_limit=0, per_comp
                             "due": due["pending"], "this_run": due["this_run"], "waiting": due["followup_waiting"],
                             "sent": counts.get(send.FOLLOWUP, 0)}
     return info
+
+
+def _followup_text(campaign):
+    """The follow-up as the editor shows it, with a preview of how it arrives."""
+    f = campaign.get("followup") or {}
+    body = f.get("body") or []
+    body = [body] if isinstance(body, str) else body
+    sender = {"email": campaign["sender"]["email"], "name": campaign["sender"].get("name", "")}
+    sample = {"email": "prospecto@ejemplo.com", "name": "Juan Pérez", "greeting": "Hola Juan,"}
+    preview = ""
+    if body:
+        msg = send.make_followup(campaign, sample, "", sender)
+        preview = msg.get_body(("plain",)).get_content().split("\n\nPara no recibir")[0]
+        preview = f"Asunto: {msg['Subject']}\n\n{preview}"
+    return {"days": int(f.get("days") or send.FOLLOWUP_DAYS), "body": "\n\n".join(body),
+            "firma": "\n".join(send.followup_signature(campaign, sender)), "preview": preview,
+            "editable": "_folder" in campaign}
 
 
 def _reply_counts(out):

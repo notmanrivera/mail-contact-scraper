@@ -217,3 +217,24 @@ def test_library_copy_seeded_before_the_followup_gets_it(tmp_path):
     info.write_text(json.dumps(data))
     library.ensure(tmp_path)
     assert json.loads(info.read_text())["followup"]["days"] == 3
+
+
+def test_followup_text_is_edited_from_the_app(tmp_path, monkeypatch):
+    import pytest
+    from mailing import app as mailing_app, library
+    _, env = _app_setup(tmp_path, monkeypatch, FakeSMTP())
+    info = mailing_app.overview(tmp_path, env, mailing_app.SendRun(), "qc-aro")
+    t = info["followup_text"]
+    assert t["days"] == 5 and t["editable"] and "Q-Pumps" in t["body"]
+    assert t["firma"] == "Pedro Marquina\nDirector de Ventas · D-Industrimex"
+    assert t["preview"].startswith("Asunto: Re: ") and "Hola Juan," in t["preview"]
+    library.save(tmp_path, "qc-aro", {"followup": {"days": "3", "body": "Primer párrafo.\n\n  Segundo\npárrafo. ",
+                                                   "firma": "Rubén\n\nVentas"}})
+    t = mailing_app.overview(tmp_path, env, mailing_app.SendRun(), "qc-aro")["followup_text"]
+    assert t["days"] == 3 and t["body"] == "Primer párrafo.\n\nSegundo párrafo." and t["firma"] == "Rubén\nVentas"
+    assert t["preview"].endswith("Primer párrafo.\n\nSegundo párrafo.\n\nRubén\nVentas")
+    with pytest.raises(ValueError, match="60"):
+        library.save(tmp_path, "qc-aro", {"followup": {"days": 90, "body": "x"}})
+    library.save(tmp_path, "qc-aro", {"followup": {"days": 5, "body": ""}})  # turns it off
+    info = mailing_app.overview(tmp_path, env, mailing_app.SendRun(), "qc-aro")
+    assert info["followup"] is None and info["followup_text"]["preview"] == ""
