@@ -19,6 +19,7 @@ import csv
 import email
 import html as html_lib
 import imaplib
+import json
 import os
 import random
 import re
@@ -250,37 +251,94 @@ def add_suppression(path, addresses, reason):
     return new
 
 
-def sync_suppression(mailboxes, suppression_path, connect, own_domains=(), days=90):
+SEEN_NAME = "imap-visto.json"
+
+
+class Stopped(Exception):
+    """The person pressed Detener while the inboxes were being read."""
+
+
+class Seen:
+    """Highest UID already read per mailbox and search (imap-visto.json), so each check
+    downloads only the mail that arrived since the last one instead of 90 days of it."""
+
+    def __init__(self, path):
+        self.path = Path(path) if path else None
+        self.data, self.pending = {}, {}
+        try:
+            self.data = json.loads(self.path.read_text(encoding="utf-8")) if self.path else {}
+        except (OSError, ValueError):
+            self.data = {}
+
+    @staticmethod
+    def validity(conn):
+        """UIDVALIDITY of the folder just selected: when it changes, the UIDs mean other messages."""
+        try:
+            _, value = conn.response("UIDVALIDITY")
+            return value[0].decode() if value and value[0] else ""
+        except Exception:
+            return ""
+
+    def new(self, key, uids):
+        last = self.data.get(key, 0)
+        if uids:
+            self.pending[key] = max(self.pending.get(key, 0), max(int(u) for u in uids))
+        return [u for u in uids if int(u) > last]
+
+    def save(self):
+        """Called only after what was read is saved, so a failed or stopped check reads it again."""
+        if not self.path:
+            return
+        self.data.update(self.pending)
+        tmp = self.path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(self.data, indent=1), encoding="utf-8")
+        tmp.replace(self.path)
+
+
+def sync_suppression(mailboxes, suppression_path, connect, own_domains=(), days=90, seen_path=None,
+                     progress=None, stop=None):
     """Add 'Baja de correos' requests and bounced recipients from the inboxes to the list.
 
-    Reads only (BODY.PEEK), nothing is marked as read.
+    Reads only (BODY.PEEK), nothing is marked as read. With seen_path, skips what an earlier
+    check already read. progress(text) tells how far it is; stop() ends it early (Stopped).
     """
     from mail_contact_scraper.parse import bounced_addresses
 
     since = (date.today() - timedelta(days=days)).strftime("%d-%b-%Y")
     unsubscribed, bounced = set(), set()
+    seen = Seen(seen_path)
     for box in mailboxes:
+        if progress:
+            progress(f"Conectando con {box.email}…")
         conn = connect(box)
         try:
             conn.select("INBOX", readonly=True)
-            for criteria, bucket in ((f'(SINCE {since} SUBJECT "{UNSUBSCRIBE_SUBJECT}")', unsubscribed),
-                                     (f'(SINCE {since} FROM "mailer-daemon")', bounced),
-                                     (f'(SINCE {since} FROM "postmaster")', bounced)):
+            validity = seen.validity(conn)
+            todo = []
+            for what, criteria, bucket in (("baja", f'(SINCE {since} SUBJECT "{UNSUBSCRIBE_SUBJECT}")', unsubscribed),
+                                           ("mailer-daemon", f'(SINCE {since} FROM "mailer-daemon")', bounced),
+                                           ("postmaster", f'(SINCE {since} FROM "postmaster")', bounced)):
                 typ, data = conn.uid("SEARCH", None, criteria)
-                for uid in (data[0].split() if data and data[0] else []):
-                    typ, parts = conn.uid("FETCH", uid, "(BODY.PEEK[])")
-                    raw = next((p[1] for p in parts if isinstance(p, tuple)), b"")
-                    msg = email.message_from_bytes(raw)
-                    if bucket is bounced:
-                        bucket.update(bounced_addresses(msg))
-                        continue
-                    bucket.add(parseaddr(msg.get("From", ""))[1].lower())
-                    # the unsubscribe link puts the address that got the mailing in the body
-                    for part in msg.walk():
-                        if part.get_content_type() == "text/plain":
-                            text = part.get_payload(decode=True) or b""
-                            bucket.update(m.lower() for m in re.findall(r"[^\s<>@]+@[^\s<>@]+\.[a-z]{2,}",
-                                                                        text.decode(errors="replace"), re.I))
+                uids = data[0].split() if data and data[0] else []
+                todo += [(uid, bucket) for uid in seen.new(f"{box.email}|{validity}|{what}", uids)]
+            for i, (uid, bucket) in enumerate(todo, 1):
+                if stop and stop():
+                    raise Stopped("Detenido.")
+                if progress:
+                    progress(f"Bajas y rebotes en {box.email}: {i} de {len(todo)} correos nuevos")
+                typ, parts = conn.uid("FETCH", uid, "(BODY.PEEK[])")
+                raw = next((p[1] for p in parts if isinstance(p, tuple)), b"")
+                msg = email.message_from_bytes(raw)
+                if bucket is bounced:
+                    bucket.update(bounced_addresses(msg))
+                    continue
+                bucket.add(parseaddr(msg.get("From", ""))[1].lower())
+                # the unsubscribe link puts the address that got the mailing in the body
+                for part in msg.walk():
+                    if part.get_content_type() == "text/plain":
+                        text = part.get_payload(decode=True) or b""
+                        bucket.update(m.lower() for m in re.findall(r"[^\s<>@]+@[^\s<>@]+\.[a-z]{2,}",
+                                                                    text.decode(errors="replace"), re.I))
         finally:
             try:
                 conn.logout()
@@ -288,8 +346,10 @@ def sync_suppression(mailboxes, suppression_path, connect, own_domains=(), days=
                 pass
     own = {d.lower() for d in own_domains}
     keep = lambda addrs: {a for a in addrs if EMAIL_RE.match(a) and a.split("@")[-1] not in own}
-    return (add_suppression(suppression_path, keep(unsubscribed), "baja"),
-            add_suppression(suppression_path, keep(bounced), "rebote"))
+    found = (add_suppression(suppression_path, keep(unsubscribed), "baja"),
+             add_suppression(suppression_path, keep(bounced), "rebote"))
+    seen.save()
+    return found
 
 
 def inboxes(settings):

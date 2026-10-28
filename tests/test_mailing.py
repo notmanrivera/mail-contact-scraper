@@ -1,4 +1,5 @@
 import csv
+from types import SimpleNamespace
 import re
 from email import message_from_bytes
 from email.policy import default
@@ -252,12 +253,43 @@ def test_sync_suppression_reads_unsubscribes_and_bounces(tmp_path):
         def logout(self):
             pass
 
-    supp = tmp_path / "suppression.txt"
-    unsubscribed, bounced = sync_suppression([object()], supp, lambda box: FakeIMAP(),
+    supp, box = tmp_path / "suppression.txt", SimpleNamespace(email="pedro@dindustrimex.com")
+    unsubscribed, bounced = sync_suppression([box], supp, lambda box: FakeIMAP(),
                                              own_domains=["dindustrimex.com"])
     assert set(unsubscribed) == {"ana@cliente.mx", "ana.vieja@cliente.mx"} and bounced == ["nadie@cliente.mx"]
     assert read_suppression(supp) == {"ana@cliente.mx", "ana.vieja@cliente.mx", "nadie@cliente.mx"}
-    assert sync_suppression([object()], supp, lambda box: FakeIMAP()) == ([], [])
+    assert sync_suppression([box], supp, lambda box: FakeIMAP()) == ([], [])
+
+
+def test_sync_suppression_reads_only_new_mail_and_can_stop(tmp_path):
+    from mailing.send import Stopped, sync_suppression
+    fetched = []
+
+    class FakeIMAP:
+        def select(self, *a, **k):
+            return "OK", [b"2"]
+
+        def response(self, code):
+            return code, [b"7"]
+
+        def uid(self, cmd, *args):
+            if cmd == "SEARCH":
+                return "OK", [b"1 2" if "mailer-daemon" in args[-1] else b""]
+            fetched.append(args[0])
+            return "OK", [(b"1 (BODY[] {10}", b"From: mailer-daemon@x.com\r\nX-Failed-Recipients: n@c.mx\r\n\r\nx")]
+
+        def logout(self):
+            pass
+
+    supp, seen, box = tmp_path / "suppression.txt", tmp_path / "imap-visto.json", SimpleNamespace(email="p@d.com")
+    with pytest.raises(Stopped):
+        sync_suppression([box], supp, lambda b: FakeIMAP(), seen_path=seen, stop=lambda: True)
+    assert fetched == [] and not seen.exists()
+    steps = []
+    assert sync_suppression([box], supp, lambda b: FakeIMAP(), seen_path=seen, progress=steps.append)[1] == ["n@c.mx"]
+    assert fetched == [b"1", b"2"] and "2 de 2" in steps[-1]
+    sync_suppression([box], supp, lambda b: FakeIMAP(), seen_path=seen)
+    assert fetched == [b"1", b"2"]  # nothing new: nothing downloaded again
 
 
 def test_senders_take_turns_and_one_hitting_its_limit_hands_over(tmp_path):
@@ -438,6 +470,34 @@ def test_app_run_sends_logs_and_resumes(tmp_path, monkeypatch):
     assert len({m["To"] for m in smtp.sent}) == 5  # nobody twice
     info = mailing_app.overview(tmp_path, env, run, "qc-aro")
     assert info["log"]["counts"] == {"enviado": 5} and info["plan"]["pending"] == 0
+
+
+def test_app_run_can_skip_the_inbox_check_but_keeps_the_suppression_list(tmp_path, monkeypatch):
+    import csv
+    smtp = FakeSMTP()
+    mailing_app, env = _app_setup(tmp_path, monkeypatch, smtp)
+    first = next(csv.DictReader(open(tmp_path / "contacts.csv", encoding="utf-8-sig")))["email"]
+    send.add_suppression(tmp_path / "suppression.txt", [first], "baja")
+    calls = []
+    run = mailing_app.SendRun(check=lambda *a: calls.append(a) or ([], []), answers=lambda *a: calls.append(a) or {})
+    state = run.start(tmp_path, env, {"campaign": "qc-aro", "confirm": "ENVIAR", "skip_check": True}, pause=0)
+    assert state["phase"] == "enviando"
+    state = _wait(run)
+    assert calls == [] and "No revisé bajas" in state["note"]
+    assert state["sent"] == 4 and first not in {m["To"].split("<")[-1].rstrip(">") for m in smtp.sent}
+
+
+def test_app_run_stop_while_reading_the_inboxes_sends_nothing(tmp_path, monkeypatch):
+    smtp = FakeSMTP()
+    mailing_app, env = _app_setup(tmp_path, monkeypatch, smtp)
+
+    def check(out_dir, env_path, slug, progress, stop):
+        progress("Bajas y rebotes en pedro@dindustrimex.com: 1 de 900 correos nuevos")
+        raise send.Stopped("Detenido.")
+    run = mailing_app.SendRun(check=check)
+    run.start(tmp_path, env, {"campaign": "qc-aro", "confirm": "ENVIAR"}, pause=0)
+    state = _wait(run)
+    assert smtp.sent == [] and "No se envió nada" in state["note"] and "1 de 900" in state["checking"]
 
 
 def test_app_run_stops_between_messages(tmp_path, monkeypatch):
