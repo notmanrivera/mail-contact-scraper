@@ -186,6 +186,30 @@
   .tabs button { border: 0; background: none; padding: 7px 16px; border-radius: 100px; font: 600 13px var(--font); color: var(--muted); cursor: pointer; }
   .tabs button[aria-selected="true"] { background: var(--ink); color: #fff; }
   .mailer-body.camp { grid-template-columns: minmax(320px, 440px) minmax(0, 1fr); }
+  .cp-main { align-self: start; max-height: 100%; }
+  .cp-side { display: grid; gap: 12px; align-content: start; overflow-y: auto; min-height: 0; padding-right: 2px; }
+  .cp-side .set { overflow: visible; }
+  .cp-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 10px 0 14px; }
+  .cp-stats .stat { padding: 9px 12px; }
+  .cp-stats .stat .k { font-size: 11.5px; }
+  .cp-stats .stat .v { font-size: 20px; }
+  .cp-stats .stat.big { background: var(--red-tint); border-color: var(--red-line); }
+  .cp-stats .stat.big .v { color: var(--red-deep); }
+  .send-row { display: flex; gap: 8px; }
+  .send-row .input { flex: 1; min-width: 0; }
+  .send-row .btn { flex: none; }
+  details.fold > summary, details.more > summary { list-style: none; cursor: pointer; display: flex; align-items: baseline; gap: 10px; }
+  details.fold > summary::-webkit-details-marker, details.more > summary::-webkit-details-marker { display: none; }
+  details.fold > summary h3 { margin: 0; }
+  details.fold > summary::after, details.more > summary::after { content: ""; margin-left: auto; width: 8px; height: 8px; flex: none; align-self: center;
+    border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg); transition: transform .15s; }
+  details[open].fold > summary::after, details[open].more > summary::after { transform: rotate(-135deg); }
+  details.fold[open] > summary { margin-bottom: 12px; }
+  details .sum { font-size: 12.5px; color: var(--muted); font-weight: 600; display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+  details.more { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+  details.more > summary { font-weight: 700; font-size: 13.5px; color: var(--ink); }
+  details.more[open] > summary { margin-bottom: 12px; }
+  .cp-side h4 { margin: 16px 0 4px; font-size: 13.5px; color: var(--ink); }
   .mini-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
   .mini-stats .stat { padding: 10px 12px; }
   .boxes-list { display: grid; gap: 6px; margin-bottom: 12px; }
@@ -196,6 +220,8 @@
   .send-box { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 14px; }
   .send-box .plan-line { font-size: 13px; color: var(--text); margin: 0 0 10px; }
   .send-box .plan-line b { color: var(--ink); }
+  .plan-line .why-more { color: var(--muted); cursor: help; }
+  .plan-line .plan-extra { display: block; margin-top: 4px; font-size: 12px; color: var(--muted); }
   .run-box { margin-top: 12px; padding: 12px; border-radius: 14px; background: #F4F2F1; }
   .run-box .bar { height: 10px; border-radius: 10px; background: #E6E1E0; overflow: hidden; margin: 8px 0; }
   .run-box .bar span { display: block; height: 100%; width: 0; background: var(--red); transition: width .6s ease; }
@@ -205,7 +231,7 @@
   .fu-preview { margin: 0; padding: 12px; border-radius: 12px; background: #F4F2F1; white-space: pre-wrap; font: 12.5px/1.5 var(--font); color: var(--text); }
   .health { display: grid; gap: 8px; margin-bottom: 12px; }
   .health .dom { padding: 10px 12px; border-radius: 12px; background: #F4F2F1; }
-  .health .head { display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--ink); }
+  .health .head { display: flex; align-items: center; justify-content: flex-start; margin: 0; gap: 8px; font-weight: 700; color: var(--ink); }
   .health .sum { margin: 2px 0 0 19px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
   .health ul { margin: 6px 0 0; padding: 0; list-style: none; font-size: 12.5px; color: var(--text); display: grid; gap: 3px; }
   .light { width: 11px; height: 11px; border-radius: 50%; flex: none; display: inline-block; background: #B9B3B1; }
@@ -223,6 +249,7 @@
     .mailer-body.camp { grid-template-columns: minmax(0, 1fr); }
     .mailer-body { grid-template-columns: minmax(0, 1fr); overflow-y: auto; align-content: start; }
     .mailer-body .set { overflow: visible; }
+    .cp-side { overflow: visible; }
     .preview { min-height: 520px; }
   }
   .steps { margin: 0 0 12px; padding-left: 18px; color: var(--text); font-size: 12.5px; display: grid; gap: 4px; }
@@ -792,52 +819,20 @@
     </button>
   </div>
   <div class="mailer-body camp" id="ml-camp-pane">
-    <section class="set">
-      <h3>Antes de enviar</h3>
-      <p class="hint">Que el dominio esté bien firmado (SPF, DKIM, DMARC) y que la lista no tenga correos que rebotarán seguro. Muchos rebotes queman el buzón.</p>
-      <div class="health" id="cp-health"><div class="hint">Revisando el dominio…</div></div>
-      <div class="actions-row">
-        <button class="btn btn-outline" id="cp-clean" type="button">Limpiar lista</button>
-        <button class="btn btn-primary" id="cp-clean-apply" type="button" hidden>Sacarlos de la lista</button>
-        <a class="btn btn-outline" id="cp-clean-csv" href="#" download="correos-a-revisar.csv" hidden>Ver cuáles (CSV)</a>
-      </div>
-      <div class="msg" id="cp-clean-msg" hidden></div>
-      <h3 style="margin-top:18px">Quedarse solo con tu lista</h3>
-      <p class="hint">Sube el Excel o CSV de pendientes que limpiaste (por ejemplo, el de "Descargar pendientes" sin los que no quieres). Los pendientes que no estén en tu archivo se van a Ignorados ▸ Competencia y nunca se les envía.</p>
-      <div class="actions-row">
-        <button class="btn btn-outline" id="cp-keep" type="button">Subir mi lista</button>
-        <input type="file" id="cp-keep-file" accept=".xlsx,.csv,.txt" hidden>
-        <button class="btn btn-primary" id="cp-keep-apply" type="button" hidden></button>
-        <a class="btn btn-outline" id="cp-keep-csv" href="#" download="pendientes-fuera-de-tu-lista.csv" hidden>Ver cuáles (CSV)</a>
-      </div>
-      <div class="msg" id="cp-keep-msg" hidden></div>
-    </section>
-    <section class="set">
-      <h3>Enviar la campaña</h3>
-      <div class="field"><label for="ml-campaign">Campaña que se envía</label><select class="input" id="ml-campaign"></select></div>
+    <section class="set cp-main">
+      <div class="field"><label for="ml-campaign">Campaña</label><select class="input" id="ml-campaign"></select></div>
       <p class="hint" id="cp-subject"></p>
-      <div class="mini-stats">
-        <div class="stat"><div class="k">En la lista</div><div class="v num" id="cp-audience">—</div></div>
+      <div class="cp-stats">
+        <div class="stat big"><div class="k">Faltan</div><div class="v num" id="cp-pending">—</div></div>
         <div class="stat"><div class="k">Ya la recibieron</div><div class="v num" id="cp-done">—</div></div>
-        <div class="stat"><div class="k">Faltan</div><div class="v num" id="cp-pending">—</div></div>
-        <div class="stat"><div class="k">Fuera por baja o rebote</div><div class="v num" id="cp-out">—</div></div>
-      </div>
-      <div class="field"><label>Buzones que envían (se turnan)</label><div class="boxes-list" id="cp-boxes"></div></div>
-      <div class="row-half">
-        <div class="field"><label for="cp-daily">Máximo al día por buzón</label><input class="input" id="cp-daily" type="number" min="1" placeholder="1500"></div>
-        <div class="field"><label for="cp-limit">Máximo en este envío</label><input class="input" id="cp-limit" type="number" min="0" placeholder="Todo el cupo de hoy"></div>
-      </div>
-      <div class="field"><label for="cp-company">Máximo por empresa al día (0 = sin tope)</label><input class="input" id="cp-company" type="number" min="0" placeholder="3"></div>
-      <div class="field">
-        <label class="switch"><input type="checkbox" id="cp-check" checked> Revisar bajas, rebotes y respuestas antes de enviar</label>
-        <p class="hint" id="cp-check-hint" hidden>Arranca más rápido, pero no ve las bajas ni los rebotes que llegaron desde la última revisión: a esas personas sí les llega este correo. Las bajas y rebotes que ya estaban registrados se respetan igual. Úsalo solo si acabas de revisar.</p>
+        <div class="stat"><div class="k">En la lista</div><div class="v num" id="cp-audience">—</div></div>
+        <div class="stat"><div class="k">Fuera (baja o rebote)</div><div class="v num" id="cp-out">—</div></div>
       </div>
       <div class="send-box">
         <p class="plan-line" id="cp-plan"></p>
-        <div class="field"><label for="cp-confirm">Para enviar a los prospectos escribe ENVIAR</label><input class="input" id="cp-confirm" type="text" autocomplete="off" placeholder="ENVIAR"></div>
-        <div class="actions-row">
+        <div class="send-row">
+          <input class="input" id="cp-confirm" type="text" autocomplete="off" placeholder="Escribe ENVIAR" aria-label="Para enviar a los prospectos escribe ENVIAR">
           <button class="btn btn-primary" id="cp-start" type="button" disabled>Enviar campaña</button>
-          <button class="btn btn-outline" id="cp-bajas" type="button">Revisar bajas, rebotes y respuestas</button>
         </div>
         <div class="run-box" id="cp-run" hidden>
           <div class="t" id="cp-run-text"></div>
@@ -846,44 +841,84 @@
         </div>
         <div class="msg" id="cp-msg" hidden></div>
       </div>
+      <details class="more" id="cp-opts">
+        <summary>Opciones de envío <span class="sum" id="cp-opts-sum"></span></summary>
+        <div class="field"><label>Buzones que envían (se turnan)</label><div class="boxes-list" id="cp-boxes"></div></div>
+        <div class="row-half">
+          <div class="field"><label for="cp-daily">Máximo al día por buzón</label><input class="input" id="cp-daily" type="number" min="1" placeholder="1500"></div>
+          <div class="field"><label for="cp-limit">Máximo en este envío</label><input class="input" id="cp-limit" type="number" min="0" placeholder="Todo el cupo de hoy"></div>
+        </div>
+        <div class="field"><label for="cp-company">Máximo por empresa al día (0 = sin tope)</label><input class="input" id="cp-company" type="number" min="0" placeholder="3"></div>
+        <div class="field">
+          <label class="switch"><input type="checkbox" id="cp-check" checked> Revisar bajas, rebotes y respuestas antes de enviar</label>
+          <p class="hint" id="cp-check-hint" hidden>Arranca más rápido, pero no ve las bajas ni los rebotes que llegaron desde la última revisión: a esas personas sí les llega este correo. Las bajas y rebotes ya registrados se respetan igual.</p>
+        </div>
+        <div class="actions-row"><button class="btn btn-outline" id="cp-bajas" type="button">Revisar bajas, rebotes y respuestas ahora</button></div>
+      </details>
     </section>
-    <section class="set" id="cp-fu" hidden>
-      <h3>Seguimiento</h3>
-      <p class="hint" id="cp-fu-hint"></p>
-      <div class="fu-editor">
-        <div class="field"><label for="cp-fu-days">Días después del primer correo</label><input class="input" id="cp-fu-days" type="number" min="1" max="60"></div>
-        <div class="field"><label for="cp-fu-body">Texto (después de "Hola Nombre,"; deja una línea en blanco entre párrafos)</label><textarea class="input" id="cp-fu-body" rows="7"></textarea></div>
-        <div class="field"><label for="cp-fu-firma">Firma</label><textarea class="input" id="cp-fu-firma" rows="2"></textarea></div>
-        <div class="actions-row"><button class="btn btn-outline" id="cp-fu-save" type="button">Guardar seguimiento</button></div>
-        <div class="msg" id="cp-fu-save-msg" hidden></div>
-        <div class="field"><label>Así le llega (ejemplo)</label><pre class="fu-preview" id="cp-fu-preview"></pre></div>
-      </div>
-      <div id="cp-fu-stats">
-      <div class="mini-stats">
-        <div class="stat"><div class="k">Listos para el seguimiento</div><div class="v num" id="cp-fu-due">—</div></div>
-        <div class="stat"><div class="k">Aún no cumplen los días</div><div class="v num" id="cp-fu-recent">—</div></div>
-        <div class="stat"><div class="k">Contestaron (leads)</div><div class="v num" id="cp-fu-replied">—</div></div>
-        <div class="stat"><div class="k">Fuera de oficina, esperando</div><div class="v num" id="cp-fu-away">—</div></div>
-      </div>
-      <div class="send-box">
-        <p class="plan-line" id="cp-fu-plan"></p>
-        <div class="field"><label for="cp-fu-confirm">Para mandar el seguimiento escribe ENVIAR</label><input class="input" id="cp-fu-confirm" type="text" autocomplete="off" placeholder="ENVIAR"></div>
-        <div class="actions-row"><button class="btn btn-primary" id="cp-fu-start" type="button" disabled>Enviar seguimiento</button></div>
-        <div class="msg" id="cp-fu-msg" hidden></div>
-      </div>
-      </div>
-    </section>
-    <section class="set">
-      <h3>Registro de envíos</h3>
-      <p class="hint">Cada correo enviado queda anotado; al volver a enviar sigue con los que faltan y nunca repite a nadie.</p>
-      <div class="log-chips" id="cp-counts"></div>
-      <div class="actions-row" style="margin-bottom:12px">
-        <a class="btn btn-outline" id="cp-csv-sent" href="#" download>Descargar enviados (CSV)</a>
-        <a class="btn btn-outline" id="cp-csv-pending" href="#" download>Descargar pendientes (CSV)</a>
-        <a class="btn btn-outline" id="cp-csv-replies" href="#" download>Descargar respuestas (CSV)</a>
-      </div>
-      <table class="log-table"><thead><tr><th>Fecha</th><th>Correo</th><th>Estado</th><th>Desde</th></tr></thead><tbody id="cp-log"></tbody></table>
-    </section>
+    <div class="cp-side">
+      <details class="set fold" id="cp-before">
+        <summary><h3>Antes de enviar</h3><span class="sum" id="cp-before-sum"></span></summary>
+        <div class="health" id="cp-health"><div class="hint">Revisando el dominio…</div></div>
+        <h4>Limpiar lista</h4>
+        <p class="hint">Saca los correos que rebotarán seguro (dominio sin correo o error de dedo).</p>
+        <div class="actions-row">
+          <button class="btn btn-outline" id="cp-clean" type="button">Limpiar lista</button>
+          <button class="btn btn-primary" id="cp-clean-apply" type="button" hidden>Sacarlos de la lista</button>
+          <a class="btn btn-outline" id="cp-clean-csv" href="#" download="correos-a-revisar.csv" hidden>Ver cuáles (CSV)</a>
+        </div>
+        <div class="msg" id="cp-clean-msg" hidden></div>
+        <h4>Quedarse solo con tu lista</h4>
+        <p class="hint">Sube tu Excel o CSV de pendientes. Los que no estén ahí se van a Ignorados ▸ Competencia.</p>
+        <div class="actions-row">
+          <button class="btn btn-outline" id="cp-keep" type="button">Subir mi lista</button>
+          <input type="file" id="cp-keep-file" accept=".xlsx,.csv,.txt" hidden>
+          <button class="btn btn-primary" id="cp-keep-apply" type="button" hidden></button>
+          <a class="btn btn-outline" id="cp-keep-csv" href="#" download="pendientes-fuera-de-tu-lista.csv" hidden>Ver cuáles (CSV)</a>
+        </div>
+        <div class="msg" id="cp-keep-msg" hidden></div>
+      </details>
+      <details class="set fold" id="cp-fu" hidden>
+        <summary><h3>Seguimiento</h3><span class="sum" id="cp-fu-sum"></span></summary>
+        <p class="hint" id="cp-fu-hint"></p>
+        <div id="cp-fu-stats">
+          <div class="cp-stats">
+            <div class="stat big"><div class="k">Listos hoy</div><div class="v num" id="cp-fu-due">—</div></div>
+            <div class="stat"><div class="k">Aún no cumplen los días</div><div class="v num" id="cp-fu-recent">—</div></div>
+            <div class="stat"><div class="k">Contestaron</div><div class="v num" id="cp-fu-replied">—</div></div>
+            <div class="stat"><div class="k">Fuera de oficina</div><div class="v num" id="cp-fu-away">—</div></div>
+          </div>
+          <div class="send-box">
+            <p class="plan-line" id="cp-fu-plan"></p>
+            <div class="send-row">
+              <input class="input" id="cp-fu-confirm" type="text" autocomplete="off" placeholder="Escribe ENVIAR" aria-label="Para mandar el seguimiento escribe ENVIAR">
+              <button class="btn btn-primary" id="cp-fu-start" type="button" disabled>Enviar seguimiento</button>
+            </div>
+            <div class="msg" id="cp-fu-msg" hidden></div>
+          </div>
+        </div>
+        <details class="more fu-editor">
+          <summary>Editar el texto del seguimiento</summary>
+          <div class="field"><label for="cp-fu-days">Días después del primer correo</label><input class="input" id="cp-fu-days" type="number" min="1" max="60"></div>
+          <div class="field"><label for="cp-fu-body">Texto (después de "Hola Nombre,"; una línea en blanco entre párrafos)</label><textarea class="input" id="cp-fu-body" rows="7"></textarea></div>
+          <div class="field"><label for="cp-fu-firma">Firma</label><textarea class="input" id="cp-fu-firma" rows="2"></textarea></div>
+          <div class="actions-row"><button class="btn btn-outline" id="cp-fu-save" type="button">Guardar seguimiento</button></div>
+          <div class="msg" id="cp-fu-save-msg" hidden></div>
+          <div class="field"><label>Así le llega (ejemplo)</label><pre class="fu-preview" id="cp-fu-preview"></pre></div>
+        </details>
+      </details>
+      <details class="set fold" id="cp-logbox">
+        <summary><h3>Registro de envíos</h3><span class="sum" id="cp-log-sum"></span></summary>
+        <p class="hint">Al volver a enviar sigue con los que faltan; nunca repite a nadie.</p>
+        <div class="log-chips" id="cp-counts"></div>
+        <div class="actions-row" style="margin-bottom:12px">
+          <a class="btn btn-outline" id="cp-csv-sent" href="#" download>Enviados (CSV)</a>
+          <a class="btn btn-outline" id="cp-csv-pending" href="#" download>Pendientes (CSV)</a>
+          <a class="btn btn-outline" id="cp-csv-replies" href="#" download>Respuestas (CSV)</a>
+        </div>
+        <table class="log-table"><thead><tr><th>Fecha</th><th>Correo</th><th>Estado</th><th>Desde</th></tr></thead><tbody id="cp-log"></tbody></table>
+      </details>
+    </div>
   </div>
   <div class="mailer-body" id="ml-test-pane" hidden>
     <form class="set" id="ml-form" autocomplete="off">
@@ -1769,12 +1804,19 @@
     if (!$("cp-daily").value && c.senders && c.senders[0]) $("cp-daily").placeholder = String(c.senders[0].daily_limit);
     const n = p ? Math.min(p.this_run, +$("cp-limit").value || p.this_run) : 0;
     const hours = (n * 5.8) / 3600;  // 3 to 6 s each plus a 30-90 s break every ~50
-    const extra = p ? [p.held_by_company && `${fmt.format(p.held_by_company)} esperan otro día por el tope por empresa`,
-      sk.duplicate && `${fmt.format(sk.duplicate)} duplicados omitidos (misma persona con dos correos)`].filter(Boolean) : [];
+    const extra = p ? [p.held_by_company && `${fmt.format(p.held_by_company)} esperan a mañana por el tope por empresa`,
+      sk.duplicate && `${fmt.format(sk.duplicate)} ${sk.duplicate === 1 ? "duplicado omitido" : "duplicados omitidos"}`].filter(Boolean) : [];
+    const took = hours < 1 ? `${Math.max(1, Math.round(hours * 60))} min` : `${hours.toFixed(1)} h`;
     $("cp-plan").innerHTML = c.error ? esc(c.error)
-      : !p ? "" : (extra.length ? `${extra.join(" · ")}. ` : "") + (n ? `Hoy saldrían <b>${fmt.format(n)}</b> correos, uno cada 3 a 6 s con una pausa cada ~50 (~${hours < 1 ? `${Math.max(1, Math.round(hours * 60))} min` : `${hours.toFixed(1)} h`}). Deja la app abierta; la Mac no se duerme mientras envía. Si se corta la conexión, reconecta sola; si se interrumpe, al volver a enviar sigue donde se quedó.`
-      : p.pending ? "Por hoy ya no sale más (cupo de los buzones o tope por empresa). Mañana sigue con los que faltan." : "Ya todos los de la lista la recibieron.");
+      : !p ? "" : (n ? `Hoy saldrían <b>${fmt.format(n)}</b> correos, en unos ${took}.`
+        + `<span class="why-more" title="Uno cada 3 a 6 s con una pausa cada ~50. La Mac no se duerme mientras envía; si se corta la conexión reconecta sola, y si se interrumpe, al volver a enviar sigue donde se quedó."> Deja la app abierta.</span>`
+      : p.pending ? "Por hoy ya no sale más (cupo de los buzones o tope por empresa). Mañana sigue." : "Ya todos los de la lista la recibieron.")
+      + (extra.length ? `<span class="plan-extra">${extra.join(" · ")}</span>` : "");
     if ($("cp-company").value === "") $("cp-company").placeholder = String(c.per_company ?? 3);
+    const perCompany = $("cp-company").value !== "" ? +$("cp-company").value : (c.per_company ?? 3);
+    $("cp-opts-sum").textContent = [`${chosen.length} ${chosen.length === 1 ? "buzón" : "buzones"}`,
+      perCompany ? `máx. ${perCompany} por empresa` : "sin tope por empresa",
+      $("cp-check").checked ? "" : "sin revisar bajas"].filter(Boolean).join(" · ");
     renderFollowup(c);
     $("cp-start").disabled = !!run.running || !n || $("cp-confirm").value.trim() !== "ENVIAR";
     $("cp-run").hidden = !run.phase;
@@ -1801,14 +1843,17 @@
       ...Object.entries(c.replies || {}).map(([k, v]) => `<span>${esc(RESP[k] || k)}: ${fmt.format(v)}</span>`),
       ...Object.entries(supp).map(([k, v]) => `<span>Lista de exclusión, ${esc(BAJA[k] || k)}: ${fmt.format(v)}</span>`),
     ].join("") || '<span>Todavía no se ha enviado nada.</span>';
+    $("cp-log-sum").textContent = counts.enviado ? `${fmt.format(counts.enviado)} enviados` : "Nada enviado aún";
     $("cp-log").innerHTML = ((c.log && c.log.recent) || []).map((r) => `<tr><td>${esc(r.fecha)}</td>
       <td title="${esc(r.detalle)}">${esc(r.email)}</td><td class="st-${esc(r.estado)}">${esc(r.estado)}</td><td>${esc(r.remitente)}</td></tr>`).join("");
   }
-  let fuFor = null;
+  let fuFor = null, fuOpened = false;
   function renderFollowup(c) {
     const f = c.followup, run = c.run || {}, t = c.followup_text;
     $("cp-fu").hidden = !t;
     if (!t) return;
+    $("cp-fu-sum").textContent = !f ? "Sin texto todavía" : f.due ? `${fmt.format(f.due)} listos hoy` : `a los ${f.days} días`;
+    if (f && f.due && !fuOpened) { fuOpened = true; $("cp-fu").open = true; }
     const editing = ["cp-fu-days", "cp-fu-body", "cp-fu-firma"].includes(document.activeElement && document.activeElement.id);
     if (fuFor !== `${c.campaign}|${t.body}|${t.firma}|${t.days}` && !editing) {
       fuFor = `${c.campaign}|${t.body}|${t.firma}|${t.days}`;
@@ -1819,7 +1864,7 @@
     $("cp-fu-stats").hidden = !f;
     if (!f) { $("cp-fu-hint").textContent = "Una nota corta que sale sola como respuesta al primer correo, solo a quien no contestó."; return; }
     const w = f.waiting || {};
-    $("cp-fu-hint").textContent = `A los ${f.days} días, como respuesta al primer correo (mismo hilo y mismo buzón), solo a quien no contestó. A quien está fuera de oficina le llega cuando regresa. Antes de enviar revisa las respuestas de los buzones.`;
+    $("cp-fu-hint").textContent = `A los ${f.days} días, en el mismo hilo y desde el mismo buzón, solo a quien no contestó.`;
     $("cp-fu-due").textContent = fmt.format(f.due);
     $("cp-fu-recent").textContent = fmt.format(w.recent || 0);
     $("cp-fu-replied").textContent = fmt.format(w.replied || 0);
@@ -1860,7 +1905,7 @@
     clearTimeout(campInputTimer); campInputTimer = setTimeout(refreshCampaign, 400);
   }));
   $("cp-confirm").addEventListener("input", () => { if (camp) renderCampaign(camp); });
-  $("cp-check").addEventListener("change", () => { $("cp-check-hint").hidden = $("cp-check").checked; });
+  $("cp-check").addEventListener("change", () => { $("cp-check-hint").hidden = $("cp-check").checked; if (camp) renderCampaign(camp); });
   $("cp-start").addEventListener("click", async () => {
     const btn = $("cp-start"); btn.disabled = true; showMsg("cp-msg", "");
     const r = await settingsCall("/mailing/campaign/start", {
@@ -1900,6 +1945,10 @@
         <div class="sum">${esc(d.summary)}</div>
         <ul>${Object.entries(d.checks || {}).map(([k, v]) => `<li><span class="light ${esc(v.light)}"></span><span><b>${k.toUpperCase()}</b>: ${esc(v.text)}</span></li>`).join("")}</ul></div>`).join("")
       || '<div class="hint">Agrega un buzón para revisar su dominio.</div>';
+    const doms = (r.ok && r.domains) || [], worst = ["bad", "warn", "unknown", "ok"].find((l) => doms.some((d) => d.light === l));
+    $("cp-before-sum").innerHTML = !doms.length ? "" : `<span class="light ${esc(worst)}"></span>${
+      worst === "ok" ? "Dominio bien firmado" : worst === "bad" ? "El dominio tiene un problema" : worst === "warn" ? "Dominio con detalles por mejorar" : "No se pudo revisar el dominio"}`;
+    if (worst === "bad") $("cp-before").open = true;
   }
   let cleanFound = null;
   async function cleanList(apply) {
